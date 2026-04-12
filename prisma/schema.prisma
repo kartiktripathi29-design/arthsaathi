@@ -1,0 +1,48 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  name        String
+  email       String   @unique
+  createdAt   DateTime @default(now())
+  salarySlips SalarySlip[]
+  chatMessages ChatMessage[]
+  goals       Goal[]
+}
+
+model SalarySlip {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  fileName    String
+  parsedData  String
+  uploadedAt  DateTime @default(now())
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  role      String
+  content   String
+  createdAt DateTime @default(now())
+}
+
+model Goal {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  name        String
+  targetAmount Float
+  currentAmount Float  @default(0)
+  targetDate  String
+  category    String
+  createdAt   DateTime @default(now())
+}
