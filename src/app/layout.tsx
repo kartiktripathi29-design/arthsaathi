@@ -1,10 +1,11 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { Toaster } from 'react-hot-toast'
+import { Analytics } from '@vercel/analytics/react'
 
 export const metadata: Metadata = {
   title: 'ArthSaathi — AI Financial Companion',
-  description: 'SEBI RIA-backed AI financial advisor for India\'s working class. Parse salary slips, optimise taxes, build wealth.',
+  description: 'SEBI RIA-backed AI financial advisor for India\'s working class.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -21,6 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             error: { style: { background: '#C0392B' } },
           }}
         />
+        <Analytics />
       </body>
     </html>
   )
