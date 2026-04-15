@@ -178,8 +178,13 @@ function SalaryBreakdown({ data }: { data: ParsedSalaryData }) {
 export default function SalaryPage() {
   const { salary, setSalary } = useAppStore()
   const [loading, setLoading] = useState(false)
+  const [consent, setConsent] = useState(false)
 
   const processFile = useCallback(async (file: File) => {
+    if (!consent) {
+      toast.error('Please read and accept the privacy notice before uploading.')
+      return
+    }
     const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif']
     if (!allowed.includes(file.type)) { toast.error('Please upload a PDF or image (JPG, PNG, WebP)'); return }
     if (file.size > 10 * 1024 * 1024) { toast.error('File must be under 10MB'); return }
@@ -208,7 +213,7 @@ export default function SalaryPage() {
     onDrop: files => files[0] && processFile(files[0]),
     accept: { 'application/pdf': [], 'image/*': [] },
     multiple: false,
-    disabled: loading,
+    disabled: loading || !consent,
   })
 
   if (salary && !loading) {
@@ -245,8 +250,23 @@ export default function SalaryPage() {
         </p>
       </div>
 
+      {/* Consent checkbox */}
+      <div style={{ background: '#fff', border: '2px solid #E5E9ED', borderRadius: 12, padding: '16px 20px', marginBottom: 16, borderColor: consent ? '#1E8449' : '#E5E9ED', transition: 'border-color 0.2s' }}>
+        <label style={{ display: 'flex', gap: 12, alignItems: 'flex-start', cursor: 'pointer' }}>
+          <input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)}
+            style={{ width: 18, height: 18, marginTop: 1, accentColor: '#1E8449', cursor: 'pointer', flexShrink: 0 }} />
+          <div style={{ fontSize: 13, color: '#1C2833', lineHeight: 1.7 }}>
+            I understand that my salary slip will be processed by{' '}
+            <a href="https://anthropic.com/privacy" target="_blank" rel="noopener noreferrer" style={{ color: '#1A3C5E', fontWeight: 600 }}>Anthropic's Claude AI</a>
+            {' '}to extract salary data. The document is <strong>not stored</strong> on any server — only the structured numbers are shown to me. I have read the{' '}
+            <a href="/privacy" target="_blank" style={{ color: '#1A3C5E', fontWeight: 600 }}>ArthVo Privacy Policy</a>
+            {' '}and consent to this processing.
+          </div>
+        </label>
+      </div>
+
       <div {...getRootProps()} className={`upload-zone${isDragActive ? ' active' : ''}`}
-        style={{ padding: '64px 40px', textAlign: 'center', marginBottom: 20 }}>
+        style={{ padding: '64px 40px', textAlign: 'center', marginBottom: 20, opacity: consent ? 1 : 0.5, cursor: consent ? 'pointer' : 'not-allowed' }}>
         <input {...getInputProps()} />
         {loading ? (
           <>

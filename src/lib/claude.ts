@@ -1,5 +1,5 @@
 /**
- * ArthSaathi — Anthropic Claude Integration
+ * ArthVo — Anthropic Claude Integration
  * Handles salary slip parsing (multimodal) + AI chat
  */
 
@@ -117,7 +117,7 @@ export async function parseSalaryFromBase64(
 // ─── AI Financial Chat ────────────────────────────────────────────────────
 
 export function buildChatSystem(userContext: string): string {
-  return `You are ArthSaathi, an AI-powered financial advisor for India's working class. You are registered under SEBI as an Investment Adviser (RIA).
+  return `You are ArthVo, an AI-powered financial advisor for India's working class. You are registered under SEBI as an Investment Adviser (RIA).
 
 Your personality:
 - Warm, clear, jargon-free — like a trusted CA friend

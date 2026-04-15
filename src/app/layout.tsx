@@ -4,8 +4,8 @@ import { Toaster } from 'react-hot-toast'
 import { Analytics } from '@vercel/analytics/react'
 
 export const metadata: Metadata = {
-  title: 'ArthSaathi — AI Financial Companion',
-  description: 'SEBI RIA-backed AI financial advisor for India\'s working class.',
+  title: 'ArthVo — Wealth Evolved',
+  description: 'SEBI RIA-backed AI financial companion. Parse salary slips, optimise taxes, build wealth.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

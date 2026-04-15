@@ -88,7 +88,7 @@ export default function DashboardPage() {
         <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
           <div>
             <div style={{ fontSize: 21, fontWeight: 700, color: '#fff', marginBottom: 6 }}>
-              {salary ? `Namaste, ${salary.employeeName?.split(' ')[0] || 'there'} 👋` : 'Welcome to ArthSaathi 🇮🇳'}
+              {salary ? `Namaste, ${salary.employeeName?.split(' ')[0] || 'there'} 👋` : 'Welcome to ArthVo 🇮🇳'}
             </div>
             <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', lineHeight: 1.65, maxWidth: 520 }}>
               {salary
@@ -202,7 +202,7 @@ export default function DashboardPage() {
       </InfoBox>
 
       <div style={{ marginTop: 28, paddingTop: 18, borderTop: '1px solid #E5E9ED', fontSize: 11, color: '#95A5A6', lineHeight: 1.65 }}>
-        ⚠️ ArthSaathi provides indicative financial guidance. All investment advice is educational. Consult a CA for ITR filing. SEBI Registration No. [INA000000000].
+        ⚠️ ArthVo provides indicative financial guidance. All investment advice is educational. Consult a CA for ITR filing. SEBI Registration No. [INA000000000].
       </div>
     </div>
   )

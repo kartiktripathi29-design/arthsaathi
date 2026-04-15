@@ -79,8 +79,8 @@ export default function ChatPage() {
   // Build initial greeting
   useEffect(() => {
     const greeting = salary
-      ? `Namaste! 🙏 I'm **ArthSaathi**, your SEBI-backed AI financial advisor.\n\nI can see your salary data: **₹${salary.netSalary?.toLocaleString('en-IN')}/mo take-home** from ${salary.employerName || 'your employer'}${taxComparison ? ` · Best regime: **${taxComparison.recommendation === 'new' ? 'New' : 'Old'} Regime** (saves ₹${taxComparison.savings.toLocaleString('en-IN')}/yr)` : ''}.\n\nAsk me anything about your taxes, investments, salary components, or financial goals. I follow SEBI guidelines and Indian tax law.`
-      : `Namaste! 🙏 I'm **ArthSaathi**, your SEBI-backed AI financial advisor.\n\nI give personalised guidance on:\n- Indian income tax & regime comparison\n- Salary components & HRA exemption\n- SIP, ELSS, NPS & direct MF investment\n- Goal-based financial planning\n- Emergency funds & insurance\n\nUpload your salary slip for hyper-personalised advice, or ask me anything!`
+      ? `Namaste! 🙏 I'm **ArthVo**, your SEBI-backed AI financial advisor.\n\nI can see your salary data: **₹${salary.netSalary?.toLocaleString('en-IN')}/mo take-home** from ${salary.employerName || 'your employer'}${taxComparison ? ` · Best regime: **${taxComparison.recommendation === 'new' ? 'New' : 'Old'} Regime** (saves ₹${taxComparison.savings.toLocaleString('en-IN')}/yr)` : ''}.\n\nAsk me anything about your taxes, investments, salary components, or financial goals. I follow SEBI guidelines and Indian tax law.`
+      : `Namaste! 🙏 I'm **ArthVo**, your SEBI-backed AI financial advisor.\n\nI give personalised guidance on:\n- Indian income tax & regime comparison\n- Salary components & HRA exemption\n- SIP, ELSS, NPS & direct MF investment\n- Goal-based financial planning\n- Emergency funds & insurance\n\nUpload your salary slip for hyper-personalised advice, or ask me anything!`
 
     setMessages([{
       id: 'welcome',
