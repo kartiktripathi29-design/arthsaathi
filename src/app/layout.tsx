@@ -24,9 +24,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             error: { style: { background: '#C0392B' } },
           }}
         />
-        <Analytics />
-      />
         </PasswordGate>
+        <Analytics />
       </body>
     </html>
   )
