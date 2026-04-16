@@ -209,7 +209,7 @@ export default function SalaryPage() {
     onDrop: files => files[0] && processFile(files[0]),
     accept: { 'application/pdf': [], 'image/*': [] },
     multiple: false,
-    disabled: loading || !consent,
+    disabled: loading,
   })
 
   if (salary && !loading) {
