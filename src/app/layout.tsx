@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { Toaster } from 'react-hot-toast'
+import { PasswordGate } from '@/components/PasswordGate'
 import { Analytics } from '@vercel/analytics/react'
 
 export const metadata: Metadata = {
@@ -12,6 +13,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
+        <PasswordGate>
         {children}
         <Toaster
           position="top-right"
@@ -23,6 +25,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
         <Analytics />
+      />
+        </PasswordGate>
       </body>
     </html>
   )
