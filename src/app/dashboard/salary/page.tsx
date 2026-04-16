@@ -176,7 +176,7 @@ function SalaryBreakdown({ data }: { data: ParsedSalaryData }) {
 
 // ─── Main Page ───────────────────────────────────────────────────────────
 export default function SalaryPage() {
-  const { salary, [setSalary, consent] } = useAppStore()
+  const { salary, setSalary, } = useAppStore()
   const [loading, setLoading] = useState(false)
   const [consent, setConsent] = useState(true)
 
