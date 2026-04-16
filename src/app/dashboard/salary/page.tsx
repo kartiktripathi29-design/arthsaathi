@@ -181,10 +181,6 @@ export default function SalaryPage() {
   const [consent, setConsent] = useState(true)
 
   const processFile = useCallback(async (file: File) => {
-    if (!consent) {
-      toast.error('Please read and accept the privacy notice before uploading.')
-      return
-    }
     const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif']
     if (!allowed.includes(file.type)) { toast.error('Please upload a PDF or image (JPG, PNG, WebP)'); return }
     if (file.size > 10 * 1024 * 1024) { toast.error('File must be under 10MB'); return }
