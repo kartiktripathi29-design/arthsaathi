@@ -176,9 +176,9 @@ function SalaryBreakdown({ data }: { data: ParsedSalaryData }) {
 
 // ─── Main Page ───────────────────────────────────────────────────────────
 export default function SalaryPage() {
-  const { salary, setSalary } = useAppStore()
+  const { salary, [setSalary, consent] } = useAppStore()
   const [loading, setLoading] = useState(false)
-  const [consent, setConsent] = useState(false)
+  const [consent, setConsent] = useState(true)
 
   const processFile = useCallback(async (file: File) => {
     if (!consent) {
