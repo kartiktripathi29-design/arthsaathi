@@ -429,16 +429,29 @@ export default function TaxPage() {
                 <div className="fade-in">
                   {(() => {
                     const totalTax = taxComparison[taxComparison.recommendation].totalTax
-                    const tdsDeducted = (salary?.tdsDeducted || 0) * 12
+
+                    // Use AIS TDS if available, otherwise use salary slip TDS
+                    const tdsFromAIS = aisData ? (aisData.totalTDSDeducted || 0) : 0
+                    const tdsFromSlip = (salary?.tdsDeducted || 0) * 12
+                    const tdsDeducted = tdsFromAIS > 0 ? tdsFromAIS : tdsFromSlip
+                    const tdsSource = tdsFromAIS > 0 ? 'Form 26AS' : 'Salary Slip'
+
+                    // Advance tax = total tax - TDS already deducted
                     const advanceTaxDue = Math.max(0, totalTax - tdsDeducted)
+
+                    // Only liable if net tax after TDS > ₹10,000 (Section 208)
                     const isLiable = advanceTaxDue > 10000
+
                     const today = new Date()
                     const currentYear = today.getFullYear()
+
+                    // Installments are % of ADVANCE TAX DUE (not total tax)
+                    // 15% by June 15, 45% by Sept 15, 75% by Dec 15, 100% by March 15
                     const installments = [
-                      { due: `15 June ${currentYear}`, pct: 15, amount: Math.round(totalTax * 0.15), label: '1st Installment', month: 5 },
-                      { due: `15 September ${currentYear}`, pct: 45, amount: Math.round(totalTax * 0.45 - totalTax * 0.15), label: '2nd Installment', month: 8 },
-                      { due: `15 December ${currentYear}`, pct: 75, amount: Math.round(totalTax * 0.75 - totalTax * 0.45), label: '3rd Installment', month: 11 },
-                      { due: `15 March ${currentYear + 1}`, pct: 100, amount: Math.round(totalTax * 0.25), label: '4th Installment', month: 2 },
+                      { due: `15 June ${currentYear}`, pct: 15, amount: Math.round(advanceTaxDue * 0.15), label: '1st Installment', month: 5 },
+                      { due: `15 September ${currentYear}`, pct: 45, amount: Math.round(advanceTaxDue * 0.30), label: '2nd Installment', month: 8 },
+                      { due: `15 December ${currentYear}`, pct: 75, amount: Math.round(advanceTaxDue * 0.30), label: '3rd Installment', month: 11 },
+                      { due: `15 March ${currentYear + 1}`, pct: 100, amount: Math.round(advanceTaxDue * 0.25), label: '4th Installment', month: 2 },
                     ]
                     const isPast = (month: number) => month < today.getMonth()
                     const isNext = (month: number, idx: number) => !isPast(month) && (idx === 0 || isPast(installments[idx-1].month))
@@ -446,27 +459,39 @@ export default function TaxPage() {
                       <>
                         {/* Summary */}
                         <div style={{ background: 'linear-gradient(135deg, #0F2640, #1A3C5E)', borderRadius: 14, padding: '20px 24px', marginBottom: 18, color: '#fff' }}>
-                          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>ESTIMATED ADVANCE TAX LIABILITY</div>
+                          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>ADVANCE TAX LIABILITY (AFTER TDS)</div>
                           <div style={{ fontSize: 36, fontWeight: 800, color: isLiable ? '#FBBF24' : '#4ADE80', marginBottom: 8 }}>
                             ₹{advanceTaxDue.toLocaleString('en-IN')}
                           </div>
-                          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', lineHeight: 1.6 }}>
-                            {isLiable
-                              ? `Total tax ₹${totalTax.toLocaleString('en-IN')} − TDS already deducted ₹${tdsDeducted.toLocaleString('en-IN')} = ₹${advanceTaxDue.toLocaleString('en-IN')} advance tax due`
-                              : 'Your employer TDS covers your full tax liability. No advance tax required.'}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginTop: 12 }}>
+                            {[
+                              { label: 'Total Tax', value: `₹${totalTax.toLocaleString('en-IN')}` },
+                              { label: `TDS Deducted (${tdsSource})`, value: `−₹${tdsDeducted.toLocaleString('en-IN')}` },
+                              { label: 'Advance Tax Due', value: `₹${advanceTaxDue.toLocaleString('en-IN')}` },
+                            ].map(s => (
+                              <div key={s.label} style={{ background: 'rgba(255,255,255,0.07)', borderRadius: 8, padding: '10px 12px' }}>
+                                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>{s.label}</div>
+                                <div style={{ fontSize: 14, fontWeight: 700 }}>{s.value}</div>
+                              </div>
+                            ))}
                           </div>
                         </div>
 
                         {!isLiable && (
                           <InfoBox variant="success" icon="✅">
-                            <strong>No advance tax required.</strong> Your TDS deductions already cover your estimated tax liability. You only need to pay advance tax if your net liability exceeds ₹10,000 after TDS.
+                            <strong>No advance tax required.</strong> Your TDS of ₹{tdsDeducted.toLocaleString('en-IN')} (from {tdsSource}) already covers your full tax liability of ₹{totalTax.toLocaleString('en-IN')}. Net balance: ₹{advanceTaxDue.toLocaleString('en-IN')} — well below the ₹10,000 threshold for advance tax under Section 208.
+                            {advanceTaxDue === 0 && tdsDeducted > totalTax && (
+                              <div style={{ marginTop: 6 }}>
+                                <strong>Refund expected:</strong> You have excess TDS of ₹{(tdsDeducted - totalTax).toLocaleString('en-IN')}. File your ITR to claim this refund.
+                              </div>
+                            )}
                           </InfoBox>
                         )}
 
                         {isLiable && (
                           <>
                             <Card style={{ marginBottom: 16 }}>
-                              <SectionHeader title="Installment Schedule — FY 2024-25" sub="Pay on time to avoid 1% monthly interest under Section 234B & 234C" />
+                              <SectionHeader title="Installment Schedule — FY 2024-25" sub="Each installment is % of your advance tax due (not total tax)" />
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                                 {installments.map((inst, i) => {
                                   const past = isPast(inst.month)
@@ -480,7 +505,7 @@ export default function TaxPage() {
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                           <div>
                                             <div style={{ fontSize: 13, fontWeight: 600, color: past ? '#95A5A6' : '#1C2833' }}>{inst.label}</div>
-                                            <div style={{ fontSize: 11, color: '#5D6D7E', marginTop: 2 }}>Due: {inst.due} · Cumulative {inst.pct}% of annual tax</div>
+                                            <div style={{ fontSize: 11, color: '#5D6D7E', marginTop: 2 }}>Due: {inst.due} · Cumulative {inst.pct}% of advance tax</div>
                                           </div>
                                           <div style={{ textAlign: 'right' }}>
                                             <div style={{ fontSize: 16, fontWeight: 700, color: past ? '#95A5A6' : next ? '#E67E22' : '#1A3C5E' }}>₹{inst.amount.toLocaleString('en-IN')}</div>
@@ -496,9 +521,17 @@ export default function TaxPage() {
                             </Card>
 
                             <InfoBox variant="warning" icon="⚠️">
-                              <strong>Late payment penalty:</strong> Missing advance tax installments attracts 1% interest per month under Section 234B and 234C of the Income Tax Act. On ₹{advanceTaxDue.toLocaleString('en-IN')}, a 3-month delay costs approximately ₹{Math.round(advanceTaxDue * 0.03).toLocaleString('en-IN')} extra.
+                              <strong>Late payment penalty:</strong> Missing advance tax installments attracts 1% interest per month under Section 234B and 234C. On ₹{advanceTaxDue.toLocaleString('en-IN')}, a 3-month delay costs approximately ₹{Math.round(advanceTaxDue * 0.03).toLocaleString('en-IN')} extra.
                             </InfoBox>
                           </>
+                        )}
+
+                        {!aisData && (
+                          <div style={{ marginTop: 12 }}>
+                            <InfoBox variant="info" icon="💡">
+                              Upload your <strong>Form 26AS</strong> in the left panel for accurate TDS data. Currently using salary slip TDS of ₹{tdsFromSlip.toLocaleString('en-IN')}/yr.
+                            </InfoBox>
+                          </div>
                         )}
 
                         <Card style={{ marginTop: 16 }}>
