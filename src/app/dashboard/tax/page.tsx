@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAppStore } from '@/store/AppStore'
-import { formatINRFull } from '@/lib/tax-engine'
+import { formatINRFull, formatINR, calcTotalTaxWithAIS } from '@/lib/tax-engine'
 import { Card, SectionHeader, InfoBox, Badge, ProgressRow, PillTabs, EmptyState } from '@/components/ui'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
@@ -130,27 +130,70 @@ export default function TaxPage() {
   const [aisLoading, setAisLoading] = useState(false)
   const aisRef = useRef<HTMLInputElement>(null)
 
+  // Password modal state
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [pdfPassword, setPdfPassword] = useState('')
+  const [passwordError, setPasswordError] = useState('')
+
   useEffect(() => {
     if (salary?.employeePF) {
       setDeductions(d => ({ ...d, section80C: Math.min(salary.employeePF * 12, 150000) }))
     }
   }, [salary])
 
-  const uploadAIS = useCallback(async (file: File) => {
+  // Try to process PDF — if password-protected, show modal
+  const handleAISFile = useCallback(async (file: File) => {
     if (!['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
       toast.error('Please upload a PDF or image of your Form 26AS / AIS'); return
     }
+
+    if (file.type === 'application/pdf') {
+      // Check if password protected by trying to read it
+      const arrayBuffer = await file.arrayBuffer()
+      const bytes = new Uint8Array(arrayBuffer)
+      // Check for encryption dictionary in PDF header area
+      const text = new TextDecoder('latin1').decode(bytes.slice(0, 2048))
+      const isEncrypted = text.includes('/Encrypt') || text.includes('Encrypt')
+
+      if (isEncrypted) {
+        // Store file and show password modal
+        setPendingFile(file)
+        setPdfPassword('')
+        setPasswordError('')
+        setShowPasswordModal(true)
+        return
+      }
+    }
+
+    // Not encrypted or is an image — process directly
+    await processAISFile(file, '')
+  }, [])
+
+  const processAISFile = useCallback(async (file: File, password: string) => {
     setAisLoading(true)
+    setShowPasswordModal(false)
     const tid = toast.loading('Reading your AIS / Form 26AS…')
     try {
       const base64Data = await fileToBase64(file)
       const res = await fetch('/api/parse-ais', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ base64Data, mediaType: file.type }),
+        body: JSON.stringify({ base64Data, mediaType: file.type, password }),
       })
       const json = await res.json()
-      if (!res.ok) throw new Error(json.error)
+      if (!res.ok) {
+        if (json.error?.includes('password') || json.error?.includes('encrypted')) {
+          setShowPasswordModal(true)
+          setPasswordError('Incorrect password. Please try again.')
+          setAisLoading(false)
+          toast.dismiss(tid)
+          return
+        }
+        throw new Error(json.error)
+      }
       setAisData(json.data)
+      setPendingFile(null)
+      setPdfPassword('')
       toast.success(`AIS parsed! Total TDS credit: ₹${json.data.totalTaxCredit?.toLocaleString('en-IN')}`, { id: tid })
     } catch (e: any) {
       toast.error(e.message || 'Failed to parse. Try a clearer image.', { id: tid })
@@ -158,6 +201,8 @@ export default function TaxPage() {
       setAisLoading(false)
     }
   }, [])
+
+  const uploadAIS = handleAISFile
 
   const calculate = async () => {
     if (!salary) return
@@ -198,6 +243,59 @@ export default function TaxPage() {
 
   return (
     <div className="fade-in">
+
+      {/* ─── Password Modal ──────────────────────────────── */}
+      {showPasswordModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: '32px 28px', width: '100%', maxWidth: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+            <div style={{ fontSize: 32, textAlign: 'center', marginBottom: 16 }}>🔐</div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: '#1C2833', textAlign: 'center', marginBottom: 8 }}>
+              PDF is Password Protected
+            </div>
+            <div style={{ fontSize: 13, color: '#5D6D7E', textAlign: 'center', marginBottom: 20, lineHeight: 1.6 }}>
+              AIS and Form 26AS from the IT portal are password protected. The password is your <strong>PAN in lowercase</strong> followed by your <strong>Date of Birth (DDMMYYYY)</strong>.
+            </div>
+            <div style={{ background: '#E8F1FA', borderRadius: 10, padding: '12px 14px', marginBottom: 20, fontSize: 13, color: '#1A3C5E' }}>
+              <strong>Format:</strong> PAN (lowercase) + DOB (DDMMYYYY)<br />
+              <strong>Example:</strong> PAN <code>ABCDE1234F</code>, DOB <code>15 Jan 1990</code><br />
+              → Password: <strong style={{ fontFamily: 'monospace' }}>abcde1234f15011990</strong>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#1C2833', display: 'block', marginBottom: 6 }}>
+                Enter PDF Password (your PAN)
+              </label>
+              <input
+                type="text"
+                value={pdfPassword}
+                onChange={e => { setPdfPassword(e.target.value); setPasswordError('') }}
+                placeholder="e.g. abcde1234f15011990"
+                autoFocus
+                onKeyDown={e => e.key === 'Enter' && pendingFile && processAISFile(pendingFile, pdfPassword)}
+                style={{ width: '100%', padding: '10px 14px', border: `1px solid ${passwordError ? '#C0392B' : '#E5E9ED'}`, borderRadius: 9, fontSize: 14, color: '#1C2833', outline: 'none', letterSpacing: '0.05em', fontFamily: 'monospace' }}
+              />
+              {passwordError && (
+                <div style={{ fontSize: 12, color: '#C0392B', marginTop: 5 }}>{passwordError}</div>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => { setShowPasswordModal(false); setPendingFile(null); setPdfPassword('') }}
+                style={{ flex: 1, padding: '11px', background: '#fff', border: '1px solid #E5E9ED', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#5D6D7E' }}>
+                Cancel
+              </button>
+              <button
+                onClick={() => pendingFile && processAISFile(pendingFile, pdfPassword)}
+                disabled={!pdfPassword || aisLoading}
+                style={{ flex: 1, padding: '11px', background: pdfPassword ? '#1A3C5E' : '#ccc', color: '#fff', border: 'none', borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: pdfPassword ? 'pointer' : 'default' }}>
+                {aisLoading ? '⟳ Opening…' : 'Open PDF →'}
+              </button>
+            </div>
+            <div style={{ marginTop: 14, fontSize: 11, color: '#95A5A6', textAlign: 'center', lineHeight: 1.6 }}>
+              🔒 Your password is used only to decrypt the PDF locally. It is never stored or sent to any server.
+            </div>
+          </div>
+        </div>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: '330px 1fr', gap: 24, alignItems: 'start' }}>
 
         {/* ─── Input Panel ────────────────────────────── */}
@@ -296,7 +394,7 @@ export default function TaxPage() {
             <div className="fade-in">
               {/* Tabs */}
               <div style={{ marginBottom: 20 }}>
-                <PillTabs tabs={['Comparison', 'Slab Breakdown', 'Save More', 'Advance Tax', 'AI Insights', 'TDS Data']} active={activeTab} onChange={setActiveTab} />
+                <PillTabs tabs={['Comparison', 'Slab Breakdown', 'Save More', 'Advance Tax', 'AI Insights', 'TDS Data', 'AIS Analysis']} active={activeTab} onChange={setActiveTab} />
               </div>
 
               {activeTab === 'Comparison' && (
@@ -754,6 +852,173 @@ export default function TaxPage() {
                   )}
                 </div>
               )}
+
+              {activeTab === 'AIS Analysis' && (
+                <div className="fade-in">
+                  {!aisData ? (
+                    <div style={{ textAlign: 'center', padding: '50px 20px', background: '#fff', borderRadius: 14, border: '1px solid #E5E9ED' }}>
+                      <div style={{ fontSize: 40, marginBottom: 14 }}>📊</div>
+                      <div style={{ fontSize: 15, fontWeight: 600, color: '#1C2833', marginBottom: 8 }}>Upload AIS for Complete Income Analysis</div>
+                      <div style={{ fontSize: 13, color: '#5D6D7E', marginBottom: 20, lineHeight: 1.7, maxWidth: 460, margin: '0 auto 20px' }}>
+                        AIS contains ALL your income — salary, FD interest, mutual fund gains, dividends, rental income. Many people underpay tax because they only account for salary.
+                      </div>
+                      <div style={{ background: '#FEF3E2', border: '1px solid #F0C070', borderRadius: 12, padding: '16px 20px', maxWidth: 460, margin: '0 auto 20px', textAlign: 'left' }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#92400E', marginBottom: 10 }}>⚠️ Common mistake Indians make:</div>
+                        {[
+                          'FD interest is taxed at YOUR slab rate (30%), not just 10% TDS',
+                          'Mutual fund gains add to taxable income — employer TDS doesn\'t cover this',
+                          'Dividend income is fully taxable since FY 2020-21',
+                          'AIS captures ALL income — IT Dept already knows everything',
+                        ].map((t, i) => (
+                          <div key={i} style={{ fontSize: 12, color: '#78350F', marginBottom: 5, display: 'flex', gap: 6 }}>
+                            <span>•</span> {t}
+                          </div>
+                        ))}
+                      </div>
+                      <button onClick={() => aisRef.current?.click()}
+                        style={{ padding: '11px 28px', background: '#1A3C5E', color: '#fff', border: 'none', borderRadius: 9, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+                        📄 Upload AIS PDF
+                      </button>
+                      <input ref={aisRef} type="file" accept=".pdf,image/*" style={{ display: 'none' }}
+                        onChange={e => e.target.files?.[0] && uploadAIS(e.target.files[0])} />
+                    </div>
+                  ) : (() => {
+                    const salaryTax = taxComparison ? taxComparison[taxComparison.recommendation].totalTax : 0
+                    const slabRate = taxComparison ? taxComparison[taxComparison.recommendation].effectiveRate / 100 : 0.30
+                    const marginalRate = taxComparison ? (taxComparison[taxComparison.recommendation].taxableIncome > 1000000 ? 0.30 : taxComparison[taxComparison.recommendation].taxableIncome > 700000 ? 0.10 : 0.05) : 0.30
+                    const totalTaxCalc = calcTotalTaxWithAIS(salaryTax, aisData, marginalRate)
+
+                    const incomeBreakdown = [
+                      { label: 'Salary Income', amount: aisData.salaryIncome || 0, color: '#1A3C5E', icon: '💼' },
+                      { label: 'FD / Interest Income', amount: aisData.totalInterestIncome || 0, color: '#E67E22', icon: '🏦' },
+                      { label: 'Capital Gains (MF/Equity)', amount: aisData.totalCapitalGains || 0, color: '#8E44AD', icon: '📈' },
+                      { label: 'Dividend Income', amount: aisData.dividendIncome || 0, color: '#2E86C1', icon: '💰' },
+                      { label: 'Rental Income', amount: aisData.rentalIncome || 0, color: '#1E8449', icon: '🏠' },
+                      { label: 'Other Income', amount: aisData.totalOtherIncome || 0, color: '#5D6D7E', icon: '📋' },
+                    ].filter(i => i.amount > 0)
+
+                    return (
+                      <>
+                        {/* Grand total income */}
+                        <div style={{ background: 'linear-gradient(135deg, #0F2640, #1A3C5E)', borderRadius: 14, padding: '20px 24px', marginBottom: 18, color: '#fff' }}>
+                          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>TOTAL INCOME (ALL SOURCES CLUBBED)</div>
+                          <div style={{ fontSize: 36, fontWeight: 800, color: '#FCD34D', marginBottom: 12 }}>
+                            ₹{(aisData.grandTotalIncome || 0).toLocaleString('en-IN')}
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                            {[
+                              { label: 'Total Tax Liability', value: `₹${totalTaxCalc.totalTaxLiability.toLocaleString('en-IN')}`, color: '#FC8181' },
+                              { label: 'TDS Credit', value: `₹${totalTaxCalc.totalTDSCredit.toLocaleString('en-IN')}`, color: '#4ADE80' },
+                              { label: totalTaxCalc.isRefund ? 'Refund Due' : 'Additional Tax Due', value: `₹${(totalTaxCalc.isRefund ? totalTaxCalc.refundAmount : totalTaxCalc.additionalTaxDue).toLocaleString('en-IN')}`, color: totalTaxCalc.isRefund ? '#4ADE80' : '#FBBF24' },
+                            ].map(s => (
+                              <div key={s.label} style={{ background: 'rgba(255,255,255,0.07)', borderRadius: 8, padding: '10px 12px' }}>
+                                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginBottom: 3 }}>{s.label}</div>
+                                <div style={{ fontSize: 15, fontWeight: 700, color: s.color }}>{s.value}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Refund or additional tax alert */}
+                        {totalTaxCalc.isRefund ? (
+                          <InfoBox variant="success" icon="💸">
+                            <strong>Refund of ₹{totalTaxCalc.refundAmount.toLocaleString('en-IN')} expected!</strong> Your TDS credits exceed your total tax liability. File your ITR to claim this refund. Refunds are typically processed within 30-60 days of ITR filing.
+                          </InfoBox>
+                        ) : totalTaxCalc.additionalTaxDue > 10000 ? (
+                          <InfoBox variant="warning" icon="⚠️">
+                            <strong>Additional tax of ₹{totalTaxCalc.additionalTaxDue.toLocaleString('en-IN')} may be due.</strong> Your income from non-salary sources creates tax beyond what your employer TDS covers. Pay self-assessment tax before filing ITR to avoid interest under Section 234B.
+                          </InfoBox>
+                        ) : (
+                          <InfoBox variant="success" icon="✅">
+                            Your TDS covers your total tax liability across all income sources. No additional tax payment required.
+                          </InfoBox>
+                        )}
+
+                        {/* Income breakdown */}
+                        <Card style={{ marginTop: 16, marginBottom: 16 }}>
+                          <SectionHeader title="Income Breakdown — All Sources" sub="This is your complete taxable income picture" />
+                          {incomeBreakdown.map((inc, i) => (
+                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #F5F5F5' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <div style={{ width: 32, height: 32, borderRadius: 8, background: `${inc.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>{inc.icon}</div>
+                                <span style={{ fontSize: 13, color: '#374151' }}>{inc.label}</span>
+                              </div>
+                              <span style={{ fontSize: 13, fontWeight: 700, color: inc.color }}>₹{inc.amount.toLocaleString('en-IN')}</span>
+                            </div>
+                          ))}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 12, marginTop: 6, borderTop: '2px solid #F0F0F0' }}>
+                            <span style={{ fontSize: 14, fontWeight: 700, color: '#1C2833' }}>Grand Total Income</span>
+                            <span style={{ fontSize: 15, fontWeight: 800, color: '#1A3C5E' }}>₹{(aisData.grandTotalIncome || 0).toLocaleString('en-IN')}</span>
+                          </div>
+                        </Card>
+
+                        {/* Tax breakdown */}
+                        <Card style={{ marginBottom: 16 }}>
+                          <SectionHeader title="Tax Liability Breakdown" sub="How your total tax is computed across income types" />
+                          {[
+                            { label: 'Tax on Salary Income', amount: totalTaxCalc.salaryTax, note: 'At slab rates after deductions' },
+                            totalTaxCalc.capitalGainsTax > 0 && { label: 'Capital Gains Tax', amount: totalTaxCalc.capitalGainsTax, note: 'STCG 20%, LTCG 12.5% above ₹1.25L' },
+                            totalTaxCalc.interestTaxAdditional > 0 && { label: 'Additional Tax on Interest', amount: totalTaxCalc.interestTaxAdditional, note: 'FD interest taxed at slab, less 10% TDS paid' },
+                            totalTaxCalc.dividendTax > 0 && { label: 'Tax on Dividend', amount: totalTaxCalc.dividendTax, note: 'Dividend taxed at slab rate' },
+                            totalTaxCalc.rentalTax > 0 && { label: 'Tax on Rental Income', amount: totalTaxCalc.rentalTax, note: 'After 30% standard deduction, at slab rate' },
+                          ].filter(Boolean).map((row: any, i) => (
+                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #F5F5F5' }}>
+                              <div>
+                                <div style={{ fontSize: 13, color: '#1C2833', fontWeight: 500 }}>{row.label}</div>
+                                <div style={{ fontSize: 11, color: '#95A5A6', marginTop: 2 }}>{row.note}</div>
+                              </div>
+                              <span style={{ fontSize: 13, fontWeight: 700, color: '#C0392B' }}>₹{row.amount.toLocaleString('en-IN')}</span>
+                            </div>
+                          ))}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 12, marginTop: 6, borderTop: '2px solid #F0F0F0' }}>
+                            <span style={{ fontSize: 14, fontWeight: 700, color: '#1C2833' }}>Total Tax Liability</span>
+                            <span style={{ fontSize: 15, fontWeight: 800, color: '#C0392B' }}>₹{totalTaxCalc.totalTaxLiability.toLocaleString('en-IN')}</span>
+                          </div>
+                        </Card>
+
+                        {/* Alerts */}
+                        {aisData.alerts && aisData.alerts.length > 0 && (
+                          <Card style={{ marginBottom: 16 }}>
+                            <SectionHeader title="⚠️ Important Alerts" sub="Income that people commonly miss — and the IT Dept already knows" />
+                            {aisData.alerts.map((alert: string, i: number) => (
+                              <div key={i} style={{ background: '#FEF3E2', border: '1px solid #F0C070', borderRadius: 10, padding: '12px 14px', marginBottom: 8, fontSize: 13, color: '#78350F', lineHeight: 1.6 }}>
+                                ⚠️ {alert}
+                              </div>
+                            ))}
+                          </Card>
+                        )}
+
+                        {/* Capital gains detail */}
+                        {aisData.capitalGains && aisData.capitalGains.length > 0 && (
+                          <Card style={{ marginBottom: 16 }}>
+                            <SectionHeader title="Capital Gains Detail" sub="STCG and LTCG transactions from AIS" />
+                            {aisData.capitalGains.map((cg: any, i: number) => (
+                              <div key={i} style={{ padding: '10px 14px', background: '#F8FAFB', borderRadius: 10, marginBottom: 8, border: '1px solid #F0F0F0' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                                  <div style={{ fontSize: 13, fontWeight: 600, color: '#1C2833' }}>{cg.assetName || cg.assetType}</div>
+                                  <div>
+                                    <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: cg.gainType === 'STCG' ? '#FEF3E2' : '#E8F1FA', color: cg.gainType === 'STCG' ? '#E67E22' : '#1A3C5E', fontWeight: 600 }}>{cg.gainType}</span>
+                                  </div>
+                                </div>
+                                <div style={{ display: 'flex', gap: 20, fontSize: 12, color: '#5D6D7E' }}>
+                                  <span>Gain: <strong style={{ color: cg.gain > 0 ? '#1E8449' : '#C0392B' }}>₹{(cg.gain || 0).toLocaleString('en-IN')}</strong></span>
+                                  <span>Tax rate: <strong>{cg.gainType === 'STCG' ? '20%' : '12.5%'}</strong></span>
+                                  <span>Tax: <strong style={{ color: '#C0392B' }}>₹{(cg.taxPayable || 0).toLocaleString('en-IN')}</strong></span>
+                                </div>
+                              </div>
+                            ))}
+                          </Card>
+                        )}
+
+                        <InfoBox variant="info" icon="📋">
+                          <strong>Next step:</strong> File your ITR including all income sources above. Use ITR-2 (if capital gains) or ITR-1 (salary + interest only). ArthVo's analysis is indicative — consult a CA for exact ITR computation.
+                        </InfoBox>
+                      </>
+                    )
+                  })()}
+                </div>
+              )}
+
 
             </div>
           )}
