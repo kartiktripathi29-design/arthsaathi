@@ -243,59 +243,6 @@ export default function TaxPage() {
 
   return (
     <div className="fade-in">
-
-      {/* ─── Password Modal ──────────────────────────────── */}
-      {showPasswordModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ background: '#fff', borderRadius: 16, padding: '32px 28px', width: '100%', maxWidth: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
-            <div style={{ fontSize: 32, textAlign: 'center', marginBottom: 16 }}>🔐</div>
-            <div style={{ fontSize: 17, fontWeight: 700, color: '#1C2833', textAlign: 'center', marginBottom: 8 }}>
-              PDF is Password Protected
-            </div>
-            <div style={{ fontSize: 13, color: '#5D6D7E', textAlign: 'center', marginBottom: 20, lineHeight: 1.6 }}>
-              AIS and Form 26AS from the IT portal are password protected. The password is your <strong>PAN in lowercase</strong> followed by your <strong>Date of Birth (DDMMYYYY)</strong>.
-            </div>
-            <div style={{ background: '#E8F1FA', borderRadius: 10, padding: '12px 14px', marginBottom: 20, fontSize: 13, color: '#1A3C5E' }}>
-              <strong>Format:</strong> PAN (lowercase) + DOB (DDMMYYYY)<br />
-              <strong>Example:</strong> PAN <code>ABCDE1234F</code>, DOB <code>15 Jan 1990</code><br />
-              → Password: <strong style={{ fontFamily: 'monospace' }}>abcde1234f15011990</strong>
-            </div>
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: '#1C2833', display: 'block', marginBottom: 6 }}>
-                Enter PDF Password (your PAN)
-              </label>
-              <input
-                type="text"
-                value={pdfPassword}
-                onChange={e => { setPdfPassword(e.target.value); setPasswordError('') }}
-                placeholder="e.g. abcde1234f15011990"
-                autoFocus
-                onKeyDown={e => e.key === 'Enter' && pendingFile && processAISFile(pendingFile, pdfPassword)}
-                style={{ width: '100%', padding: '10px 14px', border: `1px solid ${passwordError ? '#C0392B' : '#E5E9ED'}`, borderRadius: 9, fontSize: 14, color: '#1C2833', outline: 'none', letterSpacing: '0.05em', fontFamily: 'monospace' }}
-              />
-              {passwordError && (
-                <div style={{ fontSize: 12, color: '#C0392B', marginTop: 5 }}>{passwordError}</div>
-              )}
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                onClick={() => { setShowPasswordModal(false); setPendingFile(null); setPdfPassword('') }}
-                style={{ flex: 1, padding: '11px', background: '#fff', border: '1px solid #E5E9ED', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#5D6D7E' }}>
-                Cancel
-              </button>
-              <button
-                onClick={() => pendingFile && processAISFile(pendingFile, pdfPassword)}
-                disabled={!pdfPassword || aisLoading}
-                style={{ flex: 1, padding: '11px', background: pdfPassword ? '#1A3C5E' : '#ccc', color: '#fff', border: 'none', borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: pdfPassword ? 'pointer' : 'default' }}>
-                {aisLoading ? '⟳ Opening…' : 'Open PDF →'}
-              </button>
-            </div>
-            <div style={{ marginTop: 14, fontSize: 11, color: '#95A5A6', textAlign: 'center', lineHeight: 1.6 }}>
-              🔒 Your password is used only to decrypt the PDF locally. It is never stored or sent to any server.
-            </div>
-          </div>
-        </div>
-      )}
       <div style={{ display: 'grid', gridTemplateColumns: '330px 1fr', gap: 24, alignItems: 'start' }}>
 
         {/* ─── Input Panel ────────────────────────────── */}
@@ -349,6 +296,38 @@ export default function TaxPage() {
             <div style={{ fontSize: 11, color: '#5D6D7E', marginBottom: 10, lineHeight: 1.5 }}>
               Download from incometax.gov.in and upload for accurate TDS data
             </div>
+
+            {/* Password entry panel — shown when encrypted PDF detected */}
+            {showPasswordModal && pendingFile && (
+              <div style={{ background: '#F8FAFB', border: '1px solid #E5E9ED', borderRadius: 12, padding: '14px', marginBottom: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#1C2833', marginBottom: 6 }}>🔐 PDF is Password Protected</div>
+                <div style={{ fontSize: 11, color: '#5D6D7E', marginBottom: 8, lineHeight: 1.6 }}>
+                  Password = PAN (lowercase) + DOB (DDMMYYYY)<br />
+                  <span style={{ fontFamily: 'monospace', color: '#1A3C5E', fontSize: 10 }}>e.g. abcde1234f15011990</span>
+                </div>
+                <input
+                  type="text"
+                  value={pdfPassword}
+                  onChange={e => { setPdfPassword(e.target.value); setPasswordError('') }}
+                  placeholder="abcde1234f15011990"
+                  onKeyDown={e => e.key === 'Enter' && processAISFile(pendingFile, pdfPassword)}
+                  style={{ width: '100%', padding: '8px 10px', border: `1px solid ${passwordError ? '#C0392B' : '#E5E9ED'}`, borderRadius: 8, fontSize: 12, color: '#1C2833', outline: 'none', fontFamily: 'monospace', marginBottom: 6, boxSizing: 'border-box' }}
+                />
+                {passwordError && <div style={{ fontSize: 11, color: '#C0392B', marginBottom: 6 }}>{passwordError}</div>}
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button onClick={() => { setShowPasswordModal(false); setPendingFile(null); setPdfPassword('') }}
+                    style={{ flex: 1, padding: '7px', background: '#fff', border: '1px solid #E5E9ED', borderRadius: 7, fontSize: 11, cursor: 'pointer', color: '#5D6D7E' }}>
+                    Cancel
+                  </button>
+                  <button onClick={() => processAISFile(pendingFile, pdfPassword)}
+                    disabled={!pdfPassword || aisLoading}
+                    style={{ flex: 1, padding: '7px', background: pdfPassword ? '#1A3C5E' : '#ccc', color: '#fff', border: 'none', borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: pdfPassword ? 'pointer' : 'default' }}>
+                    {aisLoading ? '⟳…' : 'Open →'}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {aisData ? (
               <div style={{ background: '#E9F7EF', border: '1px solid #A9DFBF', borderRadius: 10, padding: '10px 12px' }}>
                 <div style={{ fontSize: 11, color: '#1E5631', fontWeight: 600, marginBottom: 2 }}>✓ AIS Loaded — {aisData.taxpayerName || 'Taxpayer'}</div>
@@ -356,7 +335,7 @@ export default function TaxPage() {
                 <div style={{ fontSize: 11, color: '#27AE60', marginTop: 2 }}>Total Tax Credit: ₹{(aisData.totalTaxCredit || 0).toLocaleString('en-IN')}</div>
                 <button onClick={() => setAisData(null)} style={{ fontSize: 10, color: '#C0392B', background: 'none', border: 'none', cursor: 'pointer', marginTop: 4, padding: 0 }}>Remove ×</button>
               </div>
-            ) : (
+            ) : !showPasswordModal && (
               <button onClick={() => aisRef.current?.click()} disabled={aisLoading}
                 style={{ width: '100%', padding: '10px', background: '#F8FAFB', border: '1px dashed #CBD5E0', borderRadius: 9, fontSize: 12, color: '#5D6D7E', cursor: 'pointer', fontWeight: 500 }}>
                 {aisLoading ? '⟳ Reading document…' : '📄 Upload Form 26AS / AIS'}
