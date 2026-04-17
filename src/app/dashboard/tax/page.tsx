@@ -254,7 +254,8 @@ export default function TaxPage() {
             {aisData ? (
               <div style={{ background: '#E9F7EF', border: '1px solid #A9DFBF', borderRadius: 10, padding: '10px 12px' }}>
                 <div style={{ fontSize: 11, color: '#1E5631', fontWeight: 600, marginBottom: 2 }}>✓ AIS Loaded — {aisData.taxpayerName || 'Taxpayer'}</div>
-                <div style={{ fontSize: 11, color: '#27AE60' }}>Total TDS Credit: ₹{aisData.totalTaxCredit?.toLocaleString('en-IN')}</div>
+                <div style={{ fontSize: 12, color: '#1E8449', fontWeight: 600 }}>Total TDS: ₹{(aisData.totalTDSDeducted || 0).toLocaleString('en-IN')}</div>
+                <div style={{ fontSize: 11, color: '#27AE60', marginTop: 2 }}>Total Tax Credit: ₹{(aisData.totalTaxCredit || 0).toLocaleString('en-IN')}</div>
                 <button onClick={() => setAisData(null)} style={{ fontSize: 10, color: '#C0392B', background: 'none', border: 'none', cursor: 'pointer', marginTop: 4, padding: 0 }}>Remove ×</button>
               </div>
             ) : (
@@ -300,6 +301,28 @@ export default function TaxPage() {
 
               {activeTab === 'Comparison' && (
                 <>
+                  {/* AIS TDS Credit Banner — shown when AIS is uploaded */}
+                  {aisData && aisData.totalTDSDeducted > 0 && (
+                    <div style={{ background: '#E9F7EF', border: '1px solid #A9DFBF', borderRadius: 12, padding: '14px 20px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: '#1E5631', marginBottom: 3 }}>
+                          ✓ TDS Already Deducted (from Form 26AS)
+                        </div>
+                        <div style={{ fontSize: 12, color: '#27AE60' }}>
+                          {aisData.taxpayerName} · AY {aisData.assessmentYear} · Employer: {aisData.tdsEntries?.[0]?.deductorName}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: 11, color: '#5D6D7E', marginBottom: 2 }}>TOTAL TDS DEDUCTED</div>
+                        <div style={{ fontSize: 24, fontWeight: 800, color: '#1E8449' }}>₹{(aisData.totalTDSDeducted || 0).toLocaleString('en-IN')}</div>
+                        {taxComparison && (
+                          <div style={{ fontSize: 12, color: '#1E8449', marginTop: 2 }}>
+                            Balance tax due: ₹{Math.max(0, taxComparison[taxComparison.recommendation].totalTax - (aisData.totalTDSDeducted || 0)).toLocaleString('en-IN')}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                   {/* Savings banner */}
                   <div style={{ background: 'linear-gradient(135deg, #0F2640, #1A3C5E)', borderRadius: 14, padding: '18px 24px', marginBottom: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
                     <div>
