@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAppStore } from '@/store/AppStore'
 import { formatINRFull } from '@/lib/tax-engine'
 import { Card, SectionHeader, InfoBox, Badge, ProgressRow, PillTabs, EmptyState } from '@/components/ui'
@@ -7,8 +7,16 @@ import toast from 'react-hot-toast'
 import Link from 'next/link'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
-  RadarChart, PolarGrid, PolarAngleAxis, Radar,
 } from 'recharts'
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve((reader.result as string).split(',')[1])
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
 
 // ─── Tax slab breakdown visual ───────────────────────────────────────────
 function SlabChart({ taxableIncome, regime }: { taxableIncome: number; regime: 'old' | 'new' }) {
@@ -118,12 +126,38 @@ export default function TaxPage() {
   const [deductions, setDeductions] = useState({ section80C: 0, section80CCD1B: 0, section80D: 0, section24b: 0, otherDeductions: 0 })
   const [rentPaid, setRentPaid] = useState(0)
   const [isMetro, setIsMetro] = useState(true)
+  const [aisData, setAisData] = useState<any>(null)
+  const [aisLoading, setAisLoading] = useState(false)
+  const aisRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (salary?.employeePF) {
       setDeductions(d => ({ ...d, section80C: Math.min(salary.employeePF * 12, 150000) }))
     }
   }, [salary])
+
+  const uploadAIS = useCallback(async (file: File) => {
+    if (!['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      toast.error('Please upload a PDF or image of your Form 26AS / AIS'); return
+    }
+    setAisLoading(true)
+    const tid = toast.loading('Reading your AIS / Form 26AS…')
+    try {
+      const base64Data = await fileToBase64(file)
+      const res = await fetch('/api/parse-ais', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base64Data, mediaType: file.type }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error)
+      setAisData(json.data)
+      toast.success(`AIS parsed! Total TDS credit: ₹${json.data.totalTaxCredit?.toLocaleString('en-IN')}`, { id: tid })
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to parse. Try a clearer image.', { id: tid })
+    } finally {
+      setAisLoading(false)
+    }
+  }, [])
 
   const calculate = async () => {
     if (!salary) return
@@ -209,6 +243,30 @@ export default function TaxPage() {
             {loading ? '⟳ Calculating…' : '📊 Calculate Tax'}
           </button>
 
+          {/* AIS Upload */}
+          <div style={{ marginTop: 16, borderTop: '1px solid #F0F0F0', paddingTop: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#1C2833', marginBottom: 4 }}>
+              Form 26AS / AIS Upload
+            </div>
+            <div style={{ fontSize: 11, color: '#5D6D7E', marginBottom: 10, lineHeight: 1.5 }}>
+              Download from incometax.gov.in and upload for accurate TDS data
+            </div>
+            {aisData ? (
+              <div style={{ background: '#E9F7EF', border: '1px solid #A9DFBF', borderRadius: 10, padding: '10px 12px' }}>
+                <div style={{ fontSize: 11, color: '#1E5631', fontWeight: 600, marginBottom: 2 }}>✓ AIS Loaded — {aisData.taxpayerName || 'Taxpayer'}</div>
+                <div style={{ fontSize: 11, color: '#27AE60' }}>Total TDS Credit: ₹{aisData.totalTaxCredit?.toLocaleString('en-IN')}</div>
+                <button onClick={() => setAisData(null)} style={{ fontSize: 10, color: '#C0392B', background: 'none', border: 'none', cursor: 'pointer', marginTop: 4, padding: 0 }}>Remove ×</button>
+              </div>
+            ) : (
+              <button onClick={() => aisRef.current?.click()} disabled={aisLoading}
+                style={{ width: '100%', padding: '10px', background: '#F8FAFB', border: '1px dashed #CBD5E0', borderRadius: 9, fontSize: 12, color: '#5D6D7E', cursor: 'pointer', fontWeight: 500 }}>
+                {aisLoading ? '⟳ Reading document…' : '📄 Upload Form 26AS / AIS'}
+              </button>
+            )}
+            <input ref={aisRef} type="file" accept=".pdf,image/*" style={{ display: 'none' }}
+              onChange={e => e.target.files?.[0] && uploadAIS(e.target.files[0])} />
+          </div>
+
           {taxComparison && (
             <div style={{ marginTop: 12, padding: '12px 14px', background: taxComparison.recommendation === 'new' ? '#FEF3E2' : '#E8F1FA', borderRadius: 10 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: taxComparison.recommendation === 'new' ? '#92400E' : '#1A3C5E' }}>
@@ -237,7 +295,7 @@ export default function TaxPage() {
             <div className="fade-in">
               {/* Tabs */}
               <div style={{ marginBottom: 20 }}>
-                <PillTabs tabs={['Comparison', 'Slab Breakdown', 'Save More', 'Advance Tax', 'AI Insights']} active={activeTab} onChange={setActiveTab} />
+                <PillTabs tabs={['Comparison', 'Slab Breakdown', 'Save More', 'Advance Tax', 'AI Insights', 'TDS Data']} active={activeTab} onChange={setActiveTab} />
               </div>
 
               {activeTab === 'Comparison' && (
@@ -523,6 +581,121 @@ export default function TaxPage() {
                       </>
                     )
                   })()}
+                </div>
+              )}
+
+              {activeTab === 'TDS Data' && (
+                <div className="fade-in">
+                  {!aisData ? (
+                    <div style={{ textAlign: 'center', padding: '50px 20px', background: '#fff', borderRadius: 14, border: '1px solid #E5E9ED' }}>
+                      <div style={{ fontSize: 40, marginBottom: 14 }}>📄</div>
+                      <div style={{ fontSize: 15, fontWeight: 600, color: '#1C2833', marginBottom: 8 }}>Upload Form 26AS or AIS</div>
+                      <div style={{ fontSize: 13, color: '#5D6D7E', marginBottom: 20, lineHeight: 1.6, maxWidth: 380, margin: '0 auto 20px' }}>
+                        Download your AIS from incometax.gov.in and upload here to see your complete TDS picture — employer wise, quarter wise.
+                      </div>
+                      <div style={{ background: '#F8FAFB', borderRadius: 12, padding: '16px 20px', marginBottom: 16, textAlign: 'left', maxWidth: 440, margin: '0 auto 16px' }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: '#1C2833', marginBottom: 10 }}>How to download AIS:</div>
+                        {[
+                          'Go to incometax.gov.in and login',
+                          'Click "Annual Information Statement (AIS)"',
+                          'Download as PDF',
+                          'Upload here using the button in the left panel',
+                        ].map((step, i) => (
+                          <div key={i} style={{ display: 'flex', gap: 10, fontSize: 12, color: '#5D6D7E', marginBottom: 6 }}>
+                            <span style={{ width: 20, height: 20, background: '#1A3C5E', color: '#fff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{i + 1}</span>
+                            {step}
+                          </div>
+                        ))}
+                      </div>
+                      <button onClick={() => aisRef.current?.click()}
+                        style={{ padding: '11px 28px', background: '#1A3C5E', color: '#fff', border: 'none', borderRadius: 9, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+                        📄 Upload Form 26AS / AIS
+                      </button>
+                      <input ref={aisRef} type="file" accept=".pdf,image/*" style={{ display: 'none' }}
+                        onChange={e => e.target.files?.[0] && uploadAIS(e.target.files[0])} />
+                    </div>
+                  ) : (
+                    <>
+                      {/* Summary cards */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
+                        {[
+                          { label: 'Total TDS Deducted', value: `₹${aisData.totalTDSDeducted?.toLocaleString('en-IN')}`, color: '#1A3C5E' },
+                          { label: 'Tax Payments Made', value: `₹${aisData.totalTaxPaid?.toLocaleString('en-IN')}`, color: '#1E8449' },
+                          { label: 'Total Tax Credit', value: `₹${aisData.totalTaxCredit?.toLocaleString('en-IN')}`, color: '#E67E22' },
+                        ].map(s => (
+                          <div key={s.label} style={{ background: '#fff', border: '1px solid #E5E9ED', borderRadius: 12, padding: '16px' }}>
+                            <div style={{ fontSize: 11, color: '#5D6D7E', marginBottom: 6 }}>{s.label}</div>
+                            <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.value}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* TDS entries */}
+                      {aisData.tdsEntries?.length > 0 && (
+                        <Card style={{ marginBottom: 16 }}>
+                          <SectionHeader title="TDS Deducted — Deductor Wise" sub={`${aisData.assessmentYear} · ${aisData.taxpayerName}`} />
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {aisData.tdsEntries.map((entry: any, i: number) => (
+                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', background: '#F8FAFB', borderRadius: 10, border: '1px solid #F0F0F0' }}>
+                                <div>
+                                  <div style={{ fontSize: 13, fontWeight: 600, color: '#1C2833' }}>{entry.deductorName}</div>
+                                  <div style={{ fontSize: 11, color: '#5D6D7E', marginTop: 2 }}>
+                                    {entry.incomeType === 'salary' ? '💼 Salary' : entry.incomeType === 'interest' ? '🏦 Interest' : entry.incomeType === 'rent' ? '🏠 Rent' : '📋 Other'} · TAN: {entry.deductorTAN || 'N/A'} · {entry.quarter}
+                                  </div>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                  <div style={{ fontSize: 14, fontWeight: 700, color: '#C0392B' }}>TDS: ₹{entry.tdsDeducted?.toLocaleString('en-IN')}</div>
+                                  <div style={{ fontSize: 11, color: '#5D6D7E' }}>Gross: ₹{entry.grossAmount?.toLocaleString('en-IN')}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </Card>
+                      )}
+
+                      {/* Tax payments */}
+                      {aisData.taxPayments?.length > 0 && (
+                        <Card style={{ marginBottom: 16 }}>
+                          <SectionHeader title="Tax Payments Made" sub="Advance tax and self-assessment tax" />
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {aisData.taxPayments.map((pmt: any, i: number) => (
+                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: '#F0FDF4', borderRadius: 10, border: '1px solid #A9DFBF' }}>
+                                <div>
+                                  <div style={{ fontSize: 13, fontWeight: 600, color: '#1C2833' }}>{pmt.type === 'advance_tax' ? 'Advance Tax' : pmt.type === 'self_assessment' ? 'Self Assessment Tax' : 'TDS'}</div>
+                                  <div style={{ fontSize: 11, color: '#5D6D7E', marginTop: 2 }}>Date: {pmt.date} · BSR: {pmt.bsrCode || 'N/A'}</div>
+                                </div>
+                                <div style={{ fontSize: 14, fontWeight: 700, color: '#1E8449' }}>₹{pmt.amount?.toLocaleString('en-IN')}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </Card>
+                      )}
+
+                      {/* Mismatch check */}
+                      {salary && (() => {
+                        const aisTDS = aisData.tdsEntries?.find((e: any) => e.incomeType === 'salary')?.tdsDeducted || 0
+                        const slipTDS = (salary.tdsDeducted || 0) * 12
+                        const diff = Math.abs(aisTDS - slipTDS)
+                        if (diff > 1000) {
+                          return (
+                            <InfoBox variant="warning" icon="⚠️">
+                              <strong>TDS Mismatch Detected!</strong> Your salary slip shows ₹{slipTDS.toLocaleString('en-IN')}/yr TDS but AIS shows ₹{aisTDS.toLocaleString('en-IN')}. Difference of ₹{diff.toLocaleString('en-IN')}. Check with your employer and verify Form 16.
+                            </InfoBox>
+                          )
+                        }
+                        return (
+                          <InfoBox variant="success" icon="✅">
+                            <strong>TDS Match!</strong> Salary slip TDS (₹{slipTDS.toLocaleString('en-IN')}/yr) matches your AIS data. Your records are consistent.
+                          </InfoBox>
+                        )
+                      })()}
+
+                      <button onClick={() => setAisData(null)}
+                        style={{ marginTop: 12, padding: '8px 16px', background: '#fff', border: '1px solid #E5E9ED', borderRadius: 8, fontSize: 12, color: '#C0392B', cursor: 'pointer', fontWeight: 500 }}>
+                        ✕ Remove AIS Data
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
 
