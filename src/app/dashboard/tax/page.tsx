@@ -237,7 +237,7 @@ export default function TaxPage() {
             <div className="fade-in">
               {/* Tabs */}
               <div style={{ marginBottom: 20 }}>
-                <PillTabs tabs={['Comparison', 'Slab Breakdown', 'Save More']} active={activeTab} onChange={setActiveTab} />
+                <PillTabs tabs={['Comparison', 'Slab Breakdown', 'Save More', 'Advance Tax', 'AI Insights']} active={activeTab} onChange={setActiveTab} />
               </div>
 
               {activeTab === 'Comparison' && (
@@ -344,6 +344,188 @@ export default function TaxPage() {
                   </Card>
                 </div>
               )}
+              {activeTab === 'Advance Tax' && (
+                <div className="fade-in">
+                  {(() => {
+                    const totalTax = taxComparison[taxComparison.recommendation].totalTax
+                    const tdsDeducted = (salary?.tdsDeducted || 0) * 12
+                    const advanceTaxDue = Math.max(0, totalTax - tdsDeducted)
+                    const isLiable = advanceTaxDue > 10000
+                    const today = new Date()
+                    const currentYear = today.getFullYear()
+                    const installments = [
+                      { due: `15 June ${currentYear}`, pct: 15, amount: Math.round(totalTax * 0.15), label: '1st Installment', month: 5 },
+                      { due: `15 September ${currentYear}`, pct: 45, amount: Math.round(totalTax * 0.45 - totalTax * 0.15), label: '2nd Installment', month: 8 },
+                      { due: `15 December ${currentYear}`, pct: 75, amount: Math.round(totalTax * 0.75 - totalTax * 0.45), label: '3rd Installment', month: 11 },
+                      { due: `15 March ${currentYear + 1}`, pct: 100, amount: Math.round(totalTax * 0.25), label: '4th Installment', month: 2 },
+                    ]
+                    const isPast = (month: number) => month < today.getMonth()
+                    const isNext = (month: number, idx: number) => !isPast(month) && (idx === 0 || isPast(installments[idx-1].month))
+                    return (
+                      <>
+                        {/* Summary */}
+                        <div style={{ background: 'linear-gradient(135deg, #0F2640, #1A3C5E)', borderRadius: 14, padding: '20px 24px', marginBottom: 18, color: '#fff' }}>
+                          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>ESTIMATED ADVANCE TAX LIABILITY</div>
+                          <div style={{ fontSize: 36, fontWeight: 800, color: isLiable ? '#FBBF24' : '#4ADE80', marginBottom: 8 }}>
+                            ₹{advanceTaxDue.toLocaleString('en-IN')}
+                          </div>
+                          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', lineHeight: 1.6 }}>
+                            {isLiable
+                              ? `Total tax ₹${totalTax.toLocaleString('en-IN')} − TDS already deducted ₹${tdsDeducted.toLocaleString('en-IN')} = ₹${advanceTaxDue.toLocaleString('en-IN')} advance tax due`
+                              : 'Your employer TDS covers your full tax liability. No advance tax required.'}
+                          </div>
+                        </div>
+
+                        {!isLiable && (
+                          <InfoBox variant="success" icon="✅">
+                            <strong>No advance tax required.</strong> Your TDS deductions already cover your estimated tax liability. You only need to pay advance tax if your net liability exceeds ₹10,000 after TDS.
+                          </InfoBox>
+                        )}
+
+                        {isLiable && (
+                          <>
+                            <Card style={{ marginBottom: 16 }}>
+                              <SectionHeader title="Installment Schedule — FY 2024-25" sub="Pay on time to avoid 1% monthly interest under Section 234B & 234C" />
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                {installments.map((inst, i) => {
+                                  const past = isPast(inst.month)
+                                  const next = isNext(inst.month, i)
+                                  return (
+                                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 12, background: next ? '#FEF3E2' : past ? '#F8FAFB' : '#fff', border: `1px solid ${next ? '#F0C070' : '#E5E9ED'}` }}>
+                                      <div style={{ width: 44, height: 44, borderRadius: 10, background: next ? '#E67E22' : past ? '#E5E9ED' : '#E8F1FA', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: next ? '#fff' : past ? '#95A5A6' : '#1A3C5E', flexShrink: 0 }}>
+                                        {inst.pct}%
+                                      </div>
+                                      <div style={{ flex: 1 }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                          <div>
+                                            <div style={{ fontSize: 13, fontWeight: 600, color: past ? '#95A5A6' : '#1C2833' }}>{inst.label}</div>
+                                            <div style={{ fontSize: 11, color: '#5D6D7E', marginTop: 2 }}>Due: {inst.due} · Cumulative {inst.pct}% of annual tax</div>
+                                          </div>
+                                          <div style={{ textAlign: 'right' }}>
+                                            <div style={{ fontSize: 16, fontWeight: 700, color: past ? '#95A5A6' : next ? '#E67E22' : '#1A3C5E' }}>₹{inst.amount.toLocaleString('en-IN')}</div>
+                                            {next && <div style={{ fontSize: 10, color: '#E67E22', fontWeight: 600, marginTop: 2 }}>PAY NEXT</div>}
+                                            {past && <div style={{ fontSize: 10, color: '#95A5A6', marginTop: 2 }}>DUE PASSED</div>}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </Card>
+
+                            <InfoBox variant="warning" icon="⚠️">
+                              <strong>Late payment penalty:</strong> Missing advance tax installments attracts 1% interest per month under Section 234B and 234C of the Income Tax Act. On ₹{advanceTaxDue.toLocaleString('en-IN')}, a 3-month delay costs approximately ₹{Math.round(advanceTaxDue * 0.03).toLocaleString('en-IN')} extra.
+                            </InfoBox>
+                          </>
+                        )}
+
+                        <Card style={{ marginTop: 16 }}>
+                          <SectionHeader title="Who needs to pay advance tax?" />
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {[
+                              { icon: '💼', text: 'Salaried employees — only if tax liability after TDS exceeds ₹10,000' },
+                              { icon: '🧑‍💼', text: 'Self-employed / freelancers — if annual tax exceeds ₹10,000' },
+                              { icon: '📈', text: 'Investors with capital gains — if gains cause tax liability above ₹10,000' },
+                              { icon: '👴', text: 'Senior citizens (60+) with no business income — exempt from advance tax' },
+                            ].map(item => (
+                              <div key={item.text} style={{ display: 'flex', gap: 10, fontSize: 13, color: '#5D6D7E', padding: '8px 0', borderBottom: '1px solid #F5F5F5' }}>
+                                <span style={{ flexShrink: 0 }}>{item.icon}</span> {item.text}
+                              </div>
+                            ))}
+                          </div>
+                        </Card>
+                      </>
+                    )
+                  })()}
+                </div>
+              )}
+
+              {activeTab === 'AI Insights' && (
+                <div className="fade-in">
+                  {(() => {
+                    const rec = taxComparison.recommendation
+                    const result = taxComparison[rec]
+                    const annualGross = (salary?.grossSalary || 0) * 12
+                    const insights = []
+
+                    if (taxComparison.savings > 5000) {
+                      insights.push({ type: 'urgent', icon: '🚨', title: 'Wrong tax regime costing you money', desc: `Aap abhi ${rec === 'new' ? 'Old' : 'New'} regime mein ho — switch karne se ₹${taxComparison.savings.toLocaleString('en-IN')}/year bachega. Yeh ${rec === 'new' ? 'Old' : 'New'} Regime better hai aapke liye.` })
+                    }
+
+                    const pfAnnual = (salary?.employeePF || 0) * 12
+                    const gap80C = Math.max(0, 150000 - pfAnnual)
+                    if (gap80C > 10000 && rec === 'old') {
+                      insights.push({ type: 'save', icon: '💰', title: `80C mein ₹${gap80C.toLocaleString('en-IN')} bacha sakte ho`, desc: `Aapka PF ₹${pfAnnual.toLocaleString('en-IN')}/yr hai. 80C limit ₹1,50,000 hai. ₹${gap80C.toLocaleString('en-IN')} ELSS ya PPF mein lagao — approximately ₹${Math.round(gap80C * 0.3).toLocaleString('en-IN')} tax bachega.` })
+                    }
+
+                    if ((salary?.tdsDeducted || 0) > result.monthlyTDS + 2000) {
+                      insights.push({ type: 'refund', icon: '💸', title: 'TDS zyada cut ho raha hai', desc: `Employer ₹${salary?.tdsDeducted?.toLocaleString('en-IN')}/mo TDS kaat raha hai, lekin actual liability sirf ₹${result.monthlyTDS.toLocaleString('en-IN')}/mo hai. Form 12BB submit karo — monthly ₹${((salary?.tdsDeducted || 0) - result.monthlyTDS).toLocaleString('en-IN')} zyada haath mein aayega.` })
+                    }
+
+                    if ((salary?.tdsDeducted || 0) < result.monthlyTDS - 2000) {
+                      insights.push({ type: 'warning', icon: '⚠️', title: 'TDS kam cut ho raha hai — notice aa sakta hai', desc: `Employer sirf ₹${salary?.tdsDeducted?.toLocaleString('en-IN')}/mo TDS kaat raha hai, lekin aapki liability ₹${result.monthlyTDS.toLocaleString('en-IN')}/mo hai. March mein bada payment bachao — employer ko sahi declaration do.` })
+                    }
+
+                    if (annualGross > 700000 && annualGross < 775000 && rec === 'new') {
+                      insights.push({ type: 'save', icon: '🎯', title: '₹7L ke paas ho — zero tax possible!', desc: `Aapki income ₹${(annualGross/100000).toFixed(1)}L hai. New Regime mein ₹7L tak zero tax hota hai (87A rebate). Thoda investment badhao ya NPS contribution karo — pure zero tax ho sakta hai.` })
+                    }
+
+                    if (insights.length === 0) {
+                      insights.push({ type: 'good', icon: '✅', title: 'Sab theek lag raha hai!', desc: 'Aapki tax situation optimised hai. Sahi regime choose ki hai, TDS sahi hai. Bas investments timely karo aur Form 12BB submit karo.' })
+                    }
+
+                    const colors: Record<string, { bg: string; border: string; iconBg: string }> = {
+                      urgent: { bg: '#FDEDEC', border: '#F5C6C2', iconBg: '#C0392B' },
+                      save:   { bg: '#E9F7EF', border: '#A9DFBF', iconBg: '#1E8449' },
+                      refund: { bg: '#E8F1FA', border: '#A8CCE8', iconBg: '#1A3C5E' },
+                      warning:{ bg: '#FEF3E2', border: '#F0C070', iconBg: '#E67E22' },
+                      good:   { bg: '#E9F7EF', border: '#A9DFBF', iconBg: '#1E8449' },
+                    }
+
+                    return (
+                      <>
+                        <div style={{ fontSize: 13, color: '#5D6D7E', marginBottom: 16 }}>
+                          Aapki salary aur tax data ke basis pe personalised insights — kya karna chahiye aur kya avoid karna chahiye.
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                          {insights.map((ins, i) => {
+                            const c = colors[ins.type]
+                            return (
+                              <div key={i} style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12, padding: '16px 18px', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                                <div style={{ width: 40, height: 40, borderRadius: 10, background: c.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
+                                  {ins.icon}
+                                </div>
+                                <div>
+                                  <div style={{ fontSize: 14, fontWeight: 700, color: '#1C2833', marginBottom: 6 }}>{ins.title}</div>
+                                  <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.7 }}>{ins.desc}</div>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+
+                        <Card style={{ marginTop: 16 }}>
+                          <SectionHeader title="Quick action checklist" sub="Ye karo is financial year mein" />
+                          {[
+                            { done: taxComparison.recommendation !== null, text: 'Sahi tax regime identify karo' },
+                            { done: (salary?.employeePF || 0) > 0, text: 'Form 12BB employer ko submit karo' },
+                            { done: false, text: '80C investments complete karo (ELSS/PPF/NPS)' },
+                            { done: false, text: 'Health insurance le lo (80D benefit)' },
+                            { done: false, text: 'Advance tax dates calendar mein set karo' },
+                          ].map((item, i) => (
+                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid #F5F5F5', fontSize: 13, color: item.done ? '#1E8449' : '#5D6D7E' }}>
+                              <span style={{ fontSize: 16 }}>{item.done ? '✅' : '⬜'}</span>
+                              {item.text}
+                            </div>
+                          ))}
+                        </Card>
+                      </>
+                    )
+                  })()}
+                </div>
+              )}
+
             </div>
           )}
         </div>
