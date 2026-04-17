@@ -142,31 +142,23 @@ export default function TaxPage() {
     }
   }, [salary])
 
-  // Try to process PDF — if password-protected, show modal
+  // Always show password panel for PDFs — simpler and more reliable
   const handleAISFile = useCallback(async (file: File) => {
     if (!['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
       toast.error('Please upload a PDF or image of your Form 26AS / AIS'); return
     }
 
     if (file.type === 'application/pdf') {
-      // Check if password protected by trying to read it
-      const arrayBuffer = await file.arrayBuffer()
-      const bytes = new Uint8Array(arrayBuffer)
-      // Check for encryption dictionary in PDF header area
-      const text = new TextDecoder('latin1').decode(bytes.slice(0, 2048))
-      const isEncrypted = text.includes('/Encrypt') || text.includes('Encrypt')
-
-      if (isEncrypted) {
-        // Store file and show password modal
-        setPendingFile(file)
-        setPdfPassword('')
-        setPasswordError('')
-        setShowPasswordModal(true)
-        return
-      }
+      // Always show password panel for PDFs
+      // User can leave blank if not password-protected
+      setPendingFile(file)
+      setPdfPassword('')
+      setPasswordError('')
+      setShowPasswordModal(true)
+      return
     }
 
-    // Not encrypted or is an image — process directly
+    // Images — process directly
     await processAISFile(file, '')
   }, [])
 
