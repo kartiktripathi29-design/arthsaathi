@@ -143,7 +143,7 @@ export default function TaxPage() {
     }
   }, [salary])
 
-  // Handle AIS PDF or image upload
+  // Handle AIS/26AS upload
   const handleAISFile = useCallback(async (file: File) => {
     if (!['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
       toast.error('Please upload a PDF or image'); return
@@ -158,69 +158,27 @@ export default function TaxPage() {
     await processAISFile(file, '')
   }, [])
 
-  // Extract text client-side (browser has DOMMatrix), send text to server
+  // Send PDF to server — pdf-parse handles decryption with password
   const processAISFile = useCallback(async (file: File, password: string) => {
     setAisLoading(true)
     setShowPasswordModal(false)
-    const tid = toast.loading('Reading your AIS PDF…')
+    const tid = toast.loading('Reading your document…')
     try {
-      const arrayBuffer = await file.arrayBuffer()
-
-      // Dynamically import pdfjs — runs in browser where DOMMatrix exists
-      const pdfjs = await import('pdfjs-dist')
-
-      // Blob worker — loads worker from CDN, no local file needed
-      const workerBlob = new Blob(
-        [`importScripts('https://unpkg.com/pdfjs-dist@${pdfjs.version}/legacy/build/pdf.worker.min.mjs')`],
-        { type: 'application/javascript' }
-      )
-      pdfjs.GlobalWorkerOptions.workerSrc = URL.createObjectURL(workerBlob)
-
-      let pdf: any
-      try {
-        pdf = await pdfjs.getDocument({
-          data: new Uint8Array(arrayBuffer),
-          password: password || undefined,
-          useWorkerFetch: false,
-          isEvalSupported: false,
-          disableFontFace: true,
-        }).promise
-      } catch (e: any) {
-        const isWrongPwd =
-          e?.name === 'PasswordException' || e?.code === 1 || e?.code === 2
-        if (isWrongPwd) {
-          setShowPasswordModal(true)
-          setPendingFile(file)
-          setPasswordError('Incorrect password. Format: PAN lowercase + DOB DDMMYYYY. Example: aizpn6725a05121998')
-          toast.dismiss(tid)
-          return
-        }
-        throw e
-      }
-
-      toast.loading(`Extracting ${pdf.numPages} pages…`, { id: tid })
-
-      let fullText = ''
-      for (let i = 1; i <= Math.min(pdf.numPages, 6); i++) {
-        const page = await pdf.getPage(i)
-        const textContent = await page.getTextContent()
-        const pageText = (textContent.items as any[])
-          .map((item: any) => item.str || '')
-          .join(' ')
-        fullText += `\n--- Page ${i} ---\n${pageText}`
-      }
-
-      toast.loading('Analysing with Claude AI…', { id: tid })
-
+      const base64Data = await fileToBase64(file)
       const res = await fetch('/api/parse-ais', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pdfText: fullText }),
+        body: JSON.stringify({ base64Data, mediaType: file.type, password: password || undefined }),
       })
-
       const json = await res.json()
+      if (res.status === 422 || json.error === 'incorrect_password') {
+        setShowPasswordModal(true)
+        setPendingFile(file)
+        setPasswordError('Incorrect password. Format: PAN lowercase + DOB DDMMYYYY. Example: aizpn6725a05121998')
+        toast.dismiss(tid)
+        return
+      }
       if (!res.ok) throw new Error(json.error)
-
       setAisData(json.data)
       setPendingFile(null)
       setPdfPassword('')
@@ -341,30 +299,28 @@ export default function TaxPage() {
             {loading ? '⟳ Calculating…' : '📊 Calculate Tax'}
           </button>
 
-          {/* AIS Upload */}
+          {/* AIS / 26AS Upload */}
           <div style={{ marginTop: 16, borderTop: '1px solid #F0F0F0', paddingTop: 16 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: '#1C2833', marginBottom: 4 }}>
-              Form 26AS / AIS Upload
+              AIS / Form 26AS Upload
             </div>
             <div style={{ fontSize: 11, color: '#5D6D7E', marginBottom: 10, lineHeight: 1.5 }}>
-              Download from incometax.gov.in for accurate TDS data
+              Download from incometax.gov.in — AIS PDF or Form 26AS PDF
             </div>
 
-            {/* Password entry panel */}
             {showPasswordModal && pendingFile && (
               <div style={{ background: '#F8FAFB', border: '1px solid #E5E9ED', borderRadius: 12, padding: '14px', marginBottom: 10 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#1C2833', marginBottom: 6 }}>🔐 PDF Password Required</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#1C2833', marginBottom: 4 }}>🔐 Enter PDF Password</div>
                 <div style={{ fontSize: 11, color: '#5D6D7E', marginBottom: 8, lineHeight: 1.6 }}>
-                  Password = PAN (lowercase) + DOB (DDMMYYYY)<br />
-                  <span style={{ fontFamily: 'monospace', color: '#1A3C5E', fontSize: 10 }}>e.g. abcde1234f01011990</span>
+                  AIS password = PAN lowercase + DOB DDMMYYYY<br/>
+                  <span style={{ fontFamily: 'monospace', color: '#1A3C5E', fontSize: 10 }}>e.g. aizpn6725a05121998</span><br/>
+                  Form 26AS = leave blank
                 </div>
-                <input
-                  type="text"
-                  value={pdfPassword}
+                <input type="text" value={pdfPassword}
                   onChange={e => { setPdfPassword(e.target.value); setPasswordError('') }}
-                  placeholder="abcde1234f01011990"
+                  placeholder="Leave blank for Form 26AS"
                   onKeyDown={e => e.key === 'Enter' && processAISFile(pendingFile, pdfPassword)}
-                  style={{ width: '100%', padding: '8px 10px', border: `1px solid ${passwordError ? '#C0392B' : '#E5E9ED'}`, borderRadius: 8, fontSize: 12, color: '#1C2833', outline: 'none', fontFamily: 'monospace', marginBottom: 6, boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '8px 10px', border: `1px solid ${passwordError ? '#C0392B' : '#E5E9ED'}`, borderRadius: 8, fontSize: 12, outline: 'none', marginBottom: 6, boxSizing: 'border-box', fontFamily: 'monospace' }}
                 />
                 {passwordError && <div style={{ fontSize: 11, color: '#C0392B', marginBottom: 6 }}>{passwordError}</div>}
                 <div style={{ display: 'flex', gap: 6 }}>
@@ -373,9 +329,9 @@ export default function TaxPage() {
                     Cancel
                   </button>
                   <button onClick={() => processAISFile(pendingFile, pdfPassword)}
-                    disabled={!pdfPassword || aisLoading}
-                    style={{ flex: 1, padding: '7px', background: pdfPassword ? '#1A3C5E' : '#ccc', color: '#fff', border: 'none', borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: pdfPassword ? 'pointer' : 'default' }}>
-                    {aisLoading ? '⟳…' : 'Open →'}
+                    disabled={aisLoading}
+                    style={{ flex: 1, padding: '7px', background: '#1A3C5E', color: '#fff', border: 'none', borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                    {aisLoading ? '⟳…' : 'Read PDF →'}
                   </button>
                 </div>
               </div>
@@ -383,21 +339,16 @@ export default function TaxPage() {
 
             {aisData ? (
               <div style={{ background: '#E9F7EF', border: '1px solid #A9DFBF', borderRadius: 10, padding: '10px 12px' }}>
-                <div style={{ fontSize: 11, color: '#1E5631', fontWeight: 600, marginBottom: 2 }}>✓ AIS Loaded — {aisData.taxpayerName || 'Taxpayer'}</div>
+                <div style={{ fontSize: 11, color: '#1E5631', fontWeight: 600, marginBottom: 2 }}>✓ Loaded — {aisData.taxpayerName || 'Taxpayer'}</div>
                 <div style={{ fontSize: 12, color: '#1E8449', fontWeight: 600 }}>Total TDS: ₹{(aisData.totalTDSDeducted || 0).toLocaleString('en-IN')}</div>
                 <div style={{ fontSize: 11, color: '#27AE60', marginTop: 2 }}>Tax Credit: ₹{(aisData.totalTaxCredit || 0).toLocaleString('en-IN')}</div>
                 <button onClick={() => setAisData(null)} style={{ fontSize: 10, color: '#C0392B', background: 'none', border: 'none', cursor: 'pointer', marginTop: 4, padding: 0 }}>Remove ×</button>
               </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <button onClick={() => aisRef.current?.click()} disabled={aisLoading}
-                  style={{ width: '100%', padding: '10px 12px', background: '#E9F7EF', border: '1px solid #A9DFBF', borderRadius: 9, fontSize: 12, color: '#1E5631', cursor: 'pointer', fontWeight: 600, textAlign: 'left' }}>
-                  {aisLoading ? '⟳ Reading…' : '📄 Upload Form 26AS / AIS PDF'}
-                </button>
-                <div style={{ fontSize: 10, color: '#5D6D7E', paddingLeft: 4, lineHeight: 1.5 }}>
-                  Download from incometax.gov.in → Form 26AS → Download PDF
-                </div>
-              </div>
+            ) : !showPasswordModal && (
+              <button onClick={() => aisRef.current?.click()} disabled={aisLoading}
+                style={{ width: '100%', padding: '10px 12px', background: '#E9F7EF', border: '1px solid #A9DFBF', borderRadius: 9, fontSize: 12, color: '#1E5631', cursor: 'pointer', fontWeight: 600, textAlign: 'left' }}>
+                {aisLoading ? '⟳ Reading…' : '📄 Upload AIS / Form 26AS PDF'}
+              </button>
             )}
 
             <input ref={aisRef} type="file" accept=".pdf,image/*" style={{ display: 'none' }}

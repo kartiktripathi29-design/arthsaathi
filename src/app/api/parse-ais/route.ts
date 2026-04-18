@@ -1,8 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { writeFileSync, unlinkSync, existsSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 export const maxDuration = 60
+
+async function extractTextFromPDF(base64Data: string, password?: string): Promise<string> {
+  const { PDFParse } = await import('pdf-parse')
+  
+  const tmpPath = join(tmpdir(), `ais_${Date.now()}.pdf`)
+  try {
+    writeFileSync(tmpPath, Buffer.from(base64Data, 'base64'))
+    
+    const opts: any = { url: `file://${tmpPath}`, verbosity: 0 }
+    if (password) opts.password = password
+    
+    const parser = new PDFParse(opts)
+    
+    let result: any
+    try {
+      result = await parser.getText()
+    } catch (e: any) {
+      const msg = String(e?.message || e?.name || '').toLowerCase()
+      if (msg.includes('password') || msg.includes('incorrect') || msg.includes('encrypted')) {
+        throw new Error('incorrect_password')
+      }
+      throw e
+    }
+    
+    const text = result?.text || 
+      (result?.pages || []).map((p: any) => p.text || '').join('\n')
+    
+    return text
+  } finally {
+    try { if (existsSync(tmpPath)) unlinkSync(tmpPath) } catch {}
+  }
+}
 
 const AIS_SYSTEM = `You are an expert Indian tax document parser for AIS and Form 26AS from incometax.gov.in.
 Extract ALL financial data. Return ONLY raw JSON — no markdown, no code blocks.
@@ -24,25 +59,35 @@ For Form 26AS PART-I use the Total row per deductor. Section 192=salary, 194A=in
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { pdfText, base64Data, mediaType } = body
+    const { base64Data, mediaType, password } = body
+
+    if (!base64Data) {
+      return NextResponse.json({ error: 'No document provided' }, { status: 400 })
+    }
 
     let content: any[]
 
-    if (pdfText) {
+    if (mediaType === 'application/pdf') {
+      // Extract text server-side using pdf-parse (supports passwords, works on Vercel)
+      let pdfText: string
+      try {
+        pdfText = await extractTextFromPDF(base64Data, password || undefined)
+      } catch (e: any) {
+        if (e.message === 'incorrect_password') {
+          return NextResponse.json({ error: 'incorrect_password' }, { status: 422 })
+        }
+        throw e
+      }
       content = [{
         type: 'text',
-        text: `Extract all TDS, income, and tax data from this Form 26AS / AIS document text. Return only JSON.\n\n${pdfText}`
+        text: `Extract all TDS, income, and tax payment data from this Form 26AS / AIS document text. Return only JSON.\n\n${pdfText}`
       }]
-    } else if (base64Data) {
-      const isImage = mediaType?.startsWith('image/')
-      content = [
-        isImage
-          ? { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Data } }
-          : { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64Data } },
-        { type: 'text', text: 'Extract all TDS and income data. Return only JSON.' }
-      ]
     } else {
-      return NextResponse.json({ error: 'No document provided' }, { status: 400 })
+      // Image upload — send directly
+      content = [
+        { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Data } },
+        { type: 'text', text: 'Extract all TDS and income data from this Form 26AS / AIS image. Return only JSON.' }
+      ]
     }
 
     const response = await client.messages.create({
@@ -58,6 +103,7 @@ export async function POST(req: NextRequest) {
     if (!jsonMatch) throw new Error('Could not extract data')
     const parsed = JSON.parse(jsonMatch[0])
 
+    // Recalculate totals
     if (parsed.tdsEntries?.length > 0) {
       parsed.totalTDSDeducted = parsed.tdsEntries.reduce((s: number, e: any) => s + (Number(e.tdsDeducted) || 0), 0)
       parsed.salaryIncome = parsed.tdsEntries.filter((e: any) => e.incomeType === 'salary')
