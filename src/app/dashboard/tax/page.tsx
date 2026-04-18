@@ -169,8 +169,12 @@ export default function TaxPage() {
       // Dynamically import pdfjs — runs in browser where DOMMatrix exists
       const pdfjs = await import('pdfjs-dist')
 
-      // Use worker from our public folder
-      pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
+      // Blob worker — loads worker from CDN, no local file needed
+      const workerBlob = new Blob(
+        [`importScripts('https://unpkg.com/pdfjs-dist@${pdfjs.version}/legacy/build/pdf.worker.min.mjs')`],
+        { type: 'application/javascript' }
+      )
+      pdfjs.GlobalWorkerOptions.workerSrc = URL.createObjectURL(workerBlob)
 
       let pdf: any
       try {
