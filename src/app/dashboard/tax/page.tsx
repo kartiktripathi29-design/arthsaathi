@@ -158,31 +158,65 @@ export default function TaxPage() {
     await processAISFile(file, '')
   }, [])
 
-  // Send PDF + password to server for text extraction
+  // Extract text client-side (browser has DOMMatrix), send text to server
   const processAISFile = useCallback(async (file: File, password: string) => {
     setAisLoading(true)
     setShowPasswordModal(false)
     const tid = toast.loading('Reading your AIS PDF…')
     try {
-      const base64Data = await fileToBase64(file)
+      const arrayBuffer = await file.arrayBuffer()
+
+      // Dynamically import pdfjs — runs in browser where DOMMatrix exists
+      const pdfjs = await import('pdfjs-dist')
+
+      // Use worker from our public folder
+      pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
+
+      let pdf: any
+      try {
+        pdf = await pdfjs.getDocument({
+          data: new Uint8Array(arrayBuffer),
+          password: password || undefined,
+          useWorkerFetch: false,
+          isEvalSupported: false,
+          disableFontFace: true,
+        }).promise
+      } catch (e: any) {
+        const isWrongPwd =
+          e?.name === 'PasswordException' || e?.code === 1 || e?.code === 2
+        if (isWrongPwd) {
+          setShowPasswordModal(true)
+          setPendingFile(file)
+          setPasswordError('Incorrect password. Format: PAN lowercase + DOB DDMMYYYY. Example: aizpn6725a05121998')
+          toast.dismiss(tid)
+          return
+        }
+        throw e
+      }
+
+      toast.loading(`Extracting ${pdf.numPages} pages…`, { id: tid })
+
+      let fullText = ''
+      for (let i = 1; i <= Math.min(pdf.numPages, 6); i++) {
+        const page = await pdf.getPage(i)
+        const textContent = await page.getTextContent()
+        const pageText = (textContent.items as any[])
+          .map((item: any) => item.str || '')
+          .join(' ')
+        fullText += `\n--- Page ${i} ---\n${pageText}`
+      }
+
+      toast.loading('Analysing with Claude AI…', { id: tid })
+
       const res = await fetch('/api/parse-ais', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          base64Data,
-          mediaType: file.type,
-          password: password || undefined,
-        }),
+        body: JSON.stringify({ pdfText: fullText }),
       })
+
       const json = await res.json()
-      if (res.status === 422 || json.error === 'incorrect_password') {
-        setShowPasswordModal(true)
-        setPendingFile(file)
-        setPasswordError('Incorrect password. Format: PAN lowercase + DOB DDMMYYYY. Example: aizpn6725a05121998')
-        toast.dismiss(tid)
-        return
-      }
       if (!res.ok) throw new Error(json.error)
+
       setAisData(json.data)
       setPendingFile(null)
       setPdfPassword('')
