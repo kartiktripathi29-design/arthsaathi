@@ -582,21 +582,21 @@ export default function SalaryPage() {
           {/* Salary tab — show breakdown if loaded, else show upload/manual */}
           {salary ? (
             <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              {/* Salary saved — prompt to add other income */}
+              <div style={{ background: '#E9F7EF', border: '1px solid #A9DFBF', borderRadius: 12, padding: '16px 20px', marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
                 <div>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1C2833', margin: 0 }}>Salary Analysis</h3>
-                  <div style={{ fontSize: 13, color: '#5D6D7E', marginTop: 3 }}>
-                    <Badge color="green">{salary.employeeName === 'You' ? 'Manual Entry' : 'Parsed by AI'}</Badge>
-                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#1E5631' }}>✅ Salary saved — ₹{salary.netSalary?.toLocaleString('en-IN')}/mo take-home</div>
+                  <div style={{ fontSize: 12, color: '#27AE60', marginTop: 3 }}>Step 2: Do you have any other income? Add it for accurate tax calculation.</div>
                 </div>
                 <div style={{ display: 'flex', gap: 10 }}>
                   <button onClick={() => setSalary(null)}
-                    style={{ padding: '8px 18px', background: '#fff', border: '1px solid #E5E9ED', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#1C2833' }}>
+                    style={{ padding: '8px 16px', background: '#fff', border: '1px solid #E5E9ED', borderRadius: 9, fontSize: 13, cursor: 'pointer', color: '#5D6D7E' }}>
                     ↑ Change
                   </button>
-                  <Link href="/dashboard/tax" style={{ padding: '8px 18px', background: '#1A3C5E', color: '#fff', borderRadius: 9, fontSize: 13, fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
-                    Optimise Tax →
-                  </Link>
+                  <button onClick={() => setTab('other')}
+                    style={{ padding: '8px 18px', background: '#1A3C5E', color: '#fff', border: 'none', borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                    Add Other Income →
+                  </button>
                 </div>
               </div>
               <SalaryBreakdown data={salary} />
