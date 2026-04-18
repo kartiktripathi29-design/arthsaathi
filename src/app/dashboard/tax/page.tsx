@@ -162,33 +162,72 @@ export default function TaxPage() {
     await processAISFile(file, '')
   }, [])
 
+  // Render password-protected PDF to images client-side using pdfjs-dist
   const processAISFile = useCallback(async (file: File, password: string) => {
     setAisLoading(true)
     setShowPasswordModal(false)
-    const tid = toast.loading('Reading your AIS / Form 26AS…')
+    const tid = toast.loading('Decrypting PDF…')
     try {
-      const base64Data = await fileToBase64(file)
-      const res = await fetch('/api/parse-ais', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ base64Data, mediaType: file.type, password }),
-      })
-      const json = await res.json()
-      if (!res.ok) {
-        if (json.error?.includes('password') || json.error?.includes('encrypted')) {
+      // Dynamically import pdfjs (browser only)
+      const pdfjsLib = await import('pdfjs-dist')
+      // Use unpkg CDN with exact installed version
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
+
+      const arrayBuffer = await file.arrayBuffer()
+
+      // Open PDF with password
+      let pdf: any
+      try {
+        const loadingTask = pdfjsLib.getDocument({
+          data: new Uint8Array(arrayBuffer),
+          password: password || undefined,
+        })
+        pdf = await loadingTask.promise
+      } catch (e: any) {
+        if (e.name === 'PasswordException' || e.code === 1 || e.code === 2) {
           setShowPasswordModal(true)
-          setPasswordError('Incorrect password. Please try again.')
+          setPasswordError('Incorrect password. Please check your PAN and date of birth.')
           setAisLoading(false)
           toast.dismiss(tid)
           return
         }
-        throw new Error(json.error)
+        throw e
       }
+
+      toast.loading(`Reading ${pdf.numPages} pages…`, { id: tid })
+
+      // Render each page to canvas → JPEG base64
+      const pageImages: string[] = []
+      for (let i = 1; i <= Math.min(pdf.numPages, 4); i++) {
+        const page = await pdf.getPage(i)
+        const viewport = page.getViewport({ scale: 2.0 })
+        const canvas = document.createElement('canvas')
+        canvas.width = viewport.width
+        canvas.height = viewport.height
+        const ctx = canvas.getContext('2d')!
+        await page.render({ canvasContext: ctx, viewport }).promise
+        pageImages.push(canvas.toDataURL('image/jpeg', 0.85).split(',')[1])
+        canvas.remove()
+      }
+
+      toast.loading('Analysing with Claude AI…', { id: tid })
+
+      const res = await fetch('/api/parse-ais', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageImages, mediaType: 'image/jpeg', isRenderedPDF: true }),
+      })
+
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error)
+
       setAisData(json.data)
       setPendingFile(null)
       setPdfPassword('')
-      toast.success(`AIS parsed! Total TDS credit: ₹${json.data.totalTaxCredit?.toLocaleString('en-IN')}`, { id: tid })
+      toast.success(`AIS parsed! TDS: ₹${(json.data.totalTDSDeducted || 0).toLocaleString('en-IN')}`, { id: tid })
     } catch (e: any) {
-      toast.error(e.message || 'Failed to parse. Try a clearer image.', { id: tid })
+      toast.error(e.message || 'Failed to read PDF. Please try again.', { id: tid })
     } finally {
       setAisLoading(false)
     }

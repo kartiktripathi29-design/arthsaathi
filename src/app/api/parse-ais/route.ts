@@ -6,7 +6,7 @@ export const maxDuration = 60
 
 const AIS_SYSTEM = `You are an expert Indian tax document parser specialising in AIS (Annual Information Statement) and Form 26AS from incometax.gov.in.
 
-Extract ALL financial data from the document comprehensively.
+Extract ALL financial data from the document pages provided.
 
 Return ONLY raw JSON — no markdown, no code blocks, no explanation.
 
@@ -63,61 +63,49 @@ Schema:
   "alerts": []
 }
 
-Capital gains tax rules (AY 2025-26):
-- Equity STCG (held < 12 months): 20% flat
-- Equity LTCG (held > 12 months): 12.5% above ₹1.25L exemption
-- Debt MF STCG: added to income, taxed at slab rate
-- Debt MF LTCG: added to income, taxed at slab rate (indexation removed)
-- Property LTCG: 12.5% without indexation
-
-For alerts array, include warnings like:
-- "MF gains of ₹X add to your taxable income — employer TDS may not cover this"
-- "FD interest of ₹X is taxed at your slab rate, not just 10% TDS"
-- "Dividend income of ₹X is fully taxable at slab rate"
-
-All numbers must be plain integers/decimals.
-If a section has no transactions, use empty array [] or 0.`
+Rules:
+- For Form 26AS PART-I: use the TOTAL row per deductor for tdsEntries
+- Section 192 = salary income
+- Section 194A = interest income
+- All numbers as plain integers/decimals
+- For alerts: warn about FD interest taxed at slab, MF gains, dividend income
+- If no transactions in a section, use empty array or 0`
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { base64Data, mediaType } = body
+    const { pageImages, base64Data, mediaType, isRenderedPDF } = body
 
-    if (!base64Data || !mediaType) {
-      return NextResponse.json({ error: 'base64Data and mediaType required' }, { status: 400 })
+    let content: any[]
+
+    if (isRenderedPDF && pageImages?.length > 0) {
+      // Multiple page images rendered from PDF client-side
+      content = [
+        ...pageImages.map((img: string) => ({
+          type: 'image',
+          source: { type: 'base64', media_type: 'image/jpeg', data: img },
+        })),
+        {
+          type: 'text',
+          text: `These are rendered pages from an Indian tax document (AIS or Form 26AS). 
+Extract all TDS entries, tax payments, income sources, and capital gains.
+For PART-I of Form 26AS, use the Total row for each deductor.
+Calculate grand total income and total tax credit.
+Return only the JSON.`,
+        }
+      ]
+    } else if (base64Data) {
+      // Direct file upload (image or unencrypted PDF)
+      const isImage = mediaType?.startsWith('image/')
+      content = [
+        isImage
+          ? { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Data } }
+          : { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64Data } },
+        { type: 'text', text: 'Parse this Form 26AS / AIS and return only the JSON.' }
+      ]
+    } else {
+      return NextResponse.json({ error: 'No document data provided' }, { status: 400 })
     }
-
-    const isImage = mediaType.startsWith('image/')
-    const content: any[] = [
-      isImage
-        ? { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Data } }
-        : { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64Data } },
-      {
-        type: 'text',
-        text: `Analyse this Indian tax document (AIS or Form 26AS) completely.
-
-Extract:
-1. All TDS entries (salary, interest, rent, professional fees)
-2. All tax payments (advance tax, self-assessment)
-3. Salary income (from Section 192 TDS)
-4. Interest income (FD interest, savings account interest)
-5. Capital gains (mutual fund redemptions, equity sales, property)
-6. Dividend income
-7. Rental income
-8. Any other income
-
-For each capital gain entry:
-- Determine if STCG or LTCG based on holding period
-- Apply correct tax rate: equity STCG 20%, equity LTCG 12.5% (above ₹1.25L), debt at slab
-
-Calculate grand total income (all sources clubbed) and total tax on that income.
-Calculate additional tax beyond TDS already deducted.
-
-Generate specific alerts for any income that users commonly overlook.
-
-Return only the JSON.`
-      }
-    ]
 
     const response = await client.messages.create({
       model: 'claude-opus-4-5',
@@ -140,39 +128,23 @@ Return only the JSON.`
         .filter((e: any) => e.incomeType === 'salary')
         .reduce((s: number, e: any) => s + (Number(e.grossAmount) || 0), 0)
     }
-
     parsed.totalInterestIncome = (parsed.interestIncome || []).reduce((s: number, i: any) => s + (Number(i.grossAmount) || 0), 0)
     parsed.totalCapitalGains = (parsed.capitalGains || []).reduce((s: number, c: any) => s + (Number(c.gain) || 0), 0)
     parsed.totalOtherIncome = (parsed.otherIncome || []).reduce((s: number, o: any) => s + (Number(o.grossAmount) || 0), 0)
-
     const totalTaxPaid = (parsed.taxPayments || []).reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0)
     parsed.totalTaxPaid = totalTaxPaid
     parsed.totalTaxCredit = (Number(parsed.totalTDSDeducted) || 0) + totalTaxPaid
-
     if (!parsed.grandTotalIncome) {
-      parsed.grandTotalIncome = (parsed.salaryIncome || 0) +
-        (parsed.totalInterestIncome || 0) +
-        (parsed.totalCapitalGains || 0) +
-        (parsed.dividendIncome || 0) +
-        (parsed.rentalIncome || 0) +
-        (parsed.totalOtherIncome || 0)
+      parsed.grandTotalIncome = (parsed.salaryIncome || 0) + (parsed.totalInterestIncome || 0) +
+        (parsed.totalCapitalGains || 0) + (parsed.dividendIncome || 0) +
+        (parsed.rentalIncome || 0) + (parsed.totalOtherIncome || 0)
     }
-
-    // Generate alerts if missing
     if (!parsed.alerts || parsed.alerts.length === 0) {
       const alerts: string[] = []
-      if (parsed.totalInterestIncome > 10000) {
-        alerts.push(`FD/interest income of ₹${parsed.totalInterestIncome.toLocaleString('en-IN')} is taxed at your slab rate (not just 10% TDS). You may owe additional tax.`)
-      }
-      if (parsed.totalCapitalGains > 0) {
-        alerts.push(`Capital gains of ₹${parsed.totalCapitalGains.toLocaleString('en-IN')} are taxable separately. Employer TDS does not cover this.`)
-      }
-      if (parsed.dividendIncome > 0) {
-        alerts.push(`Dividend income of ₹${parsed.dividendIncome.toLocaleString('en-IN')} is fully taxable at your slab rate since FY 2020-21.`)
-      }
-      if (parsed.rentalIncome > 0) {
-        alerts.push(`Rental income of ₹${parsed.rentalIncome.toLocaleString('en-IN')} must be declared. 30% standard deduction allowed on net rental income.`)
-      }
+      if (parsed.totalInterestIncome > 10000) alerts.push(`FD/interest income of ₹${Math.round(parsed.totalInterestIncome).toLocaleString('en-IN')} is taxed at your slab rate, not just 10% TDS.`)
+      if (parsed.totalCapitalGains > 0) alerts.push(`Capital gains of ₹${Math.round(parsed.totalCapitalGains).toLocaleString('en-IN')} are taxable separately — employer TDS does not cover this.`)
+      if (parsed.dividendIncome > 0) alerts.push(`Dividend income of ₹${Math.round(parsed.dividendIncome).toLocaleString('en-IN')} is fully taxable at your slab rate.`)
+      if (parsed.rentalIncome > 0) alerts.push(`Rental income of ₹${Math.round(parsed.rentalIncome).toLocaleString('en-IN')} must be declared in your ITR.`)
       parsed.alerts = alerts
     }
 
