@@ -158,7 +158,7 @@ function SalaryBreakdown({ data }: { data: ParsedSalaryData }) {
 }
 
 // ─── Manual Entry Form ────────────────────────────────────────────────────
-function ManualEntryForm({ onSubmit }: { onSubmit: (data: ParsedSalaryData) => void }) {
+function ManualEntryForm({ onSubmit, onAfterSubmit }: { onSubmit: (data: ParsedSalaryData) => void, onAfterSubmit?: () => void }) {
   const n = (v: string) => parseFloat(v.replace(/,/g, '')) || 0
 
   const [form, setForm] = useState({
@@ -251,7 +251,8 @@ function ManualEntryForm({ onSubmit }: { onSubmit: (data: ParsedSalaryData) => v
       ],
     }
     onSubmit(data)
-    toast.success(`Saved! Take-home: ₹${netSalary.toLocaleString('en-IN')}/mo`)
+    toast.success(`✅ Salary saved! Now add any other income sources.`, { duration: 5000 })
+    onAfterSubmit?.()
   }
 
   const months = ['April','May','June','July','August','September','October','November','December','January','February','March']
@@ -537,7 +538,8 @@ export default function SalaryPage() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Parsing failed')
       setSalary(json.data)
-      toast.success(`Parsed! Take-home: ₹${json.data.netSalary?.toLocaleString('en-IN')}/mo`, { id: toastId })
+      setTab('other')
+      toast.success(`✅ Salary saved! Now add any other income sources.`, { id: toastId, duration: 5000 })
     } catch (e: any) {
       toast.error(e.message || 'Failed to parse. Try a clearer image.', { id: toastId })
     } finally {
@@ -552,31 +554,6 @@ export default function SalaryPage() {
     disabled: loading,
   })
 
-  if (salary && !loading) {
-    return (
-      <div className="fade-in">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <div>
-            <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1C2833', margin: 0 }}>Salary Analysis</h2>
-            <div style={{ fontSize: 13, color: '#5D6D7E', marginTop: 3 }}>
-              All components extracted · <Badge color="green">{salary.employeeName === 'You' ? 'Manual Entry' : 'Parsed by AI'}</Badge>
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={() => setSalary(null)}
-              style={{ padding: '8px 18px', background: '#fff', border: '1px solid #E5E9ED', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#1C2833' }}>
-              ↑ New Upload
-            </button>
-            <Link href="/dashboard/tax" style={{ padding: '8px 18px', background: '#1A3C5E', color: '#fff', borderRadius: 9, fontSize: 13, fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
-              Optimise Tax →
-            </Link>
-          </div>
-        </div>
-        <SalaryBreakdown data={salary} />
-      </div>
-    )
-  }
-
   return (
     <div className="fade-in">
       <div style={{ marginBottom: 20 }}>
@@ -586,92 +563,118 @@ export default function SalaryPage() {
         </p>
       </div>
 
-      {/* Main Tabs */}
+      {/* Main Tabs — always visible */}
       <div style={{ display: 'flex', borderBottom: '2px solid #E5E9ED', marginBottom: 24, gap: 0 }}>
         {[
-          { key: 'salary', label: '💼 Salary', desc: 'Upload slip or enter manually' },
+          { key: 'salary', label: '💼 Salary', desc: salary ? `₹${salary.netSalary?.toLocaleString('en-IN')}/mo take-home` : 'Upload slip or enter manually' },
           { key: 'other', label: '🏦 Other Income', desc: 'Dividend, interest, capital gains...' },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key as any)}
             style={{ padding: '12px 24px', background: 'none', border: 'none', borderBottom: `3px solid ${tab === t.key ? '#1A3C5E' : 'transparent'}`, marginBottom: -2, cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s' }}>
             <div style={{ fontSize: 14, fontWeight: tab === t.key ? 700 : 500, color: tab === t.key ? '#1A3C5E' : '#5D6D7E' }}>{t.label}</div>
-            <div style={{ fontSize: 11, color: '#95A5A6', marginTop: 2 }}>{t.desc}</div>
+            <div style={{ fontSize: 11, color: tab === t.key ? '#1A3C5E' : '#95A5A6', marginTop: 2, opacity: 0.8 }}>{t.desc}</div>
           </button>
         ))}
       </div>
 
       {tab === 'other' ? <OtherIncomeForm /> : (
-      <>
-      {/* Sub-mode Toggle for Salary tab */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 24 }}>
-        {[
-          { key: 'upload', label: '📄 Upload Salary Slip', desc: 'AI reads any format' },
-          { key: 'manual', label: '✏️ Enter Manually', desc: 'Type in your numbers' },
-        ].map(m => (
-          <button key={m.key} onClick={() => setMode(m.key as any)}
-            style={{ flex: 1, padding: '14px 20px', background: mode === m.key ? '#1A3C5E' : '#fff', color: mode === m.key ? '#fff' : '#1C2833', border: `2px solid ${mode === m.key ? '#1A3C5E' : '#E5E9ED'}`, borderRadius: 12, cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s' }}>
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 3 }}>{m.label}</div>
-            <div style={{ fontSize: 12, opacity: 0.7 }}>{m.desc}</div>
-          </button>
-        ))}
-      </div>
-
-      {mode === 'upload' ? (
         <>
-          <div {...getRootProps()} className={`upload-zone${isDragActive ? ' active' : ''}`}
-            style={{ padding: '64px 40px', textAlign: 'center', marginBottom: 20, cursor: 'pointer' }}>
-            <input {...getInputProps()} />
-            {loading ? (
-              <>
-                <div style={{ fontSize: 48, marginBottom: 16 }}>🔍</div>
-                <div style={{ fontSize: 16, fontWeight: 600, color: '#1C2833', marginBottom: 8 }}>Analysing with Claude Vision…</div>
-                <div style={{ fontSize: 13, color: '#5D6D7E', marginBottom: 24 }}>Extracting every salary component</div>
-                <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-                  {['Reading layout', 'Finding components', 'Calculating totals'].map((s, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#E8F1FA', borderRadius: 20, padding: '5px 14px', fontSize: 12, color: '#1A3C5E' }}>
-                      <div className="skeleton" style={{ width: 7, height: 7, borderRadius: '50%' }} />
-                      {s}
-                    </div>
-                  ))}
+          {/* Salary tab — show breakdown if loaded, else show upload/manual */}
+          {salary ? (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <div>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1C2833', margin: 0 }}>Salary Analysis</h3>
+                  <div style={{ fontSize: 13, color: '#5D6D7E', marginTop: 3 }}>
+                    <Badge color="green">{salary.employeeName === 'You' ? 'Manual Entry' : 'Parsed by AI'}</Badge>
+                  </div>
                 </div>
-              </>
-            ) : (
-              <>
-                <div style={{ fontSize: 52, marginBottom: 14 }}>{isDragActive ? '📂' : '📄'}</div>
-                <div style={{ fontSize: 17, fontWeight: 600, color: '#1C2833', marginBottom: 8 }}>
-                  {isDragActive ? 'Drop to parse' : 'Drop your salary slip here'}
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button onClick={() => setSalary(null)}
+                    style={{ padding: '8px 18px', background: '#fff', border: '1px solid #E5E9ED', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#1C2833' }}>
+                    ↑ Change
+                  </button>
+                  <Link href="/dashboard/tax" style={{ padding: '8px 18px', background: '#1A3C5E', color: '#fff', borderRadius: 9, fontSize: 13, fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+                    Optimise Tax →
+                  </Link>
                 </div>
-                <div style={{ fontSize: 13, color: '#5D6D7E', marginBottom: 22 }}>PDF, JPG, PNG, WebP · Max 10MB · Any employer format</div>
-                <button type="button" style={{ padding: '11px 28px', background: '#C9A84C', color: '#0F2640', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-                  Browse Files
-                </button>
-              </>
-            )}
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12, marginBottom: 20 }}>
-            {[
-              { icon: '🖨️', title: 'PDF Payslips', desc: 'Email PDFs, HR system exports' },
-              { icon: '📸', title: 'Photo / Image', desc: 'Phone camera photos of printed payslips' },
-              { icon: '🏢', title: 'Any Employer', desc: 'IT, PSU, SME, startup — all formats' },
-              { icon: '🔒', title: 'Stays Private', desc: 'Never stored on any server' },
-            ].map(f => (
-              <div key={f.title} style={{ background: '#fff', border: '1px solid #E5E9ED', borderRadius: 10, padding: '14px 16px' }}>
-                <div style={{ fontSize: 22, marginBottom: 8 }}>{f.icon}</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#1C2833', marginBottom: 4 }}>{f.title}</div>
-                <div style={{ fontSize: 12, color: '#5D6D7E', lineHeight: 1.5 }}>{f.desc}</div>
               </div>
-            ))}
-          </div>
+              <SalaryBreakdown data={salary} />
+            </>
+          ) : (
+            <>
+              {/* Sub-mode Toggle */}
+              <div style={{ display: 'flex', gap: 10, marginBottom: 24 }}>
+                {[
+                  { key: 'upload', label: '📄 Upload Salary Slip', desc: 'AI reads any format' },
+                  { key: 'manual', label: '✏️ Enter Manually', desc: 'Type in your numbers' },
+                ].map(m => (
+                  <button key={m.key} onClick={() => setMode(m.key as any)}
+                    style={{ flex: 1, padding: '14px 20px', background: mode === m.key ? '#1A3C5E' : '#fff', color: mode === m.key ? '#fff' : '#1C2833', border: `2px solid ${mode === m.key ? '#1A3C5E' : '#E5E9ED'}`, borderRadius: 12, cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s' }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 3 }}>{m.label}</div>
+                    <div style={{ fontSize: 12, opacity: 0.7 }}>{m.desc}</div>
+                  </button>
+                ))}
+              </div>
 
-          <InfoBox variant="info" icon="🔒">
-            <strong>Privacy:</strong> Your salary slip is processed by Claude AI and converted to structured data. The raw document is never saved to any database.
-          </InfoBox>
+              {mode === 'upload' ? (
+                <>
+                  <div {...getRootProps()} className={`upload-zone${isDragActive ? ' active' : ''}`}
+                    style={{ padding: '64px 40px', textAlign: 'center', marginBottom: 20, cursor: 'pointer' }}>
+                    <input {...getInputProps()} />
+                    {loading ? (
+                      <>
+                        <div style={{ fontSize: 48, marginBottom: 16 }}>🔍</div>
+                        <div style={{ fontSize: 16, fontWeight: 600, color: '#1C2833', marginBottom: 8 }}>Analysing with Claude Vision…</div>
+                        <div style={{ fontSize: 13, color: '#5D6D7E', marginBottom: 24 }}>Extracting every salary component</div>
+                        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+                          {['Reading layout', 'Finding components', 'Calculating totals'].map((s, i) => (
+                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#E8F1FA', borderRadius: 20, padding: '5px 14px', fontSize: 12, color: '#1A3C5E' }}>
+                              <div className="skeleton" style={{ width: 7, height: 7, borderRadius: '50%' }} />
+                              {s}
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: 52, marginBottom: 14 }}>{isDragActive ? '📂' : '📄'}</div>
+                        <div style={{ fontSize: 17, fontWeight: 600, color: '#1C2833', marginBottom: 8 }}>
+                          {isDragActive ? 'Drop to parse' : 'Drop your salary slip here'}
+                        </div>
+                        <div style={{ fontSize: 13, color: '#5D6D7E', marginBottom: 22 }}>PDF, JPG, PNG, WebP · Max 10MB · Any employer format</div>
+                        <button type="button" style={{ padding: '11px 28px', background: '#C9A84C', color: '#0F2640', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                          Browse Files
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12, marginBottom: 20 }}>
+                    {[
+                      { icon: '🖨️', title: 'PDF Payslips', desc: 'Email PDFs, HR system exports' },
+                      { icon: '📸', title: 'Photo / Image', desc: 'Phone camera photos of printed payslips' },
+                      { icon: '🏢', title: 'Any Employer', desc: 'IT, PSU, SME, startup — all formats' },
+                      { icon: '🔒', title: 'Stays Private', desc: 'Never stored on any server' },
+                    ].map(f => (
+                      <div key={f.title} style={{ background: '#fff', border: '1px solid #E5E9ED', borderRadius: 10, padding: '14px 16px' }}>
+                        <div style={{ fontSize: 22, marginBottom: 8 }}>{f.icon}</div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: '#1C2833', marginBottom: 4 }}>{f.title}</div>
+                        <div style={{ fontSize: 12, color: '#5D6D7E', lineHeight: 1.5 }}>{f.desc}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <InfoBox variant="info" icon="🔒">
+                    <strong>Privacy:</strong> Your salary slip is processed by Claude AI and converted to structured data. The raw document is never saved to any database.
+                  </InfoBox>
+                </>
+              ) : (
+                <ManualEntryForm onSubmit={setSalary} onAfterSubmit={() => setTab('other')} />
+              )}
+            </>
+          )}
         </>
-      ) : (
-        <ManualEntryForm onSubmit={setSalary} />
-      )}
-      </>
       )}
     </div>
   )
