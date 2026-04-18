@@ -158,11 +158,11 @@ export default function TaxPage() {
     await processAISFile(file, '')
   }, [])
 
-  // Send file directly to server for rendering
+  // Send PDF + password to server for text extraction
   const processAISFile = useCallback(async (file: File, password: string) => {
     setAisLoading(true)
     setShowPasswordModal(false)
-    const tid = toast.loading('Reading your AIS / Form 26AS…')
+    const tid = toast.loading('Reading your AIS PDF…')
     try {
       const base64Data = await fileToBase64(file)
       const res = await fetch('/api/parse-ais', {
@@ -178,7 +178,7 @@ export default function TaxPage() {
       if (res.status === 422 || json.error === 'incorrect_password') {
         setShowPasswordModal(true)
         setPendingFile(file)
-        setPasswordError('Incorrect password. Format: PAN lowercase + DOB as DDMMYYYY. Example: aizpn6725a05121998')
+        setPasswordError('Incorrect password. Format: PAN lowercase + DOB DDMMYYYY. Example: aizpn6725a05121998')
         toast.dismiss(tid)
         return
       }
@@ -188,7 +188,7 @@ export default function TaxPage() {
       setPdfPassword('')
       toast.success(`Parsed! TDS: ₹${(json.data.totalTDSDeducted || 0).toLocaleString('en-IN')}`, { id: tid })
     } catch (e: any) {
-      toast.error(e.message || 'Failed. Try a screenshot instead.', { id: tid })
+      toast.error(e.message || 'Failed. Please try again.', { id: tid })
     } finally {
       setAisLoading(false)
     }
