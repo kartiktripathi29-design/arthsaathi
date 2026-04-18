@@ -169,8 +169,18 @@ function ManualEntryForm({ onSubmit }: { onSubmit: (data: ParsedSalaryData) => v
     // Deductions
     employeePF: '', employerPF: '', esic: '', professionalTax: '',
     tdsDeducted: '', loanDeduction: '', otherDeductions: '',
-    // For freelancers/self-employed
+    // Freelance/Business (monthly)
     freelanceIncome: '', businessIncome: '',
+    // Other Income (ANNUAL amounts)
+    dividendIncome: '',
+    fdInterest: '', savingsInterest: '', otherInterest: '',
+    giftFromRelatives: '', giftFromOthers: '',
+    ltcgEquity: '', stcgEquity: '',
+    ltcgProperty: '', stcgProperty: '',
+    ltcgOther: '', stcgOther: '',
+    annualRentReceived: '', municipalTaxPaid: '', homeLoanInterestHP: '',
+    isLetOut: 'yes',
+    businessIncomeAnnual: '', professionalIncomeAnnual: '', presumptiveIncome: '',
   })
 
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
@@ -197,12 +207,18 @@ function ManualEntryForm({ onSubmit }: { onSubmit: (data: ParsedSalaryData) => v
       n(form.medicalAllowance) + n(form.specialAllowance) + n(form.otherAllowances) +
       n(form.freelanceIncome) + n(form.businessIncome)
 
-    if (gross === 0) { toast.error('Please enter at least your basic salary or income'); return }
+    const hasOtherIncome = n(form.dividendIncome) + n(form.fdInterest) + n(form.savingsInterest) +
+      n(form.ltcgEquity) + n(form.stcgEquity) + n(form.ltcgProperty) + n(form.annualRentReceived) +
+      n(form.businessIncomeAnnual) + n(form.professionalIncomeAnnual) + n(form.presumptiveIncome) > 0
+
+    if (gross === 0 && !hasOtherIncome) {
+      toast.error('Please enter at least your salary or one income source'); return
+    }
 
     const totalDeductions = n(form.employeePF) + n(form.esic) + n(form.professionalTax) +
       n(form.tdsDeducted) + n(form.loanDeduction) + n(form.otherDeductions)
 
-    const netSalary = gross - totalDeductions
+    const netSalary = Math.max(0, gross - totalDeductions)
 
     const data: ParsedSalaryData = {
       employeeName: form.employeeName || 'You',
@@ -357,9 +373,86 @@ function ManualEntryForm({ onSubmit }: { onSubmit: (data: ParsedSalaryData) => v
         </div>
       </div>
 
+      {/* ─── Other Income Sources (Annual) ─────────────────────────── */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: '#1C2833', marginBottom: 4, marginTop: 8 }}>
+          🏦 Other Income Sources <span style={{ fontSize: 12, fontWeight: 400, color: '#5D6D7E' }}>(Annual amounts — leave blank if not applicable)</span>
+        </div>
+        <div style={{ fontSize: 12, color: '#E67E22', marginBottom: 16, background: '#FEF3E2', padding: '8px 12px', borderRadius: 8, border: '1px solid #F0C070' }}>
+          ⚠️ These are added to your taxable income. Most people forget these — IT Dept already has this data via AIS.
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+
+          {/* (i) Dividend */}
+          <Card>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#2E86C1', marginBottom: 12 }}>📈 Dividend Income</div>
+            {inp('Dividend from Shares/MF (Annual)', 'dividendIncome', '0', 'Fully taxable at slab rate since FY 2020-21')}
+          </Card>
+
+          {/* (ii) Interest Income */}
+          <Card>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#1E8449', marginBottom: 12 }}>🏦 Interest Income (Annual)</div>
+            {inp('FD Interest', 'fdInterest', '0', 'Taxable at slab rate. Bank deducts 10% TDS if >₹40K')}
+            {inp('Savings Bank Interest', 'savingsInterest', '0', '₹10,000 exempt under 80TTA (₹50K for seniors)')}
+            {inp('Other Interest (Bonds, etc.)', 'otherInterest', '0')}
+          </Card>
+
+          {/* (iii) Gifts */}
+          <Card>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#8E44AD', marginBottom: 12 }}>🎁 Gifts Received (Annual)</div>
+            {inp('Gift from Relatives', 'giftFromRelatives', '0', '100% tax exempt — from spouse, parents, siblings')}
+            {inp('Gift from Non-Relatives', 'giftFromOthers', '0', 'Taxable if total > ₹50,000 in a year')}
+          </Card>
+
+          {/* (iv) Capital Gains */}
+          <Card style={{ gridColumn: '1 / -1' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#C0392B', marginBottom: 6 }}>📊 Capital Gains (Annual)</div>
+            <div style={{ fontSize: 11, color: '#5D6D7E', marginBottom: 14 }}>
+              STCG Equity = 20% flat · LTCG Equity = 12.5% above ₹1.25L · Property LTCG = 12.5% · Debt at slab rate
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+              {inp('LTCG — Equity / Mutual Funds', 'ltcgEquity', '0', 'Held > 12 months. 12.5% above ₹1.25L exemption')}
+              {inp('STCG — Equity / Mutual Funds', 'stcgEquity', '0', 'Held < 12 months. 20% flat')}
+              {inp('LTCG — Property', 'ltcgProperty', '0', '12.5% without indexation')}
+              {inp('STCG — Property', 'stcgProperty', '0', 'Added to income, taxed at slab rate')}
+              {inp('LTCG — Debt / Other', 'ltcgOther', '0', 'Added to income, taxed at slab rate')}
+              {inp('STCG — Debt / Other', 'stcgOther', '0', 'Added to income, taxed at slab rate')}
+            </div>
+          </Card>
+
+          {/* (v) House Property */}
+          <Card>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#E67E22', marginBottom: 6 }}>🏠 Income from House Property</div>
+            <div style={{ fontSize: 11, color: '#5D6D7E', marginBottom: 12 }}>Annual amounts</div>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Property Status</label>
+              <select value={form.isLetOut} onChange={e => set('isLetOut', e.target.value)}
+                style={{ width: '100%', padding: '8px 12px', border: '1px solid #E5E9ED', borderRadius: 8, fontSize: 13, outline: 'none', background: '#fff' }}>
+                <option value="yes">Let Out (Rented)</option>
+                <option value="no">Self Occupied</option>
+              </select>
+            </div>
+            {form.isLetOut === 'yes' && inp('Annual Rent Received', 'annualRentReceived', '0', 'Gross annual rent before deductions')}
+            {inp('Municipal Tax Paid (Annual)', 'municipalTaxPaid', '0', 'Deductible from rental income')}
+            {inp('Home Loan Interest (Annual)', 'homeLoanInterestHP', '0', form.isLetOut === 'yes' ? 'Fully deductible for let-out property' : 'Max ₹2L for self-occupied (Sec 24b)')}
+          </Card>
+
+          {/* (vi) Business & Profession */}
+          <Card>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#1A3C5E', marginBottom: 6 }}>💼 Business & Profession (Annual)</div>
+            <div style={{ fontSize: 11, color: '#5D6D7E', marginBottom: 12 }}>Net profit/income after expenses</div>
+            {inp('Business Income (Net Profit)', 'businessIncomeAnnual', '0', 'After all business expenses')}
+            {inp('Professional Income (Net)', 'professionalIncomeAnnual', '0', 'Doctors, CAs, consultants, architects')}
+            {inp('Presumptive Income (44AD/44ADA)', 'presumptiveIncome', '0', '44AD: 6-8% of turnover · 44ADA: 50% of receipts')}
+          </Card>
+
+        </div>
+      </div>
+
       <button onClick={handleSubmit}
         style={{ width: '100%', padding: '14px', background: '#1A3C5E', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
-        ✓ Save & Analyse My Salary
+        ✓ Save & Analyse My Income
       </button>
     </div>
   )

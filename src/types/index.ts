@@ -6,6 +6,40 @@ export interface SalaryComponent {
   type: 'earning' | 'deduction' | 'computed'
 }
 
+// ─── Other Income Sources (for ITR) ──────────────────────────────────────
+export interface OtherIncomeData {
+  // Dividend
+  dividendIncome: number
+
+  // Interest Income
+  fdInterest: number           // FD interest income
+  savingsInterest: number      // Savings bank interest
+  otherInterest: number        // Bonds, debentures, etc
+
+  // Gifts
+  giftFromRelatives: number    // Tax exempt
+  giftFromOthers: number       // Taxable above ₹50,000
+
+  // Capital Gains (Annual)
+  ltcgEquity: number           // LTCG from equity/MF (12.5% above ₹1.25L)
+  stcgEquity: number           // STCG from equity/MF (20%)
+  ltcgProperty: number         // LTCG from property (12.5%)
+  stcgProperty: number         // STCG from property (slab rate)
+  ltcgOther: number            // LTCG from debt/other
+  stcgOther: number            // STCG from debt/other
+
+  // House Property
+  annualRentReceived: number   // Gross rent received
+  municipalTaxPaid: number     // Actual municipal tax paid
+  homeLoanInterest: number     // Home loan interest (Section 24b)
+  isLetOut: boolean            // Let out or self-occupied
+
+  // Business & Profession
+  businessIncome: number       // Net profit from business
+  professionalIncome: number   // Net income from profession/freelance
+  presumptiveIncome: number    // 44AD/44ADA presumptive income
+}
+
 export interface ParsedSalaryData {
   employeeName: string
   employerName: string
@@ -112,6 +146,75 @@ export interface InvestmentPlan {
     debtRatio: number
     investmentDiversity: number
   }
+}
+
+// ─── AIS / Income Types ───────────────────────────────────────────────────
+
+export interface CapitalGainEntry {
+  assetType: 'equity' | 'mutual_fund' | 'property' | 'other'
+  assetName: string
+  purchaseDate: string
+  saleDate: string
+  purchaseAmount: number
+  saleAmount: number
+  gain: number
+  gainType: 'STCG' | 'LTCG'   // Short term or Long term
+  taxRate: number               // 20% STCG equity, 12.5% LTCG equity
+  taxPayable: number
+}
+
+export interface InterestIncome {
+  source: string               // Bank name / FD details
+  type: 'savings' | 'fd' | 'bonds' | 'other'
+  grossAmount: number
+  tdsDeducted: number
+  netAmount: number
+}
+
+export interface OtherIncome {
+  source: string
+  type: 'dividend' | 'rental' | 'freelance' | 'business' | 'other'
+  grossAmount: number
+  tdsDeducted: number
+}
+
+export interface AISData {
+  pan: string
+  taxpayerName: string
+  assessmentYear: string
+  // TDS
+  tdsEntries: {
+    deductorName: string
+    deductorTAN: string
+    incomeType: string
+    grossAmount: number
+    tdsDeducted: number
+    quarter: string
+  }[]
+  taxPayments: {
+    type: string
+    amount: number
+    date: string
+    bsrCode: string
+  }[]
+  totalTDSDeducted: number
+  totalTaxPaid: number
+  totalTaxCredit: number
+  // Income sources
+  salaryIncome: number
+  interestIncome: InterestIncome[]
+  capitalGains: CapitalGainEntry[]
+  dividendIncome: number
+  rentalIncome: number
+  otherIncome: OtherIncome[]
+  // Computed
+  totalInterestIncome: number
+  totalCapitalGains: number
+  totalOtherIncome: number
+  grandTotalIncome: number
+  totalTaxOnAllIncome: number
+  additionalTaxOverTDS: number  // Tax owed beyond TDS
+  alerts: string[]              // Warning messages for user
 }
 
 // ─── Chat Types ───────────────────────────────────────────────────────────
