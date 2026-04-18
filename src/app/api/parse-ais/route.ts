@@ -7,9 +7,10 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 export const maxDuration = 60
 
 async function extractTextFromPDF(base64Data: string, password?: string): Promise<string> {
-  // Polyfill DOMMatrix from @napi-rs/canvas (already installed)
+  // Polyfill DOMMatrix from @napi-rs/canvas (already installed as pdfjs-dist dependency)
   const req = createRequire(import.meta.url)
-  const { DOMMatrix, DOMPoint, DOMRect } = req('pdfjs-dist/node_modules/@napi-rs/canvas')
+  const canvasModule = req('@napi-rs/canvas')
+  const { DOMMatrix, DOMPoint, DOMRect } = canvasModule
   ;(global as any).DOMMatrix = DOMMatrix
   ;(global as any).DOMPoint = DOMPoint
   ;(global as any).DOMRect = DOMRect
