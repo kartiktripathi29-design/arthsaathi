@@ -4,68 +4,54 @@ import Anthropic from '@anthropic-ai/sdk'
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 export const maxDuration = 60
 
-async function pdfToImages(base64Data: string, password?: string): Promise<string[]> {
-  // Server-side PDF rendering using pdfjs-dist legacy + @napi-rs/canvas
-  const { createCanvas } = await import(
-    // @ts-ignore
-    'pdfjs-dist/node_modules/@napi-rs/canvas/index.js'
-  )
-  const pdfjs = await import(
-    // @ts-ignore
-    'pdfjs-dist/legacy/build/pdf.mjs'
-  )
+// Extract text from PDF using pdfjs — no canvas, no images needed
+async function extractPDFText(base64Data: string, password?: string): Promise<string> {
+  // Use require to avoid static analysis by bundler
+  const pdfjsPath = 'pdfjs-dist/legacy/build/pdf.mjs'
+  const pdfjs = await new Function('path', 'return import(path)')(pdfjsPath)
 
-  // Disable worker for server-side use
   pdfjs.GlobalWorkerOptions.workerSrc = ''
 
   const pdfBuffer = Buffer.from(base64Data, 'base64')
 
-  class NodeCanvasFactory {
-    create(width: number, height: number) {
-      const canvas = createCanvas(width, height)
-      return { canvas, context: canvas.getContext('2d') }
-    }
-    reset(cac: any, w: number, h: number) {
-      cac.canvas.width = w; cac.canvas.height = h
-    }
-    destroy(cac: any) {
-      cac.canvas.width = 0; cac.canvas.height = 0
-    }
-  }
-
   const loadOptions: any = {
     data: new Uint8Array(pdfBuffer),
-    canvasFactory: new NodeCanvasFactory(),
     useWorkerFetch: false,
     isEvalSupported: false,
     useSystemFonts: true,
+    disableFontFace: true,
   }
   if (password) loadOptions.password = password
 
-  const pdf = await pdfjs.getDocument(loadOptions).promise
-  const images: string[] = []
-
-  for (let i = 1; i <= Math.min(pdf.numPages, 4); i++) {
-    const page = await pdf.getPage(i)
-    const viewport = page.getViewport({ scale: 1.8 })
-    const canvasFactory = new NodeCanvasFactory()
-    const { canvas, context } = canvasFactory.create(viewport.width, viewport.height)
-
-    await page.render({
-      canvasContext: context as any,
-      viewport,
-    } as any).promise
-
-    const buffer = canvas.toBuffer('image/jpeg', 0.85)
-    images.push(buffer.toString('base64'))
+  let pdf: any
+  try {
+    pdf = await pdfjs.getDocument(loadOptions).promise
+  } catch (e: any) {
+    const msg = String(e?.message || e?.name || '').toLowerCase()
+    if (msg.includes('password') || msg.includes('incorrect') || e?.code === 1 || e?.code === 2) {
+      throw new Error('incorrect_password')
+    }
+    throw e
   }
 
-  return images
+  let fullText = ''
+  for (let i = 1; i <= Math.min(pdf.numPages, 6); i++) {
+    const page = await pdf.getPage(i)
+    const textContent = await page.getTextContent()
+    const pageText = textContent.items
+      .map((item: any) => item.str || '')
+      .join(' ')
+    fullText += `\n--- Page ${i} ---\n${pageText}`
+  }
+
+  return fullText
 }
 
 const AIS_SYSTEM = `You are an expert Indian tax document parser for AIS and Form 26AS from incometax.gov.in.
 
-Extract ALL financial data. Return ONLY raw JSON — no markdown, no code blocks.
+Extract ALL financial data from the document text provided.
+
+Return ONLY raw JSON — no markdown, no code blocks, no explanation.
 
 Schema:
 {
@@ -81,7 +67,12 @@ Schema:
   "totalInterestIncome":0,"totalCapitalGains":0,"totalOtherIncome":0,"grandTotalIncome":0,
   "totalTaxOnAllIncome":0,"additionalTaxOverTDS":0,"alerts":[]
 }
-For Form 26AS PART-I use the TOTAL row per deductor. Section 192=salary, 194A=interest.`
+
+Rules:
+- For Form 26AS PART-I: find the Total row per deductor
+- Section 192 = salary income, 194A = interest income
+- All numbers as plain integers/decimals only
+- Generate alerts for commonly missed income (FD interest, capital gains, dividends)`
 
 export async function POST(req: NextRequest) {
   try {
@@ -91,7 +82,7 @@ export async function POST(req: NextRequest) {
     let content: any[]
 
     if (isRenderedPDF && pageImages?.length > 0) {
-      // Pre-rendered images from client
+      // Pre-rendered images
       content = [
         ...pageImages.map((img: string) => ({
           type: 'image',
@@ -100,25 +91,24 @@ export async function POST(req: NextRequest) {
         { type: 'text', text: 'Extract all data from these Form 26AS / AIS pages. Return only JSON.' }
       ]
     } else if (base64Data && mediaType === 'application/pdf') {
-      // PDF — render server-side then send images to Claude
+      // Extract text from PDF server-side
+      let pdfText: string
       try {
-        const images = await pdfToImages(base64Data, password || undefined)
-        content = [
-          ...images.map((img: string) => ({
-            type: 'image',
-            source: { type: 'base64', media_type: 'image/jpeg', data: img },
-          })),
-          { type: 'text', text: 'Extract all TDS, income, and capital gains from these Form 26AS / AIS pages. Return only JSON.' }
-        ]
+        pdfText = await extractPDFText(base64Data, password || undefined)
       } catch (e: any) {
-        const msg = String(e.message || '').toLowerCase()
-        if (msg.includes('password') || msg.includes('incorrect') || msg.includes('encrypted')) {
+        if (e.message === 'incorrect_password') {
           return NextResponse.json({ error: 'incorrect_password' }, { status: 422 })
         }
         throw e
       }
+      content = [
+        {
+          type: 'text',
+          text: `Here is the extracted text from a Form 26AS / AIS PDF document. Extract all TDS entries, income sources, and tax payments. Return only JSON.\n\n${pdfText}`
+        }
+      ]
     } else if (base64Data) {
-      // Image — send directly
+      // Image upload
       content = [
         { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Data } },
         { type: 'text', text: 'Extract all data from this Form 26AS / AIS image. Return only JSON.' }
@@ -143,7 +133,8 @@ export async function POST(req: NextRequest) {
     // Recalculate totals
     if (parsed.tdsEntries?.length > 0) {
       parsed.totalTDSDeducted = parsed.tdsEntries.reduce((s: number, e: any) => s + (Number(e.tdsDeducted) || 0), 0)
-      parsed.salaryIncome = parsed.tdsEntries.filter((e: any) => e.incomeType === 'salary').reduce((s: number, e: any) => s + (Number(e.grossAmount) || 0), 0)
+      parsed.salaryIncome = parsed.tdsEntries.filter((e: any) => e.incomeType === 'salary')
+        .reduce((s: number, e: any) => s + (Number(e.grossAmount) || 0), 0)
     }
     parsed.totalInterestIncome = (parsed.interestIncome || []).reduce((s: number, i: any) => s + (Number(i.grossAmount) || 0), 0)
     parsed.totalCapitalGains = (parsed.capitalGains || []).reduce((s: number, c: any) => s + (Number(c.gain) || 0), 0)
@@ -155,7 +146,7 @@ export async function POST(req: NextRequest) {
     if (!parsed.alerts?.length) {
       const alerts: string[] = []
       if (parsed.totalInterestIncome > 10000) alerts.push(`Interest income of ₹${Math.round(parsed.totalInterestIncome).toLocaleString('en-IN')} is taxed at your slab rate — not just 10% TDS.`)
-      if (parsed.totalCapitalGains > 0) alerts.push(`Capital gains of ₹${Math.round(parsed.totalCapitalGains).toLocaleString('en-IN')} are taxable separately.`)
+      if (parsed.totalCapitalGains > 0) alerts.push(`Capital gains of ₹${Math.round(parsed.totalCapitalGains).toLocaleString('en-IN')} are taxable separately — employer TDS does not cover this.`)
       if (parsed.dividendIncome > 0) alerts.push(`Dividend income of ₹${Math.round(parsed.dividendIncome).toLocaleString('en-IN')} is fully taxable at your slab rate.`)
       parsed.alerts = alerts
     }
