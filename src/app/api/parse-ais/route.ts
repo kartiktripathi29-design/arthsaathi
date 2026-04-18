@@ -1,42 +1,53 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
-import { writeFileSync, unlinkSync, existsSync } from 'fs'
-import { tmpdir } from 'os'
 import { join } from 'path'
+import { createRequire } from 'module'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 export const maxDuration = 60
 
 async function extractTextFromPDF(base64Data: string, password?: string): Promise<string> {
-  const { PDFParse } = await import('pdf-parse')
-  
-  const tmpPath = join(tmpdir(), `ais_${Date.now()}.pdf`)
-  try {
-    writeFileSync(tmpPath, Buffer.from(base64Data, 'base64'))
-    
-    const opts: any = { url: `file://${tmpPath}`, verbosity: 0 }
-    if (password) opts.password = password
-    
-    const parser = new PDFParse(opts)
-    
-    let result: any
-    try {
-      result = await parser.getText()
-    } catch (e: any) {
-      const msg = String(e?.message || e?.name || '').toLowerCase()
-      if (msg.includes('password') || msg.includes('incorrect') || msg.includes('encrypted')) {
-        throw new Error('incorrect_password')
-      }
-      throw e
-    }
-    
-    const text = result?.text || 
-      (result?.pages || []).map((p: any) => p.text || '').join('\n')
-    
-    return text
-  } finally {
-    try { if (existsSync(tmpPath)) unlinkSync(tmpPath) } catch {}
+  // Polyfill DOMMatrix from @napi-rs/canvas (already installed)
+  const req = createRequire(import.meta.url)
+  const { DOMMatrix, DOMPoint, DOMRect } = req('pdfjs-dist/node_modules/@napi-rs/canvas')
+  ;(global as any).DOMMatrix = DOMMatrix
+  ;(global as any).DOMPoint = DOMPoint
+  ;(global as any).DOMRect = DOMRect
+
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs' as any)
+
+  // Use the bundled worker file
+  const workerPath = new URL(
+    join(process.cwd(), 'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs'),
+    'file://'
+  ).href
+  ;(pdfjs as any).GlobalWorkerOptions.workerSrc = workerPath
+
+  const pdfBuffer = Buffer.from(base64Data, 'base64')
+  const loadOptions: any = {
+    data: new Uint8Array(pdfBuffer),
+    useWorkerFetch: false,
   }
+  if (password) loadOptions.password = password
+
+  let pdf: any
+  try {
+    pdf = await (pdfjs as any).getDocument(loadOptions).promise
+  } catch (e: any) {
+    if (e?.name === 'PasswordException' || e?.code === 1 || e?.code === 2) {
+      throw new Error('incorrect_password')
+    }
+    throw e
+  }
+
+  let fullText = ''
+  for (let i = 1; i <= Math.min(pdf.numPages, 6); i++) {
+    const page = await pdf.getPage(i)
+    const textContent = await page.getTextContent()
+    const pageText = (textContent.items as any[]).map((item: any) => item.str || '').join(' ')
+    fullText += `\n--- Page ${i} ---\n${pageText}`
+  }
+  return fullText
 }
 
 const AIS_SYSTEM = `You are an expert Indian tax document parser for AIS and Form 26AS from incometax.gov.in.
@@ -68,7 +79,6 @@ export async function POST(req: NextRequest) {
     let content: any[]
 
     if (mediaType === 'application/pdf') {
-      // Extract text server-side using pdf-parse (supports passwords, works on Vercel)
       let pdfText: string
       try {
         pdfText = await extractTextFromPDF(base64Data, password || undefined)
@@ -83,10 +93,9 @@ export async function POST(req: NextRequest) {
         text: `Extract all TDS, income, and tax payment data from this Form 26AS / AIS document text. Return only JSON.\n\n${pdfText}`
       }]
     } else {
-      // Image upload — send directly
       content = [
         { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Data } },
-        { type: 'text', text: 'Extract all TDS and income data from this Form 26AS / AIS image. Return only JSON.' }
+        { type: 'text', text: 'Extract all TDS and income data from this AIS image. Return only JSON.' }
       ]
     }
 
@@ -103,7 +112,6 @@ export async function POST(req: NextRequest) {
     if (!jsonMatch) throw new Error('Could not extract data')
     const parsed = JSON.parse(jsonMatch[0])
 
-    // Recalculate totals
     if (parsed.tdsEntries?.length > 0) {
       parsed.totalTDSDeducted = parsed.tdsEntries.reduce((s: number, e: any) => s + (Number(e.tdsDeducted) || 0), 0)
       parsed.salaryIncome = parsed.tdsEntries.filter((e: any) => e.incomeType === 'salary')
