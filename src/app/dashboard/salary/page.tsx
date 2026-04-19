@@ -3,6 +3,7 @@ import { useState, useCallback } from 'react'
 import { useDropzone } from 'react-dropzone'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useAppStore } from '@/store/AppStore'
 import { InfoBox, Badge, Card } from '@/components/ui'
 import type { ParsedSalaryData } from '@/types'
@@ -58,18 +59,16 @@ function SalaryBreakdown({ data }: { data: ParsedSalaryData }) {
   const earnings = data.components?.filter(c => c.type === 'earning' && c.amount > 0) || []
   const deductions = data.components?.filter(c => c.type === 'deduction' && c.amount > 0) || []
   const hasComponents = earnings.length > 0 || deductions.length > 0
-
   const earningsItems = hasComponents ? earnings : [
     { label: 'Basic Salary', amount: data.basicSalary, type: 'earning' },
     { label: 'HRA', amount: data.hra, type: 'earning' },
-    { label: 'Dearness Allowance', amount: data.da, type: 'earning' },
+    { label: 'DA', amount: data.da, type: 'earning' },
     { label: 'Travel Allowance', amount: data.ta, type: 'earning' },
-    { label: 'Leave Travel Allowance', amount: data.lta, type: 'earning' },
+    { label: 'LTA', amount: data.lta, type: 'earning' },
     { label: 'Medical Allowance', amount: data.medicalAllowance, type: 'earning' },
     { label: 'Special Allowance', amount: data.specialAllowance, type: 'earning' },
     { label: 'Other Allowances', amount: data.otherAllowances, type: 'earning' },
   ].filter(c => c.amount > 0)
-
   const deductionItems = hasComponents ? deductions : [
     { label: 'EPF (Employee 12%)', amount: data.employeePF, type: 'deduction' },
     { label: 'ESIC', amount: data.esic, type: 'deduction' },
@@ -86,7 +85,7 @@ function SalaryBreakdown({ data }: { data: ParsedSalaryData }) {
           <div>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 4, fontWeight: 500 }}>SALARY ANALYSIS</div>
             <div style={{ fontSize: 20, fontWeight: 700 }}>{data.employeeName || 'Employee'}</div>
-            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', marginTop: 3 }}>{data.employerName || 'Employer'} · {data.month} {data.year}</div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', marginTop: 3 }}>{data.employerName} · {data.month} {data.year}</div>
           </div>
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 4 }}>MONTHLY TAKE-HOME</div>
@@ -95,99 +94,77 @@ function SalaryBreakdown({ data }: { data: ParsedSalaryData }) {
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginTop: 22 }}>
           {[
-            { label: 'Gross Monthly', value: `₹${data.grossSalary?.toLocaleString('en-IN')}`, color: 'rgba(255,255,255,0.9)' },
+            { label: 'Gross Monthly', value: `₹${data.grossSalary?.toLocaleString('en-IN')}` },
             { label: 'Total Deductions', value: `₹${data.totalDeductions?.toLocaleString('en-IN')}`, color: '#FC8181' },
             { label: 'Annual CTC', value: `₹${((data.ctcAnnual || data.grossSalary * 12) / 100000).toFixed(2)}L`, color: '#FCD34D' },
           ].map(s => (
             <div key={s.label} style={{ background: 'rgba(255,255,255,0.07)', borderRadius: 10, padding: '12px 14px' }}>
               <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{s.label}</div>
-              <div style={{ fontSize: 17, fontWeight: 700, color: s.color }}>{s.value}</div>
+              <div style={{ fontSize: 17, fontWeight: 700, color: s.color || 'rgba(255,255,255,0.9)' }}>{s.value}</div>
             </div>
           ))}
         </div>
         <TakeHomeVisual gross={data.grossSalary} deductions={data.totalDeductions} net={data.netSalary} />
       </div>
-
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <Card>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14, alignItems: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: '#1E8449' }}>↑ Earnings</div>
             <Badge color="green">{earningsItems.length} items</Badge>
           </div>
           {earningsItems.map((c, i) => <ComponentRow key={i} {...c} />)}
           <div style={{ marginTop: 10, paddingTop: 10, borderTop: '2px solid #F0F0F0', display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#1C2833' }}>Gross Salary</span>
+            <span style={{ fontSize: 13, fontWeight: 700 }}>Gross Salary</span>
             <span style={{ fontSize: 14, fontWeight: 800, color: '#1E8449' }}>₹{data.grossSalary?.toLocaleString('en-IN')}</span>
           </div>
         </Card>
         <Card>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14, alignItems: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: '#C0392B' }}>↓ Deductions</div>
             <Badge color="red">{deductionItems.length} items</Badge>
           </div>
           {deductionItems.map((c, i) => <ComponentRow key={i} {...c} />)}
           <div style={{ marginTop: 10, paddingTop: 10, borderTop: '2px solid #F0F0F0', display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#1C2833' }}>Total Deductions</span>
+            <span style={{ fontSize: 13, fontWeight: 700 }}>Total Deductions</span>
             <span style={{ fontSize: 14, fontWeight: 800, color: '#C0392B' }}>₹{data.totalDeductions?.toLocaleString('en-IN')}</span>
           </div>
         </Card>
       </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 14 }}>
-        <div style={{ background: '#F0FDF4', border: '1px solid #A9DFBF', borderRadius: 12, padding: '16px 20px' }}>
-          <div style={{ fontSize: 11, color: '#1E5631', fontWeight: 600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Net Pay (Take-Home)</div>
-          <div style={{ fontSize: 28, fontWeight: 800, color: '#1E8449' }}>₹{data.netSalary?.toLocaleString('en-IN')}</div>
-          <div style={{ fontSize: 12, color: '#27AE60', marginTop: 4 }}>per month · ₹{(data.netSalary * 12)?.toLocaleString('en-IN')}/year</div>
+      <div style={{ marginTop: 16, background: '#E9F7EF', border: '1px solid #A9DFBF', borderRadius: 12, padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#1E5631' }}>✅ Salary saved — ₹{data.netSalary?.toLocaleString('en-IN')}/mo</div>
+          <div style={{ fontSize: 12, color: '#27AE60', marginTop: 2 }}>Next: Add any other income sources for accurate tax calculation</div>
         </div>
-        {data.employeePF > 0 && (
-          <div style={{ background: '#E8F1FA', border: '1px solid #A8CCE8', borderRadius: 12, padding: '16px 20px' }}>
-            <div style={{ fontSize: 11, color: '#1A3C5E', fontWeight: 600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>EPF Contribution</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: '#1A3C5E' }}>₹{((data.employeePF + (data.employerPF || data.employeePF)) * 12)?.toLocaleString('en-IN')}/yr</div>
-            <div style={{ fontSize: 12, color: '#2E5A88', marginTop: 4 }}>You ₹{data.employeePF?.toLocaleString('en-IN')} + Employer ₹{(data.employerPF || data.employeePF)?.toLocaleString('en-IN')} /mo</div>
-          </div>
-        )}
+        <Link href="/dashboard/other-income"
+          style={{ padding: '10px 20px', background: '#1A3C5E', color: '#fff', borderRadius: 9, fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>
+          Add Other Income →
+        </Link>
       </div>
-
-      <InfoBox variant="info" icon="→">
-        <strong>Next step:</strong> Use the{' '}
-        <Link href="/dashboard/tax" style={{ color: '#1A3C5E', fontWeight: 700 }}>Tax Optimiser</Link>
-        {' '}to compare Old vs New regime based on this salary — and see exactly how much tax you can save.
-      </InfoBox>
     </div>
   )
 }
 
 // ─── Manual Entry Form ────────────────────────────────────────────────────
-function ManualEntryForm({ onSubmit, onAfterSubmit }: { onSubmit: (data: ParsedSalaryData) => void, onAfterSubmit?: () => void }) {
+function ManualEntryForm({ onSubmit }: { onSubmit: (data: ParsedSalaryData) => void }) {
   const n = (v: string) => parseFloat(v.replace(/,/g, '')) || 0
-
   const [form, setForm] = useState({
     employeeName: '', employerName: '', month: 'April', year: '2025',
-    // Earnings
     basicSalary: '', hra: '', da: '', ta: '', lta: '',
     medicalAllowance: '', specialAllowance: '', otherAllowances: '',
-    // Deductions
     employeePF: '', employerPF: '', esic: '', professionalTax: '',
     tdsDeducted: '', loanDeduction: '', otherDeductions: '',
-    // Freelance/Business (monthly)
     freelanceIncome: '', businessIncome: '',
   })
-
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
 
-  const inp = (label: string, key: string, placeholder = '0', hint?: string) => (
+  const inp = (label: string, key: string, hint?: string) => (
     <div style={{ marginBottom: 14 }}>
       <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>{label}</label>
       {hint && <div style={{ fontSize: 11, color: '#95A5A6', marginBottom: 4 }}>{hint}</div>}
-      <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #E5E9ED', borderRadius: 8, overflow: 'hidden', background: '#fff' }}>
+      <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #E5E9ED', borderRadius: 8, overflow: 'hidden' }}>
         <span style={{ padding: '8px 10px', background: '#F8FAFB', fontSize: 13, color: '#5D6D7E', borderRight: '1px solid #E5E9ED' }}>₹</span>
-        <input
-          type="number"
-          value={form[key as keyof typeof form]}
-          onChange={e => set(key, e.target.value)}
-          placeholder={placeholder}
-          style={{ flex: 1, padding: '8px 12px', border: 'none', fontSize: 13, outline: 'none', background: 'transparent' }}
-        />
+        <input type="number" value={form[key as keyof typeof form]} onChange={e => set(key, e.target.value)}
+          placeholder="0" style={{ flex: 1, padding: '8px 12px', border: 'none', fontSize: 13, outline: 'none', background: 'transparent' }} />
       </div>
     </div>
   )
@@ -196,35 +173,21 @@ function ManualEntryForm({ onSubmit, onAfterSubmit }: { onSubmit: (data: ParsedS
     const gross = n(form.basicSalary) + n(form.hra) + n(form.da) + n(form.ta) + n(form.lta) +
       n(form.medicalAllowance) + n(form.specialAllowance) + n(form.otherAllowances) +
       n(form.freelanceIncome) + n(form.businessIncome)
-
-    if (gross === 0) {
-      toast.error('Please enter at least your basic salary or income'); return
-    }
-
+    if (gross === 0) { toast.error('Please enter at least your basic salary or income'); return }
     const totalDeductions = n(form.employeePF) + n(form.esic) + n(form.professionalTax) +
       n(form.tdsDeducted) + n(form.loanDeduction) + n(form.otherDeductions)
-
     const netSalary = Math.max(0, gross - totalDeductions)
-
-    const data: ParsedSalaryData = {
-      employeeName: form.employeeName || 'You',
-      employerName: form.employerName || 'Self',
+    onSubmit({
+      employeeName: form.employeeName || 'You', employerName: form.employerName || 'Self',
       month: form.month, year: form.year,
-      basicSalary: n(form.basicSalary),
-      hra: n(form.hra), da: n(form.da), ta: n(form.ta), lta: n(form.lta),
+      basicSalary: n(form.basicSalary), hra: n(form.hra), da: n(form.da), ta: n(form.ta), lta: n(form.lta),
       medicalAllowance: n(form.medicalAllowance),
       specialAllowance: n(form.specialAllowance) + n(form.freelanceIncome) + n(form.businessIncome),
-      otherAllowances: n(form.otherAllowances),
-      grossSalary: gross,
-      employeePF: n(form.employeePF),
-      employerPF: n(form.employerPF) || n(form.employeePF),
-      esic: n(form.esic),
-      professionalTax: n(form.professionalTax),
-      tdsDeducted: n(form.tdsDeducted),
-      loanDeduction: n(form.loanDeduction),
-      otherDeductions: n(form.otherDeductions),
-      totalDeductions,
-      netSalary,
+      otherAllowances: n(form.otherAllowances), grossSalary: gross,
+      employeePF: n(form.employeePF), employerPF: n(form.employerPF) || n(form.employeePF),
+      esic: n(form.esic), professionalTax: n(form.professionalTax),
+      tdsDeducted: n(form.tdsDeducted), loanDeduction: n(form.loanDeduction),
+      otherDeductions: n(form.otherDeductions), totalDeductions, netSalary,
       ctcMonthly: gross + (n(form.employerPF) || n(form.employeePF)),
       ctcAnnual: (gross + (n(form.employerPF) || n(form.employeePF))) * 12,
       components: [
@@ -249,31 +212,27 @@ function ManualEntryForm({ onSubmit, onAfterSubmit }: { onSubmit: (data: ParsedS
           { label: 'Other Deductions', amount: n(form.otherDeductions), type: 'deduction' as const },
         ].filter(c => c.amount > 0),
       ],
-    }
-    onSubmit(data)
-    toast.success(`✅ Salary saved! Now add any other income sources.`, { duration: 5000 })
-    onAfterSubmit?.()
+    })
+    toast.success('Salary saved! Now add other income sources.')
   }
 
   const months = ['April','May','June','July','August','September','October','November','December','January','February','March']
 
   return (
     <div className="fade-in">
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
-        {/* Left panel */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <div>
-          {/* Personal info */}
           <Card style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: '#1C2833', marginBottom: 14 }}>👤 Your Details</div>
             <div style={{ marginBottom: 14 }}>
               <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Your Name (optional)</label>
               <input value={form.employeeName} onChange={e => set('employeeName', e.target.value)} placeholder="e.g. Rahul Sharma"
-                style={{ width: '100%', padding: '8px 12px', border: '1px solid #E5E9ED', borderRadius: 8, fontSize: 13, outline: 'none' }} />
+                style={{ width: '100%', padding: '8px 12px', border: '1px solid #E5E9ED', borderRadius: 8, fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
             </div>
             <div style={{ marginBottom: 14 }}>
               <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Employer / Company (optional)</label>
               <input value={form.employerName} onChange={e => set('employerName', e.target.value)} placeholder="e.g. Infosys Ltd"
-                style={{ width: '100%', padding: '8px 12px', border: '1px solid #E5E9ED', borderRadius: 8, fontSize: 13, outline: 'none' }} />
+                style={{ width: '100%', padding: '8px 12px', border: '1px solid #E5E9ED', borderRadius: 8, fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <div>
@@ -293,40 +252,36 @@ function ManualEntryForm({ onSubmit, onAfterSubmit }: { onSubmit: (data: ParsedS
             </div>
           </Card>
 
-          {/* Earnings */}
           <Card style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: '#1E8449', marginBottom: 14 }}>↑ Earnings (Monthly)</div>
-            {inp('Basic Salary *', 'basicSalary', '25000', 'Usually 40-50% of CTC')}
-            {inp('HRA (House Rent Allowance)', 'hra', '0', 'Usually 40-50% of Basic')}
-            {inp('DA (Dearness Allowance)', 'da', '0', 'Mainly for Govt employees')}
-            {inp('Travel Allowance (TA)', 'ta', '0')}
-            {inp('LTA (Leave Travel Allowance)', 'lta', '0')}
-            {inp('Medical Allowance', 'medicalAllowance', '0')}
-            {inp('Special Allowance', 'specialAllowance', '0', 'Flexible component / balance allowance')}
-            {inp('Other Allowances', 'otherAllowances', '0')}
+            {inp('Basic Salary *', 'basicSalary', 'Usually 40-50% of CTC')}
+            {inp('HRA (House Rent Allowance)', 'hra', 'Usually 40-50% of Basic')}
+            {inp('DA (Dearness Allowance)', 'da', 'Mainly for Govt employees')}
+            {inp('Travel Allowance (TA)', 'ta')}
+            {inp('LTA (Leave Travel Allowance)', 'lta')}
+            {inp('Medical Allowance', 'medicalAllowance')}
+            {inp('Special Allowance', 'specialAllowance', 'Flexible/balance component')}
+            {inp('Other Allowances', 'otherAllowances')}
           </Card>
 
-          {/* Freelance/Business */}
           <Card>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#8E44AD', marginBottom: 6 }}>💼 Freelance / Business Income</div>
-            <div style={{ fontSize: 12, color: '#5D6D7E', marginBottom: 14 }}>For self-employed, consultants, and gig workers</div>
-            {inp('Monthly Freelance Income', 'freelanceIncome', '0')}
-            {inp('Monthly Business Income', 'businessIncome', '0')}
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#8E44AD', marginBottom: 6 }}>💼 Freelance / Business (Monthly)</div>
+            <div style={{ fontSize: 12, color: '#5D6D7E', marginBottom: 14 }}>For self-employed, consultants, gig workers</div>
+            {inp('Monthly Freelance Income', 'freelanceIncome')}
+            {inp('Monthly Business Income', 'businessIncome')}
           </Card>
         </div>
 
-        {/* Right panel */}
         <div>
-          {/* Deductions */}
           <Card style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: '#C0392B', marginBottom: 14 }}>↓ Deductions (Monthly)</div>
-            {inp('EPF — Employee Contribution', 'employeePF', '0', '12% of Basic Salary typically')}
-            {inp('EPF — Employer Contribution', 'employerPF', '0', 'Same as employee contribution')}
-            {inp('ESIC', 'esic', '0', 'Only if salary < ₹21,000/mo')}
-            {inp('Professional Tax', 'professionalTax', '0', 'Max ₹200/mo in most states')}
-            {inp('TDS Deducted', 'tdsDeducted', '0', 'Income tax deducted by employer')}
-            {inp('Loan / Advance Recovery', 'loanDeduction', '0')}
-            {inp('Other Deductions', 'otherDeductions', '0')}
+            {inp('EPF — Employee Contribution', 'employeePF', '12% of Basic typically')}
+            {inp('EPF — Employer Contribution', 'employerPF', 'Same as employee')}
+            {inp('ESIC', 'esic', 'Only if salary < ₹21,000/mo')}
+            {inp('Professional Tax', 'professionalTax', 'Max ₹200/mo in most states')}
+            {inp('TDS Deducted', 'tdsDeducted', 'Income tax deducted by employer')}
+            {inp('Loan / Advance Recovery', 'loanDeduction')}
+            {inp('Other Deductions', 'otherDeductions')}
           </Card>
 
           {/* Live preview */}
@@ -352,7 +307,7 @@ function ManualEntryForm({ onSubmit, onAfterSubmit }: { onSubmit: (data: ParsedS
                   </div>
                 ))}
                 <div style={{ marginTop: 10, padding: '10px', background: '#E9F7EF', borderRadius: 8, fontSize: 12, color: '#1E5631' }}>
-                  Annual take-home: <strong>₹{(net * 12).toLocaleString('en-IN')}</strong>
+                  Annual: <strong>₹{(net * 12).toLocaleString('en-IN')}</strong>
                 </div>
               </Card>
             )
@@ -361,165 +316,18 @@ function ManualEntryForm({ onSubmit, onAfterSubmit }: { onSubmit: (data: ParsedS
       </div>
 
       <button onClick={handleSubmit}
-        style={{ width: '100%', padding: '14px', background: '#1A3C5E', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
-        ✓ Save & Analyse My Income
+        style={{ width: '100%', padding: '14px', background: '#1A3C5E', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: 'pointer', marginTop: 16 }}>
+        ✓ Save Salary & Continue
       </button>
     </div>
   )
 }
 
-// ─── Other Income Form ───────────────────────────────────────────────────
-function OtherIncomeForm() {
-  const n = (v: string) => parseFloat(v.replace(/,/g, '')) || 0
-  const [saved, setSaved] = useState(false)
-  const [income, setIncome] = useState({
-    dividendIncome: '',
-    fdInterest: '', savingsInterest: '', otherInterest: '',
-    giftFromRelatives: '', giftFromOthers: '',
-    ltcgEquity: '', stcgEquity: '',
-    ltcgProperty: '', stcgProperty: '',
-    ltcgOther: '', stcgOther: '',
-    annualRentReceived: '', municipalTaxPaid: '', homeLoanInterestHP: '',
-    isLetOut: 'yes',
-    businessIncomeAnnual: '', professionalIncomeAnnual: '', presumptiveIncome: '',
-  })
-
-  const set = (k: string, v: string) => setIncome(f => ({ ...f, [k]: v }))
-
-  const inp = (label: string, key: string, hint?: string) => (
-    <div style={{ marginBottom: 14 }}>
-      <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>{label}</label>
-      {hint && <div style={{ fontSize: 11, color: '#95A5A6', marginBottom: 4 }}>{hint}</div>}
-      <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #E5E9ED', borderRadius: 8, overflow: 'hidden', background: '#fff' }}>
-        <span style={{ padding: '8px 10px', background: '#F8FAFB', fontSize: 13, color: '#5D6D7E', borderRight: '1px solid #E5E9ED' }}>₹</span>
-        <input type="number" value={income[key as keyof typeof income] as string}
-          onChange={e => set(key, e.target.value)} placeholder="0"
-          style={{ flex: 1, padding: '8px 12px', border: 'none', fontSize: 13, outline: 'none', background: 'transparent' }} />
-      </div>
-    </div>
-  )
-
-  const totalOtherIncome = n(income.dividendIncome) + n(income.fdInterest) + n(income.savingsInterest) +
-    n(income.otherInterest) + n(income.giftFromOthers) + n(income.ltcgEquity) + n(income.stcgEquity) +
-    n(income.ltcgProperty) + n(income.stcgProperty) + n(income.ltcgOther) + n(income.stcgOther) +
-    n(income.annualRentReceived) + n(income.businessIncomeAnnual) + n(income.professionalIncomeAnnual) +
-    n(income.presumptiveIncome)
-
-  const handleSave = () => {
-    if (totalOtherIncome === 0) { toast.error('Please enter at least one income amount'); return }
-    setSaved(true)
-    toast.success(`Other income saved: ₹${totalOtherIncome.toLocaleString('en-IN')}/yr`)
-  }
-
-  return (
-    <div className="fade-in">
-      <div style={{ background: '#FEF3E2', border: '1px solid #F0C070', borderRadius: 10, padding: '12px 16px', marginBottom: 20, fontSize: 13, color: '#78350F' }}>
-        ⚠️ <strong>Important:</strong> These incomes are added to your total taxable income. The IT Department already has this data via AIS — not declaring it leads to notices.
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-
-        {/* (i) Dividend */}
-        <Card>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#2E86C1', marginBottom: 12 }}>📈 (i) Dividend Income</div>
-          {inp('Dividend from Shares / MF (Annual)', 'dividendIncome', 'Fully taxable at slab rate since FY 2020-21')}
-        </Card>
-
-        {/* (ii) Interest Income */}
-        <Card>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#1E8449', marginBottom: 12 }}>🏦 (ii) Interest Income (Annual)</div>
-          {inp('(a) FD Interest', 'fdInterest', 'Taxable at slab rate. Bank deducts 10% TDS if >₹40K')}
-          {inp('(b) Savings Bank Interest', 'savingsInterest', '₹10,000 exempt under 80TTA (₹50K for seniors)')}
-          {inp('(c) Other Interest (Bonds, etc.)', 'otherInterest', 'Fully taxable at slab rate')}
-        </Card>
-
-        {/* (iii) Gifts */}
-        <Card>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#8E44AD', marginBottom: 12 }}>🎁 (iii) Gifts Received (Annual)</div>
-          {inp('From Relatives', 'giftFromRelatives', '100% tax exempt — spouse, parents, siblings, children')}
-          {inp('From Non-Relatives', 'giftFromOthers', 'Taxable if total > ₹50,000 in a year')}
-        </Card>
-
-        {/* (iv) Capital Gains */}
-        <Card style={{ gridColumn: '1 / -1' }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#C0392B', marginBottom: 6 }}>📊 (iv) Capital Gains (Annual)</div>
-          <div style={{ fontSize: 11, color: '#5D6D7E', marginBottom: 14, background: '#FFF5F5', padding: '8px 12px', borderRadius: 6 }}>
-            Equity STCG = 20% flat &nbsp;·&nbsp; Equity LTCG = 12.5% above ₹1.25L &nbsp;·&nbsp; Property LTCG = 12.5% &nbsp;·&nbsp; Debt/Other = slab rate
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-            {inp('LTCG — Equity / Mutual Funds', 'ltcgEquity', 'Held > 12 months. 12.5% tax above ₹1.25L exemption')}
-            {inp('STCG — Equity / Mutual Funds', 'stcgEquity', 'Held < 12 months. 20% flat tax')}
-            {inp('LTCG — Property', 'ltcgProperty', '12.5% tax without indexation (post July 2024)')}
-            {inp('STCG — Property', 'stcgProperty', 'Added to income, taxed at your slab rate')}
-            {inp('LTCG — Debt / Other Assets', 'ltcgOther', 'Added to income, taxed at your slab rate')}
-            {inp('STCG — Debt / Other Assets', 'stcgOther', 'Added to income, taxed at your slab rate')}
-          </div>
-        </Card>
-
-        {/* (v) House Property */}
-        <Card>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#E67E22', marginBottom: 6 }}>🏠 (v) Income from House Property</div>
-          <div style={{ fontSize: 11, color: '#5D6D7E', marginBottom: 12 }}>Annual amounts</div>
-          <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Property Status</label>
-            <select value={income.isLetOut} onChange={e => set('isLetOut', e.target.value)}
-              style={{ width: '100%', padding: '8px 12px', border: '1px solid #E5E9ED', borderRadius: 8, fontSize: 13, outline: 'none', background: '#fff' }}>
-              <option value="yes">Let Out (Rented)</option>
-              <option value="no">Self Occupied</option>
-            </select>
-          </div>
-          {income.isLetOut === 'yes' && inp('Annual Rent Received', 'annualRentReceived', 'Gross rent before deductions')}
-          {inp('Municipal Tax Paid (Annual)', 'municipalTaxPaid', 'Deductible from rental income')}
-          {inp('Home Loan Interest (Annual)', 'homeLoanInterestHP', income.isLetOut === 'yes' ? 'Fully deductible for let-out property' : 'Max ₹2L deduction for self-occupied (Sec 24b)')}
-        </Card>
-
-        {/* (vi) Business & Profession */}
-        <Card>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#1A3C5E', marginBottom: 6 }}>💼 (vi) Business & Profession (Annual)</div>
-          <div style={{ fontSize: 11, color: '#5D6D7E', marginBottom: 12 }}>Net profit/income after all expenses</div>
-          {inp('Business Income (Net Profit)', 'businessIncomeAnnual', 'After all allowable business expenses')}
-          {inp('Professional Income (Net)', 'professionalIncomeAnnual', 'Doctors, CAs, lawyers, consultants, architects')}
-          {inp('Presumptive Income (44AD/44ADA)', 'presumptiveIncome', '44AD: 6-8% of turnover · 44ADA: 50% of gross receipts')}
-        </Card>
-
-      </div>
-
-      {totalOtherIncome > 0 && (
-        <div style={{ background: 'linear-gradient(135deg, #0F2640, #1A3C5E)', borderRadius: 12, padding: '16px 20px', margin: '20px 0', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>TOTAL OTHER INCOME (ANNUAL)</div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: '#FCD34D' }}>₹{totalOtherIncome.toLocaleString('en-IN')}</div>
-          </div>
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', maxWidth: 200, textAlign: 'right', lineHeight: 1.6 }}>
-            This will be added to your salary income for total tax calculation
-          </div>
-        </div>
-      )}
-
-      <button onClick={handleSave}
-        style={{ width: '100%', padding: '14px', background: saved ? '#1E8449' : '#1A3C5E', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
-        {saved ? '✓ Other Income Saved' : 'Save Other Income'}
-      </button>
-
-      {saved && (
-        <div style={{ marginTop: 12 }}>
-          <InfoBox variant="info" icon="→">
-            <strong>Next step:</strong> Go to the{' '}
-            <Link href="/dashboard/tax" style={{ color: '#1A3C5E', fontWeight: 700 }}>Tax Optimiser</Link>
-            {' '}to see your complete tax picture including all income sources.
-          </InfoBox>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── Main Page ───────────────────────────────────────────────────────────
+// ─── Main Page ────────────────────────────────────────────────────────────
 export default function SalaryPage() {
   const { salary, setSalary } = useAppStore()
+  const router = useRouter()
   const [loading, setLoading] = useState(false)
-  const [consent, setConsent] = useState(true)
-  const [tab, setTab] = useState<'salary' | 'other'>('salary')
   const [mode, setMode] = useState<'upload' | 'manual'>('upload')
 
   const processFile = useCallback(async (file: File) => {
@@ -538,8 +346,7 @@ export default function SalaryPage() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Parsing failed')
       setSalary(json.data)
-      setTab('other')
-      toast.success(`✅ Salary saved! Now add any other income sources.`, { id: toastId, duration: 5000 })
+      toast.success('Salary parsed! Now add other income sources.', { id: toastId })
     } catch (e: any) {
       toast.error(e.message || 'Failed to parse. Try a clearer image.', { id: toastId })
     } finally {
@@ -556,123 +363,82 @@ export default function SalaryPage() {
 
   return (
     <div className="fade-in">
-      <div style={{ marginBottom: 20 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, color: '#1C2833', marginBottom: 6 }}>Income Details</h2>
+      <div style={{ marginBottom: 24 }}>
+        <h2 style={{ fontSize: 20, fontWeight: 700, color: '#1C2833', marginBottom: 6 }}>Salary Slip</h2>
         <p style={{ fontSize: 14, color: '#5D6D7E', lineHeight: 1.65, maxWidth: 580 }}>
-          Add your salary and any other income sources for a complete tax picture.
+          Upload your salary slip or enter the details manually.
         </p>
       </div>
 
-      {/* Main Tabs — always visible */}
-      <div style={{ display: 'flex', borderBottom: '2px solid #E5E9ED', marginBottom: 24, gap: 0 }}>
-        {[
-          { key: 'salary', label: '💼 Salary', desc: salary ? `₹${salary.netSalary?.toLocaleString('en-IN')}/mo take-home` : 'Upload slip or enter manually' },
-          { key: 'other', label: '🏦 Other Income', desc: 'Dividend, interest, capital gains...' },
-        ].map(t => (
-          <button key={t.key} onClick={() => setTab(t.key as any)}
-            style={{ padding: '12px 24px', background: 'none', border: 'none', borderBottom: `3px solid ${tab === t.key ? '#1A3C5E' : 'transparent'}`, marginBottom: -2, cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s' }}>
-            <div style={{ fontSize: 14, fontWeight: tab === t.key ? 700 : 500, color: tab === t.key ? '#1A3C5E' : '#5D6D7E' }}>{t.label}</div>
-            <div style={{ fontSize: 11, color: tab === t.key ? '#1A3C5E' : '#95A5A6', marginTop: 2, opacity: 0.8 }}>{t.desc}</div>
-          </button>
-        ))}
-      </div>
-
-      {tab === 'other' ? <OtherIncomeForm /> : (
+      {salary ? (
+        <SalaryBreakdown data={salary} />
+      ) : (
         <>
-          {/* Salary tab — show breakdown if loaded, else show upload/manual */}
-          {salary ? (
+          {/* Upload / Manual toggle */}
+          <div style={{ display: 'flex', gap: 10, marginBottom: 24 }}>
+            {[
+              { key: 'upload', label: '📄 Upload Salary Slip', desc: 'AI reads any format automatically' },
+              { key: 'manual', label: '✏️ Enter Manually', desc: 'Type in your salary components' },
+            ].map(m => (
+              <button key={m.key} onClick={() => setMode(m.key as any)}
+                style={{ flex: 1, padding: '14px 20px', background: mode === m.key ? '#1A3C5E' : '#fff', color: mode === m.key ? '#fff' : '#1C2833', border: `2px solid ${mode === m.key ? '#1A3C5E' : '#E5E9ED'}`, borderRadius: 12, cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s' }}>
+                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 3 }}>{m.label}</div>
+                <div style={{ fontSize: 12, opacity: 0.7 }}>{m.desc}</div>
+              </button>
+            ))}
+          </div>
+
+          {mode === 'upload' ? (
             <>
-              {/* Salary saved — prompt to add other income */}
-              <div style={{ background: '#E9F7EF', border: '1px solid #A9DFBF', borderRadius: 12, padding: '16px 20px', marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: '#1E5631' }}>✅ Salary saved — ₹{salary.netSalary?.toLocaleString('en-IN')}/mo take-home</div>
-                  <div style={{ fontSize: 12, color: '#27AE60', marginTop: 3 }}>Step 2: Do you have any other income? Add it for accurate tax calculation.</div>
-                </div>
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <button onClick={() => setSalary(null)}
-                    style={{ padding: '8px 16px', background: '#fff', border: '1px solid #E5E9ED', borderRadius: 9, fontSize: 13, cursor: 'pointer', color: '#5D6D7E' }}>
-                    ↑ Change
-                  </button>
-                  <button onClick={() => setTab('other')}
-                    style={{ padding: '8px 18px', background: '#1A3C5E', color: '#fff', border: 'none', borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                    Add Other Income →
-                  </button>
-                </div>
+              <div {...getRootProps()} className={`upload-zone${isDragActive ? ' active' : ''}`}
+                style={{ padding: '64px 40px', textAlign: 'center', marginBottom: 20, cursor: 'pointer' }}>
+                <input {...getInputProps()} />
+                {loading ? (
+                  <>
+                    <div style={{ fontSize: 48, marginBottom: 16 }}>🔍</div>
+                    <div style={{ fontSize: 16, fontWeight: 600, color: '#1C2833', marginBottom: 8 }}>Analysing with Claude Vision…</div>
+                    <div style={{ fontSize: 13, color: '#5D6D7E', marginBottom: 24 }}>Extracting every salary component</div>
+                    <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+                      {['Reading layout', 'Finding components', 'Calculating totals'].map((s, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#E8F1FA', borderRadius: 20, padding: '5px 14px', fontSize: 12, color: '#1A3C5E' }}>
+                          <div className="skeleton" style={{ width: 7, height: 7, borderRadius: '50%' }} />{s}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 52, marginBottom: 14 }}>{isDragActive ? '📂' : '📄'}</div>
+                    <div style={{ fontSize: 17, fontWeight: 600, color: '#1C2833', marginBottom: 8 }}>
+                      {isDragActive ? 'Drop to parse' : 'Drop your salary slip here'}
+                    </div>
+                    <div style={{ fontSize: 13, color: '#5D6D7E', marginBottom: 22 }}>PDF, JPG, PNG, WebP · Max 10MB · Any employer format</div>
+                    <button type="button" style={{ padding: '11px 28px', background: '#C9A84C', color: '#0F2640', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                      Browse Files
+                    </button>
+                  </>
+                )}
               </div>
-              <SalaryBreakdown data={salary} />
-            </>
-          ) : (
-            <>
-              {/* Sub-mode Toggle */}
-              <div style={{ display: 'flex', gap: 10, marginBottom: 24 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12, marginBottom: 20 }}>
                 {[
-                  { key: 'upload', label: '📄 Upload Salary Slip', desc: 'AI reads any format' },
-                  { key: 'manual', label: '✏️ Enter Manually', desc: 'Type in your numbers' },
-                ].map(m => (
-                  <button key={m.key} onClick={() => setMode(m.key as any)}
-                    style={{ flex: 1, padding: '14px 20px', background: mode === m.key ? '#1A3C5E' : '#fff', color: mode === m.key ? '#fff' : '#1C2833', border: `2px solid ${mode === m.key ? '#1A3C5E' : '#E5E9ED'}`, borderRadius: 12, cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s' }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 3 }}>{m.label}</div>
-                    <div style={{ fontSize: 12, opacity: 0.7 }}>{m.desc}</div>
-                  </button>
+                  { icon: '🖨️', title: 'PDF Payslips', desc: 'Email PDFs, HR system exports' },
+                  { icon: '📸', title: 'Photo / Image', desc: 'Phone camera photos of payslips' },
+                  { icon: '🏢', title: 'Any Employer', desc: 'IT, PSU, SME, startup formats' },
+                  { icon: '🔒', title: 'Stays Private', desc: 'Never stored on any server' },
+                ].map(f => (
+                  <div key={f.title} style={{ background: '#fff', border: '1px solid #E5E9ED', borderRadius: 10, padding: '14px 16px' }}>
+                    <div style={{ fontSize: 22, marginBottom: 8 }}>{f.icon}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#1C2833', marginBottom: 4 }}>{f.title}</div>
+                    <div style={{ fontSize: 12, color: '#5D6D7E', lineHeight: 1.5 }}>{f.desc}</div>
+                  </div>
                 ))}
               </div>
-
-              {mode === 'upload' ? (
-                <>
-                  <div {...getRootProps()} className={`upload-zone${isDragActive ? ' active' : ''}`}
-                    style={{ padding: '64px 40px', textAlign: 'center', marginBottom: 20, cursor: 'pointer' }}>
-                    <input {...getInputProps()} />
-                    {loading ? (
-                      <>
-                        <div style={{ fontSize: 48, marginBottom: 16 }}>🔍</div>
-                        <div style={{ fontSize: 16, fontWeight: 600, color: '#1C2833', marginBottom: 8 }}>Analysing with Claude Vision…</div>
-                        <div style={{ fontSize: 13, color: '#5D6D7E', marginBottom: 24 }}>Extracting every salary component</div>
-                        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-                          {['Reading layout', 'Finding components', 'Calculating totals'].map((s, i) => (
-                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#E8F1FA', borderRadius: 20, padding: '5px 14px', fontSize: 12, color: '#1A3C5E' }}>
-                              <div className="skeleton" style={{ width: 7, height: 7, borderRadius: '50%' }} />
-                              {s}
-                            </div>
-                          ))}
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div style={{ fontSize: 52, marginBottom: 14 }}>{isDragActive ? '📂' : '📄'}</div>
-                        <div style={{ fontSize: 17, fontWeight: 600, color: '#1C2833', marginBottom: 8 }}>
-                          {isDragActive ? 'Drop to parse' : 'Drop your salary slip here'}
-                        </div>
-                        <div style={{ fontSize: 13, color: '#5D6D7E', marginBottom: 22 }}>PDF, JPG, PNG, WebP · Max 10MB · Any employer format</div>
-                        <button type="button" style={{ padding: '11px 28px', background: '#C9A84C', color: '#0F2640', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-                          Browse Files
-                        </button>
-                      </>
-                    )}
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12, marginBottom: 20 }}>
-                    {[
-                      { icon: '🖨️', title: 'PDF Payslips', desc: 'Email PDFs, HR system exports' },
-                      { icon: '📸', title: 'Photo / Image', desc: 'Phone camera photos of printed payslips' },
-                      { icon: '🏢', title: 'Any Employer', desc: 'IT, PSU, SME, startup — all formats' },
-                      { icon: '🔒', title: 'Stays Private', desc: 'Never stored on any server' },
-                    ].map(f => (
-                      <div key={f.title} style={{ background: '#fff', border: '1px solid #E5E9ED', borderRadius: 10, padding: '14px 16px' }}>
-                        <div style={{ fontSize: 22, marginBottom: 8 }}>{f.icon}</div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: '#1C2833', marginBottom: 4 }}>{f.title}</div>
-                        <div style={{ fontSize: 12, color: '#5D6D7E', lineHeight: 1.5 }}>{f.desc}</div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <InfoBox variant="info" icon="🔒">
-                    <strong>Privacy:</strong> Your salary slip is processed by Claude AI and converted to structured data. The raw document is never saved to any database.
-                  </InfoBox>
-                </>
-              ) : (
-                <ManualEntryForm onSubmit={setSalary} onAfterSubmit={() => setTab('other')} />
-              )}
+              <InfoBox variant="info" icon="🔒">
+                <strong>Privacy:</strong> Processed by Claude AI, converted to numbers. Raw document never saved.
+              </InfoBox>
             </>
+          ) : (
+            <ManualEntryForm onSubmit={data => { setSalary(data) }} />
           )}
         </>
       )}

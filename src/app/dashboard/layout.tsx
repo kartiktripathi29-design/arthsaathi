@@ -4,11 +4,12 @@ import { usePathname } from 'next/navigation'
 import { AppProvider, useAppStore } from '@/store/AppStore'
 
 const NAV = [
-  { href: '/dashboard',         icon: '⊞',  label: 'Overview' },
-  { href: '/dashboard/salary',  icon: '📄',  label: 'Salary Slip' },
-  { href: '/dashboard/tax',     icon: '📊',  label: 'Tax Optimiser' },
-  { href: '/dashboard/invest',  icon: '📈',  label: 'Investments' },
-  { href: '/dashboard/chat',    icon: '💬',  label: 'AI Advisor' },
+  { href: '/dashboard',              icon: '⊞',  label: 'Overview' },
+  { href: '/dashboard/salary',       icon: '📄',  label: 'Salary Slip' },
+  { href: '/dashboard/other-income', icon: '🏦',  label: 'Other Income' },
+  { href: '/dashboard/tax',          icon: '📊',  label: 'Tax Optimiser' },
+  { href: '/dashboard/invest',       icon: '📈',  label: 'Investments' },
+  { href: '/dashboard/chat',         icon: '💬',  label: 'AI Advisor' },
 ]
 
 function LogoMark({ size = 28 }: { size?: number }) {
