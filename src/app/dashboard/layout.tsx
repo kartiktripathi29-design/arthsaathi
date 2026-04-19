@@ -7,6 +7,7 @@ const NAV = [
   { href: '/dashboard',              icon: '⊞',  label: 'Overview' },
   { href: '/dashboard/salary',       icon: '📄',  label: 'Salary Slip' },
   { href: '/dashboard/other-income', icon: '🏦',  label: 'Other Income' },
+  { href: '/dashboard/total-income', icon: '📋',  label: 'Total Income' },
   { href: '/dashboard/tax',          icon: '📊',  label: 'Tax Optimiser' },
   { href: '/dashboard/invest',       icon: '📈',  label: 'Investments' },
   { href: '/dashboard/chat',         icon: '💬',  label: 'AI Advisor' },
