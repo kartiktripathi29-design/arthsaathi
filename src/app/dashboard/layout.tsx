@@ -5,6 +5,7 @@ import { AppProvider, useAppStore } from '@/store/AppStore'
 
 const NAV = [
   { href: '/dashboard',              icon: '⊞',  label: 'Overview' },
+  { href: '/dashboard/ais',          icon: '📑',  label: 'AIS / 26AS' },
   { href: '/dashboard/salary',       icon: '📄',  label: 'Salary Slip' },
   { href: '/dashboard/other-income', icon: '🏦',  label: 'Other Income' },
   { href: '/dashboard/total-income', icon: '📋',  label: 'Total Income' },

@@ -4,10 +4,12 @@ import type { ParsedSalaryData, TaxComparison, FinancialGoal, InvestmentPlan } f
 
 interface AppState {
   salary: ParsedSalaryData | null
+  aisData: any | null
   taxComparison: TaxComparison | null
   investPlan: InvestmentPlan | null
   goals: FinancialGoal[]
   setSalary: (s: ParsedSalaryData | null) => void
+  setAisData: (a: any | null) => void
   setTaxComparison: (t: TaxComparison | null) => void
   setInvestPlan: (p: InvestmentPlan | null) => void
   setGoals: (g: FinancialGoal[]) => void
@@ -18,6 +20,7 @@ const AppContext = createContext<AppState | null>(null)
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [salary, setSalaryState] = useState<ParsedSalaryData | null>(null)
+  const [aisData, setAisDataState] = useState<any | null>(null)
   const [taxComparison, setTaxComparisonState] = useState<TaxComparison | null>(null)
   const [investPlan, setInvestPlanState] = useState<InvestmentPlan | null>(null)
   const [goals, setGoalsState] = useState<FinancialGoal[]>([])
@@ -25,10 +28,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const s = localStorage.getItem('as_salary')
+      const a = localStorage.getItem('as_ais')
       const t = localStorage.getItem('as_tax')
       const p = localStorage.getItem('as_invest')
       const g = localStorage.getItem('as_goals')
       if (s) setSalaryState(JSON.parse(s))
+      if (a) setAisDataState(JSON.parse(a))
       if (t) setTaxComparisonState(JSON.parse(t))
       if (p) setInvestPlanState(JSON.parse(p))
       if (g) setGoalsState(JSON.parse(g))
@@ -39,6 +44,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSalaryState(s)
     if (s) localStorage.setItem('as_salary', JSON.stringify(s))
     else localStorage.removeItem('as_salary')
+  }, [])
+
+  const setAisData = useCallback((a: any | null) => {
+    setAisDataState(a)
+    if (a) localStorage.setItem('as_ais', JSON.stringify(a))
+    else localStorage.removeItem('as_ais')
   }, [])
 
   const setTaxComparison = useCallback((t: TaxComparison | null) => {
@@ -59,12 +70,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const clearAll = useCallback(() => {
-    setSalaryState(null); setTaxComparisonState(null); setInvestPlanState(null); setGoalsState([])
-    ;['as_salary','as_tax','as_invest','as_goals'].forEach(k => localStorage.removeItem(k))
+    setSalaryState(null); setAisDataState(null); setTaxComparisonState(null)
+    setInvestPlanState(null); setGoalsState([])
+    ;['as_salary','as_ais','as_tax','as_invest','as_goals'].forEach(k => localStorage.removeItem(k))
   }, [])
 
   return (
-    <AppContext.Provider value={{ salary, taxComparison, investPlan, goals, setSalary, setTaxComparison, setInvestPlan, setGoals, clearAll }}>
+    <AppContext.Provider value={{ salary, aisData, taxComparison, investPlan, goals, setSalary, setAisData, setTaxComparison, setInvestPlan, setGoals, clearAll }}>
       {children}
     </AppContext.Provider>
   )

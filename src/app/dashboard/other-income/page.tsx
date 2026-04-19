@@ -1,7 +1,8 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
+import { useAppStore } from '@/store/AppStore'
 
 // All possible income types
 const INCOME_TYPES = [
@@ -24,11 +25,51 @@ const INCOME_TYPES = [
 ]
 
 export default function OtherIncomePage() {
+  const { aisData } = useAppStore()
   const n = (v: string) => parseFloat(v.replace(/,/g, '')) || 0
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [values, setValues] = useState<Record<string, string>>({})
   const [isLetOut, setIsLetOut] = useState('yes')
   const [saved, setSaved] = useState(false)
+
+  // Pre-fill from AIS on load
+  useEffect(() => {
+    if (!aisData) return
+    const preSelected = new Set<string>()
+    const preValues: Record<string, string> = {}
+
+    if (aisData.dividendIncome > 0) {
+      preSelected.add('dividend')
+      preValues['dividend'] = String(Math.round(aisData.dividendIncome))
+    }
+    const totalInterest = (aisData.interestIncome || []).reduce((s: number, i: any) => s + (i.grossAmount || 0), 0)
+    if (totalInterest > 0) {
+      const fd = (aisData.interestIncome || []).filter((i: any) => i.type === 'fd').reduce((s: number, i: any) => s + (i.grossAmount || 0), 0)
+      const sav = (aisData.interestIncome || []).filter((i: any) => i.type === 'savings').reduce((s: number, i: any) => s + (i.grossAmount || 0), 0)
+      const oth = totalInterest - fd - sav
+      if (fd > 0) { preSelected.add('fd'); preValues['fd'] = String(Math.round(fd)) }
+      if (sav > 0) { preSelected.add('savings'); preValues['savings'] = String(Math.round(sav)) }
+      if (oth > 0) { preSelected.add('other_int'); preValues['other_int'] = String(Math.round(oth)) }
+    }
+    const ltcgEq = (aisData.capitalGains || []).filter((c: any) => c.assetType === 'equity' && c.gainType === 'LTCG').reduce((s: number, c: any) => s + (c.gain || 0), 0)
+    const stcgEq = (aisData.capitalGains || []).filter((c: any) => c.assetType === 'equity' && c.gainType === 'STCG').reduce((s: number, c: any) => s + (c.gain || 0), 0)
+    const ltcgProp = (aisData.capitalGains || []).filter((c: any) => c.assetType === 'property' && c.gainType === 'LTCG').reduce((s: number, c: any) => s + (c.gain || 0), 0)
+    const stcgProp = (aisData.capitalGains || []).filter((c: any) => c.assetType === 'property' && c.gainType === 'STCG').reduce((s: number, c: any) => s + (c.gain || 0), 0)
+    if (ltcgEq > 0) { preSelected.add('ltcg_eq'); preValues['ltcg_eq'] = String(Math.round(ltcgEq)) }
+    if (stcgEq > 0) { preSelected.add('stcg_eq'); preValues['stcg_eq'] = String(Math.round(stcgEq)) }
+    if (ltcgProp > 0) { preSelected.add('ltcg_prop'); preValues['ltcg_prop'] = String(Math.round(ltcgProp)) }
+    if (stcgProp > 0) { preSelected.add('stcg_prop'); preValues['stcg_prop'] = String(Math.round(stcgProp)) }
+    if (aisData.rentalIncome > 0) {
+      preSelected.add('house_prop')
+      preValues['annualRentReceived'] = String(Math.round(aisData.rentalIncome))
+    }
+
+    if (preSelected.size > 0) {
+      setSelected(preSelected)
+      setValues(preValues)
+      toast.success(`${preSelected.size} income source${preSelected.size > 1 ? 's' : ''} pre-filled from AIS`, { duration: 4000 })
+    }
+  }, [aisData])
 
   const toggle = (key: string) => {
     setSelected(prev => {
@@ -111,6 +152,19 @@ export default function OtherIncomePage() {
           Select only the income types that apply to you. Leave the rest — they won't appear.
         </p>
       </div>
+
+      {/* AIS pre-fill notice */}
+      {aisData && selected.size > 0 && (
+        <div style={{ background: '#E9F7EF', border: '1px solid #A9DFBF', borderRadius: 10, padding: '10px 16px', marginBottom: 16, fontSize: 13, color: '#1E5631' }}>
+          ✅ <strong>{selected.size} income source{selected.size > 1 ? 's' : ''} auto-filled from your AIS.</strong> Review and adjust if needed.
+        </div>
+      )}
+      {!aisData && (
+        <div style={{ background: '#E8F1FA', border: '1px solid #A8CCE8', borderRadius: 10, padding: '10px 16px', marginBottom: 16, fontSize: 13, color: '#1A3C5E' }}>
+          💡 <strong>Tip:</strong> Upload your AIS first to auto-fill all income sources.{' '}
+          <Link href="/dashboard/ais" style={{ color: '#1A3C5E', fontWeight: 700 }}>Upload AIS →</Link>
+        </div>
+      )}
 
       {/* Warning */}
       <div style={{ background: '#FEF3E2', border: '1px solid #F0C070', borderRadius: 10, padding: '10px 16px', marginBottom: 20, fontSize: 13, color: '#78350F' }}>
