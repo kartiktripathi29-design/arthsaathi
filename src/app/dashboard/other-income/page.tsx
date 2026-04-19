@@ -25,7 +25,7 @@ const INCOME_TYPES = [
 ]
 
 export default function OtherIncomePage() {
-  const { aisData } = useAppStore()
+  const { aisData, setOtherIncome } = useAppStore()
   const n = (v: string) => parseFloat(v.replace(/,/g, '')) || 0
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [values, setValues] = useState<Record<string, string>>({})
@@ -94,6 +94,8 @@ export default function OtherIncomePage() {
   }, 0)
 
   const handleSave = () => {
+    const data = { selected: Array.from(selected), values, isLetOut, total }
+    setOtherIncome(data)
     setSaved(true)
     toast.success(total > 0 ? `Other income saved: ₹${total.toLocaleString('en-IN')}/yr` : 'Saved — no other income added')
   }
