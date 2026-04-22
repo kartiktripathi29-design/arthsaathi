@@ -1,11 +1,8 @@
 'use client'
-import { useState, useCallback } from 'react'
-import { useDropzone } from 'react-dropzone'
+import { useState, useRef } from 'react'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { useAppStore } from '@/store/AppStore'
-import { InfoBox, Badge, Card } from '@/components/ui'
 import type { ParsedSalaryData } from '@/types'
 
 function fileToBase64(file: File): Promise<string> {
@@ -17,430 +14,675 @@ function fileToBase64(file: File): Promise<string> {
   })
 }
 
-function TakeHomeVisual({ gross, deductions, net }: { gross: number; deductions: number; net: number }) {
-  const netPct = gross > 0 ? (net / gross) * 100 : 0
-  const dedPct = gross > 0 ? (deductions / gross) * 100 : 0
-  return (
-    <div style={{ marginTop: 16 }}>
-      <div style={{ fontSize: 11, color: '#5D6D7E', marginBottom: 6, fontWeight: 500 }}>Monthly gross → take-home</div>
-      <div style={{ height: 10, borderRadius: 99, background: '#F1F2F4', overflow: 'hidden', display: 'flex', marginBottom: 8 }}>
-        <div style={{ width: `${netPct}%`, background: '#1E8449', borderRadius: '99px 0 0 99px', transition: 'width 0.8s ease' }} />
-        <div style={{ width: `${dedPct}%`, background: '#C0392B', transition: 'width 0.8s ease' }} />
-      </div>
-      <div style={{ display: 'flex', gap: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#5D6D7E' }}>
-          <div style={{ width: 8, height: 8, borderRadius: 2, background: '#1E8449' }} /> Take-Home ({netPct.toFixed(0)}%)
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#5D6D7E' }}>
-          <div style={{ width: 8, height: 8, borderRadius: 2, background: '#C0392B' }} /> Deductions ({dedPct.toFixed(0)}%)
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function ComponentRow({ label, amount, type }: { label: string; amount: number; type: string }) {
-  if (!amount || amount === 0) return null
-  const styles: Record<string, { bg: string; border: string; color: string; prefix: string }> = {
-    earning:   { bg: '#F0FDF4', border: '#1E8449', color: '#1E8449', prefix: '' },
-    deduction: { bg: '#FFF5F5', border: '#C0392B', color: '#C0392B', prefix: '−' },
-    computed:  { bg: '#FFFBEB', border: '#E67E22', color: '#E67E22', prefix: '' },
+// ─── Tax calculation ────────────────────────────────────────────────────────
+function calcTax(annualIncome: number): { old: number; new: number; recommended: string; savings: number } {
+  const stdDed = 75000
+  const taxableNew = Math.max(0, annualIncome - stdDed)
+  let newTax = 0
+  const newSlabs = [[300000,0],[300000,0.05],[300000,0.10],[300000,0.15],[300000,0.20],[Infinity,0.30]]
+  let remaining = taxableNew
+  for (const [limit, rate] of newSlabs) {
+    const chunk = Math.min(remaining, limit as number)
+    newTax += chunk * (rate as number)
+    remaining -= chunk
+    if (remaining <= 0) break
   }
-  const s = styles[type] || styles.computed
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 14px', borderRadius: 8, marginBottom: 5, background: s.bg, borderLeft: `3px solid ${s.border}` }}>
-      <span style={{ fontSize: 13, color: '#374151' }}>{label}</span>
-      <span style={{ fontSize: 13, fontWeight: 600, color: s.color }}>{s.prefix}₹{amount.toLocaleString('en-IN')}</span>
-    </div>
-  )
+  if (taxableNew <= 700000) newTax = 0
+
+  const taxableOld = Math.max(0, annualIncome - stdDed - 150000 - 25000)
+  let oldTax = 0
+  const oldSlabs = [[250000,0],[250000,0.05],[500000,0.20],[Infinity,0.30]]
+  let rem2 = taxableOld
+  for (const [limit, rate] of oldSlabs) {
+    const chunk = Math.min(rem2, limit as number)
+    oldTax += chunk * (rate as number)
+    rem2 -= chunk
+    if (rem2 <= 0) break
+  }
+  if (taxableOld <= 500000) oldTax = 0
+
+  newTax = Math.round(newTax * 1.04)
+  oldTax = Math.round(oldTax * 1.04)
+  const savings = Math.abs(oldTax - newTax)
+  return { old: oldTax, new: newTax, recommended: newTax <= oldTax ? 'new' : 'old', savings }
 }
 
-function SalaryBreakdown({ data }: { data: ParsedSalaryData }) {
-  const earnings = data.components?.filter(c => c.type === 'earning' && c.amount > 0) || []
-  const deductions = data.components?.filter(c => c.type === 'deduction' && c.amount > 0) || []
-  const hasComponents = earnings.length > 0 || deductions.length > 0
-  const earningsItems = hasComponents ? earnings : [
-    { label: 'Basic Salary', amount: data.basicSalary, type: 'earning' },
-    { label: 'HRA', amount: data.hra, type: 'earning' },
-    { label: 'DA', amount: data.da, type: 'earning' },
-    { label: 'Travel Allowance', amount: data.ta, type: 'earning' },
-    { label: 'LTA', amount: data.lta, type: 'earning' },
-    { label: 'Medical Allowance', amount: data.medicalAllowance, type: 'earning' },
-    { label: 'Special Allowance', amount: data.specialAllowance, type: 'earning' },
-    { label: 'Other Allowances', amount: data.otherAllowances, type: 'earning' },
-  ].filter(c => c.amount > 0)
-  const deductionItems = hasComponents ? deductions : [
-    { label: 'EPF (Employee 12%)', amount: data.employeePF, type: 'deduction' },
-    { label: 'ESIC', amount: data.esic, type: 'deduction' },
-    { label: 'Professional Tax', amount: data.professionalTax, type: 'deduction' },
-    { label: 'TDS (Income Tax)', amount: data.tdsDeducted, type: 'deduction' },
-    { label: 'Loan Recovery', amount: data.loanDeduction, type: 'deduction' },
-    { label: 'Other Deductions', amount: data.otherDeductions, type: 'deduction' },
-  ].filter(c => c.amount > 0)
+// ─── Component Review Step ────────────────────────────────────────────────────
+type ComponentTag = 'fixed' | 'variable' | 'onetime'
+
+interface ReviewComponent {
+  label: string
+  amount: number
+  tag: ComponentTag
+  isDeduction: boolean
+}
+
+const TAG_CONFIG: Record<ComponentTag, { label: string; color: string; bg: string; desc: string }> = {
+  fixed:    { label: 'Fixed Monthly', color: '#059669', bg: '#ECFDF5', desc: 'Paid every month, same amount' },
+  variable: { label: 'Variable/Bonus', color: '#7C3AED', bg: '#F5F3FF', desc: 'Depends on performance or quarter' },
+  onetime:  { label: 'One-time',       color: '#D97706', bg: '#FFFBEB', desc: 'Won\'t repeat next month (joining bonus, arrears)' },
+}
+
+function ComponentReview({ data, onConfirm }: { data: ParsedSalaryData; onConfirm: (components: ReviewComponent[], increment: { pct: number; months: number } | null) => void }) {
+  // Build initial components from parsed data
+  const buildInitial = (): ReviewComponent[] => {
+    const items: ReviewComponent[] = []
+    const earningMap: [string, number, ComponentTag][] = [
+      ['Basic Salary', data.basicSalary, 'fixed'],
+      ['HRA', data.hra, 'fixed'],
+      ['DA', data.da, 'fixed'],
+      ['Conveyance / TA', data.ta, 'fixed'],
+      ['LTA', data.lta, 'onetime'],
+      ['Medical Allowance', data.medicalAllowance, 'fixed'],
+      ['Special Allowance', data.specialAllowance, 'fixed'],
+      ['Other Allowances', data.otherAllowances, 'fixed'],
+    ]
+    for (const [label, amount, tag] of earningMap) {
+      if (amount > 0) items.push({ label, amount, tag, isDeduction: false })
+    }
+    // Add any extra components from parsed components array
+    if (data.components) {
+      for (const c of data.components) {
+        const alreadyAdded = items.some(i => i.label.toLowerCase() === c.label.toLowerCase())
+        if (!alreadyAdded && c.amount > 0 && c.type === 'earning') {
+          // Guess tag based on label
+          const lbl = c.label.toLowerCase()
+          const tag: ComponentTag = lbl.includes('bonus') || lbl.includes('incentive') || lbl.includes('variable') ? 'variable'
+            : lbl.includes('joining') || lbl.includes('one-time') || lbl.includes('arrear') || lbl.includes('lta') ? 'onetime'
+            : 'fixed'
+          items.push({ label: c.label, amount: c.amount, tag, isDeduction: false })
+        }
+      }
+    }
+    // Deductions
+    const dedMap: [string, number][] = [
+      ['PF / EPF', data.employeePF],
+      ['TDS / Income Tax', data.tdsDeducted],
+      ['Professional Tax', data.professionalTax],
+      ['ESIC', data.esic],
+      ['Other Deductions', data.otherDeductions],
+    ]
+    for (const [label, amount] of dedMap) {
+      if (amount > 0) items.push({ label, amount, tag: 'fixed', isDeduction: true })
+    }
+    return items.filter(i => i.amount > 0)
+  }
+
+  const [components, setComponents] = useState<ReviewComponent[]>(buildInitial)
+  const [expectIncrement, setExpectIncrement] = useState<'yes' | 'no' | null>(null)
+  const [incrPct, setIncrPct] = useState('')
+  const [incrMonths, setIncrMonths] = useState('')
+
+  const setTag = (idx: number, tag: ComponentTag) => {
+    setComponents(prev => prev.map((c, i) => i === idx ? { ...c, tag } : c))
+  }
+
+  const handleConfirm = () => {
+    const increment = expectIncrement === 'yes' && parseFloat(incrPct) > 0
+      ? { pct: parseFloat(incrPct), months: parseInt(incrMonths) || 3 }
+      : null
+    onConfirm(components, increment)
+  }
+
+  const earnings = components.filter(c => !c.isDeduction)
+  const deductions = components.filter(c => c.isDeduction)
 
   return (
-    <div className="fade-in">
-      <div style={{ background: 'linear-gradient(135deg, #0F2640, #1A3C5E)', borderRadius: 16, padding: '24px 28px', marginBottom: 20, color: '#fff' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
-          <div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 4, fontWeight: 500 }}>SALARY ANALYSIS</div>
-            <div style={{ fontSize: 20, fontWeight: 700 }}>{data.employeeName || 'Employee'}</div>
-            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', marginTop: 3 }}>{data.employerName} · {data.month} {data.year}</div>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 4 }}>MONTHLY TAKE-HOME</div>
-            <div style={{ fontSize: 36, fontWeight: 800, color: '#4ADE80', lineHeight: 1 }}>₹{data.netSalary?.toLocaleString('en-IN')}</div>
-          </div>
+    <div>
+      {/* Header */}
+      <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 12, padding: '14px 18px', marginBottom: 20 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: '#065F46', marginBottom: 4 }}>✅ Slip parsed — review your components</div>
+        <div style={{ fontSize: 13, color: '#047857', lineHeight: 1.6 }}>
+          Tell us which components repeat every month and which are one-time. This makes your annual tax projection accurate.
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginTop: 22 }}>
-          {[
-            { label: 'Gross Monthly', value: `₹${data.grossSalary?.toLocaleString('en-IN')}` },
-            { label: 'Total Deductions', value: `₹${data.totalDeductions?.toLocaleString('en-IN')}`, color: '#FC8181' },
-            { label: 'Annual CTC', value: `₹${((data.ctcAnnual || data.grossSalary * 12) / 100000).toFixed(2)}L`, color: '#FCD34D' },
-          ].map(s => (
-            <div key={s.label} style={{ background: 'rgba(255,255,255,0.07)', borderRadius: 10, padding: '12px 14px' }}>
-              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{s.label}</div>
-              <div style={{ fontSize: 17, fontWeight: 700, color: s.color || 'rgba(255,255,255,0.9)' }}>{s.value}</div>
+      </div>
+
+      {/* Earnings */}
+      <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: '16px 20px', marginBottom: 12 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#059669', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 14 }}>Earnings</div>
+        {earnings.map((c, i) => (
+          <div key={i} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: i < earnings.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 500, color: '#1E293B' }}>{c.label}</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#1E293B' }}>₹{c.amount.toLocaleString('en-IN')}</span>
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {(Object.keys(TAG_CONFIG) as ComponentTag[]).map(tag => (
+                <button key={tag} onClick={() => setTag(components.indexOf(c), tag)}
+                  style={{ flex: 1, padding: '7px 4px', borderRadius: 8, border: `1.5px solid ${c.tag === tag ? TAG_CONFIG[tag].color : '#E2E8F0'}`, background: c.tag === tag ? TAG_CONFIG[tag].bg : '#fff', color: c.tag === tag ? TAG_CONFIG[tag].color : '#94A3B8', fontSize: 11, fontWeight: c.tag === tag ? 700 : 400, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', textAlign: 'center' as const }}>
+                  {TAG_CONFIG[tag].label}
+                </button>
+              ))}
+            </div>
+            <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 5 }}>{TAG_CONFIG[c.tag].desc}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Deductions — always fixed, just show */}
+      {deductions.length > 0 && (
+        <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: '16px 20px', marginBottom: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#DC2626', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10 }}>Deductions <span style={{ color: '#94A3B8', fontWeight: 400, fontSize: 10 }}>(treated as fixed monthly)</span></div>
+          {deductions.map((c, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: i < deductions.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
+              <span style={{ fontSize: 13, color: '#475569' }}>{c.label}</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#DC2626' }}>−₹{c.amount.toLocaleString('en-IN')}</span>
             </div>
           ))}
         </div>
-        <TakeHomeVisual gross={data.grossSalary} deductions={data.totalDeductions} net={data.netSalary} />
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <Card>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#1E8449' }}>↑ Earnings</div>
-            <Badge color="green">{earningsItems.length} items</Badge>
-          </div>
-          {earningsItems.map((c, i) => <ComponentRow key={i} {...c} />)}
-          <div style={{ marginTop: 10, paddingTop: 10, borderTop: '2px solid #F0F0F0', display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 13, fontWeight: 700 }}>Gross Salary</span>
-            <span style={{ fontSize: 14, fontWeight: 800, color: '#1E8449' }}>₹{data.grossSalary?.toLocaleString('en-IN')}</span>
-          </div>
-        </Card>
-        <Card>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#C0392B' }}>↓ Deductions</div>
-            <Badge color="red">{deductionItems.length} items</Badge>
-          </div>
-          {deductionItems.map((c, i) => <ComponentRow key={i} {...c} />)}
-          <div style={{ marginTop: 10, paddingTop: 10, borderTop: '2px solid #F0F0F0', display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 13, fontWeight: 700 }}>Total Deductions</span>
-            <span style={{ fontSize: 14, fontWeight: 800, color: '#C0392B' }}>₹{data.totalDeductions?.toLocaleString('en-IN')}</span>
-          </div>
-        </Card>
-      </div>
-      <div style={{ marginTop: 16, background: '#E9F7EF', border: '1px solid #A9DFBF', borderRadius: 12, padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#1E5631' }}>✅ Salary saved — ₹{data.netSalary?.toLocaleString('en-IN')}/mo</div>
-          <div style={{ fontSize: 12, color: '#27AE60', marginTop: 2 }}>Next: Add any other income sources for accurate tax calculation</div>
+      )}
+
+      {/* Increment question */}
+      <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: '16px 20px', marginBottom: 20 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: '#1E293B', marginBottom: 4 }}>Expecting an increment?</div>
+        <div style={{ fontSize: 12, color: '#64748B', marginBottom: 12 }}>We'll project your tax for the full year including the hike.</div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: expectIncrement === 'yes' ? 16 : 0 }}>
+          {[['yes', '🎉 Yes'], ['no', 'Not yet']].map(([val, lbl]) => (
+            <button key={val} onClick={() => setExpectIncrement(val as 'yes' | 'no')}
+              style={{ flex: 1, padding: '10px', borderRadius: 9, border: `1.5px solid ${expectIncrement === val ? '#059669' : '#E2E8F0'}`, background: expectIncrement === val ? '#ECFDF5' : '#fff', color: expectIncrement === val ? '#059669' : '#64748B', fontSize: 13, fontWeight: expectIncrement === val ? 700 : 400, cursor: 'pointer', fontFamily: 'inherit' }}>
+              {lbl}
+            </button>
+          ))}
         </div>
-        <Link href="/dashboard/other-income"
-          style={{ padding: '10px 20px', background: '#1A3C5E', color: '#fff', borderRadius: 9, fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>
-          Add Other Income →
-        </Link>
-      </div>
-    </div>
-  )
-}
-
-// ─── Manual Entry Form ────────────────────────────────────────────────────
-function ManualEntryForm({ onSubmit }: { onSubmit: (data: ParsedSalaryData) => void }) {
-  const n = (v: string) => parseFloat(v.replace(/,/g, '')) || 0
-  const [form, setForm] = useState({
-    employeeName: '', employerName: '', month: 'April', year: '2025',
-    basicSalary: '', hra: '', da: '', ta: '', lta: '',
-    medicalAllowance: '', specialAllowance: '', otherAllowances: '',
-    employeePF: '', employerPF: '', esic: '', professionalTax: '',
-    tdsDeducted: '', loanDeduction: '', otherDeductions: '',
-    freelanceIncome: '', businessIncome: '',
-  })
-  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
-
-  const inp = (label: string, key: string, hint?: string) => (
-    <div style={{ marginBottom: 14 }}>
-      <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>{label}</label>
-      {hint && <div style={{ fontSize: 11, color: '#95A5A6', marginBottom: 4 }}>{hint}</div>}
-      <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #E5E9ED', borderRadius: 8, overflow: 'hidden' }}>
-        <span style={{ padding: '8px 10px', background: '#F8FAFB', fontSize: 13, color: '#5D6D7E', borderRight: '1px solid #E5E9ED' }}>₹</span>
-        <input type="number" value={form[key as keyof typeof form]} onChange={e => set(key, e.target.value)}
-          placeholder="0" style={{ flex: 1, padding: '8px 12px', border: 'none', fontSize: 13, outline: 'none', background: 'transparent' }} />
-      </div>
-    </div>
-  )
-
-  const handleSubmit = () => {
-    const gross = n(form.basicSalary) + n(form.hra) + n(form.da) + n(form.ta) + n(form.lta) +
-      n(form.medicalAllowance) + n(form.specialAllowance) + n(form.otherAllowances) +
-      n(form.freelanceIncome) + n(form.businessIncome)
-    if (gross === 0) { toast.error('Please enter at least your basic salary or income'); return }
-    const totalDeductions = n(form.employeePF) + n(form.esic) + n(form.professionalTax) +
-      n(form.tdsDeducted) + n(form.loanDeduction) + n(form.otherDeductions)
-    const netSalary = Math.max(0, gross - totalDeductions)
-    onSubmit({
-      employeeName: form.employeeName || 'You', employerName: form.employerName || 'Self',
-      month: form.month, year: form.year,
-      basicSalary: n(form.basicSalary), hra: n(form.hra), da: n(form.da), ta: n(form.ta), lta: n(form.lta),
-      medicalAllowance: n(form.medicalAllowance),
-      specialAllowance: n(form.specialAllowance) + n(form.freelanceIncome) + n(form.businessIncome),
-      otherAllowances: n(form.otherAllowances), grossSalary: gross,
-      employeePF: n(form.employeePF), employerPF: n(form.employerPF) || n(form.employeePF),
-      esic: n(form.esic), professionalTax: n(form.professionalTax),
-      tdsDeducted: n(form.tdsDeducted), loanDeduction: n(form.loanDeduction),
-      otherDeductions: n(form.otherDeductions), totalDeductions, netSalary,
-      ctcMonthly: gross + (n(form.employerPF) || n(form.employeePF)),
-      ctcAnnual: (gross + (n(form.employerPF) || n(form.employeePF))) * 12,
-      components: [
-        ...[
-          { label: 'Basic Salary', amount: n(form.basicSalary), type: 'earning' as const },
-          { label: 'HRA', amount: n(form.hra), type: 'earning' as const },
-          { label: 'DA', amount: n(form.da), type: 'earning' as const },
-          { label: 'Travel Allowance', amount: n(form.ta), type: 'earning' as const },
-          { label: 'LTA', amount: n(form.lta), type: 'earning' as const },
-          { label: 'Medical Allowance', amount: n(form.medicalAllowance), type: 'earning' as const },
-          { label: 'Special Allowance', amount: n(form.specialAllowance), type: 'earning' as const },
-          { label: 'Freelance Income', amount: n(form.freelanceIncome), type: 'earning' as const },
-          { label: 'Business Income', amount: n(form.businessIncome), type: 'earning' as const },
-          { label: 'Other Allowances', amount: n(form.otherAllowances), type: 'earning' as const },
-        ].filter(c => c.amount > 0),
-        ...[
-          { label: 'EPF (Employee)', amount: n(form.employeePF), type: 'deduction' as const },
-          { label: 'ESIC', amount: n(form.esic), type: 'deduction' as const },
-          { label: 'Professional Tax', amount: n(form.professionalTax), type: 'deduction' as const },
-          { label: 'TDS Deducted', amount: n(form.tdsDeducted), type: 'deduction' as const },
-          { label: 'Loan Deduction', amount: n(form.loanDeduction), type: 'deduction' as const },
-          { label: 'Other Deductions', amount: n(form.otherDeductions), type: 'deduction' as const },
-        ].filter(c => c.amount > 0),
-      ],
-    })
-    toast.success('Salary saved! Now add other income sources.')
-  }
-
-  const months = ['April','May','June','July','August','September','October','November','December','January','February','March']
-
-  return (
-    <div className="fade-in">
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div>
-          <Card style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#1C2833', marginBottom: 14 }}>👤 Your Details</div>
-            <div style={{ marginBottom: 14 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Your Name (optional)</label>
-              <input value={form.employeeName} onChange={e => set('employeeName', e.target.value)} placeholder="e.g. Rahul Sharma"
-                style={{ width: '100%', padding: '8px 12px', border: '1px solid #E5E9ED', borderRadius: 8, fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
-            </div>
-            <div style={{ marginBottom: 14 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Employer / Company (optional)</label>
-              <input value={form.employerName} onChange={e => set('employerName', e.target.value)} placeholder="e.g. Infosys Ltd"
-                style={{ width: '100%', padding: '8px 12px', border: '1px solid #E5E9ED', borderRadius: 8, fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Month</label>
-                <select value={form.month} onChange={e => set('month', e.target.value)}
-                  style={{ width: '100%', padding: '8px 12px', border: '1px solid #E5E9ED', borderRadius: 8, fontSize: 13, outline: 'none', background: '#fff' }}>
-                  {months.map(m => <option key={m}>{m}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Year</label>
-                <select value={form.year} onChange={e => set('year', e.target.value)}
-                  style={{ width: '100%', padding: '8px 12px', border: '1px solid #E5E9ED', borderRadius: 8, fontSize: 13, outline: 'none', background: '#fff' }}>
-                  {['2024','2025','2026'].map(y => <option key={y}>{y}</option>)}
-                </select>
+        {expectIncrement === 'yes' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, color: '#475569', display: 'block', marginBottom: 5 }}>Increment %</label>
+              <div style={{ display: 'flex', border: '1px solid #CBD5E1', borderRadius: 8, overflow: 'hidden' }}>
+                <input type="number" value={incrPct} onChange={e => setIncrPct(e.target.value)}
+                  placeholder="e.g. 15" min="0" max="200"
+                  style={{ flex: 1, padding: '9px 12px', border: 'none', fontSize: 14, outline: 'none', fontFamily: 'inherit' }} />
+                <span style={{ padding: '9px 10px', background: '#F8FAFC', fontSize: 13, color: '#64748B', borderLeft: '1px solid #E2E8F0' }}>%</span>
               </div>
             </div>
-          </Card>
-
-          <Card style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#1E8449', marginBottom: 14 }}>↑ Earnings (Monthly)</div>
-            {inp('Basic Salary *', 'basicSalary', 'Usually 40-50% of CTC')}
-            {inp('HRA (House Rent Allowance)', 'hra', 'Usually 40-50% of Basic')}
-            {inp('DA (Dearness Allowance)', 'da', 'Mainly for Govt employees')}
-            {inp('Travel Allowance (TA)', 'ta')}
-            {inp('LTA (Leave Travel Allowance)', 'lta')}
-            {inp('Medical Allowance', 'medicalAllowance')}
-            {inp('Special Allowance', 'specialAllowance', 'Flexible/balance component')}
-            {inp('Other Allowances', 'otherAllowances')}
-          </Card>
-
-          <Card>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#8E44AD', marginBottom: 6 }}>💼 Freelance / Business (Monthly)</div>
-            <div style={{ fontSize: 12, color: '#5D6D7E', marginBottom: 14 }}>For self-employed, consultants, gig workers</div>
-            {inp('Monthly Freelance Income', 'freelanceIncome')}
-            {inp('Monthly Business Income', 'businessIncome')}
-          </Card>
-        </div>
-
-        <div>
-          <Card style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#C0392B', marginBottom: 14 }}>↓ Deductions (Monthly)</div>
-            {inp('EPF — Employee Contribution', 'employeePF', '12% of Basic typically')}
-            {inp('EPF — Employer Contribution', 'employerPF', 'Same as employee')}
-            {inp('ESIC', 'esic', 'Only if salary < ₹21,000/mo')}
-            {inp('Professional Tax', 'professionalTax', 'Max ₹200/mo in most states')}
-            {inp('TDS Deducted', 'tdsDeducted', 'Income tax deducted by employer')}
-            {inp('Loan / Advance Recovery', 'loanDeduction')}
-            {inp('Other Deductions', 'otherDeductions')}
-          </Card>
-
-          {/* Live preview */}
-          {(() => {
-            const gross = n(form.basicSalary) + n(form.hra) + n(form.da) + n(form.ta) + n(form.lta) +
-              n(form.medicalAllowance) + n(form.specialAllowance) + n(form.otherAllowances) +
-              n(form.freelanceIncome) + n(form.businessIncome)
-            const totalDed = n(form.employeePF) + n(form.esic) + n(form.professionalTax) +
-              n(form.tdsDeducted) + n(form.loanDeduction) + n(form.otherDeductions)
-            const net = Math.max(0, gross - totalDed)
-            if (gross === 0) return null
-            return (
-              <Card>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#1C2833', marginBottom: 12 }}>📊 Live Preview</div>
-                {[
-                  { label: 'Gross Income', value: gross, color: '#1A3C5E' },
-                  { label: 'Total Deductions', value: totalDed, color: '#C0392B' },
-                  { label: 'Take-Home', value: net, color: '#1E8449', bold: true },
-                ].map(r => (
-                  <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #F5F5F5' }}>
-                    <span style={{ fontSize: 13, color: '#5D6D7E' }}>{r.label}</span>
-                    <span style={{ fontSize: r.bold ? 16 : 13, fontWeight: r.bold ? 800 : 600, color: r.color }}>₹{r.value.toLocaleString('en-IN')}</span>
-                  </div>
-                ))}
-                <div style={{ marginTop: 10, padding: '10px', background: '#E9F7EF', borderRadius: 8, fontSize: 12, color: '#1E5631' }}>
-                  Annual: <strong>₹{(net * 12).toLocaleString('en-IN')}</strong>
-                </div>
-              </Card>
-            )
-          })()}
-        </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, color: '#475569', display: 'block', marginBottom: 5 }}>In how many months?</label>
+              <div style={{ display: 'flex', border: '1px solid #CBD5E1', borderRadius: 8, overflow: 'hidden' }}>
+                <input type="number" value={incrMonths} onChange={e => setIncrMonths(e.target.value)}
+                  placeholder="e.g. 3" min="1" max="12"
+                  style={{ flex: 1, padding: '9px 12px', border: 'none', fontSize: 14, outline: 'none', fontFamily: 'inherit' }} />
+                <span style={{ padding: '9px 10px', background: '#F8FAFC', fontSize: 13, color: '#64748B', borderLeft: '1px solid #E2E8F0' }}>mo</span>
+              </div>
+            </div>
+            {incrPct && incrMonths && (
+              <div style={{ gridColumn: '1/-1', background: '#F0FDF4', border: '1px solid #A7F3D0', borderRadius: 8, padding: '10px 12px', fontSize: 12, color: '#065F46' }}>
+                📊 We'll calculate tax assuming {incrMonths} months at current salary, then {12 - parseInt(incrMonths)} months at +{incrPct}% increment.
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      <button onClick={handleSubmit}
-        style={{ width: '100%', padding: '14px', background: '#1A3C5E', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: 'pointer', marginTop: 16 }}>
-        ✓ Save Salary & Continue
+      <button onClick={handleConfirm} disabled={expectIncrement === null}
+        style={{ width: '100%', padding: '14px', background: expectIncrement === null ? '#E2E8F0' : '#059669', color: expectIncrement === null ? '#94A3B8' : '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: expectIncrement === null ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
+        {expectIncrement === null ? 'Answer the increment question above →' : 'Confirm & Calculate Tax →'}
       </button>
     </div>
   )
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────
+// ─── Shared result display ──────────────────────────────────────────────────
+function ResultView({ 
+  data, onEdit, onReset, source, increment
+}: { 
+  data: ParsedSalaryData | any, 
+  onEdit: () => void, 
+  onReset: () => void,
+  source: 'slip' | 'offer' | 'manual',
+  increment: { pct: number; months: number } | null
+}) {
+  const annualGross = data._adjustedAnnual
+    || (source === 'slip' || source === 'manual' ? (data.grossSalary || 0) * 12 : (data.totalCTC || data.fixedCTC || 0))
+  const annualFixed = source === 'offer' ? (data.fixedCTC || annualGross) : annualGross
+  const annualVariable = source === 'offer' ? (data.variableCTC || 0) : 0
+  const tax = calcTax(annualGross)
+
+  const fmt = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`
+  const fmtM = (n: number) => fmt(Math.round(n / 12))
+
+  const rows = [
+    { label: 'Gross / Total CTC', annual: annualGross, monthly: annualGross / 12, color: '#1E293B', bold: true },
+    ...(annualVariable > 0 ? [
+      { label: 'Fixed CTC', annual: annualFixed, monthly: annualFixed / 12, color: '#059669', bold: false },
+      { label: 'Variable / Bonus', annual: annualVariable, monthly: annualVariable / 12, color: '#D97706', bold: false },
+    ] : []),
+    { label: 'Standard Deduction', annual: -75000, monthly: -75000/12, color: '#DC2626', bold: false },
+    { label: 'Tax (New Regime)', annual: -tax.new, monthly: -tax.new/12, color: '#DC2626', bold: false },
+    { label: 'Tax (Old Regime)', annual: -tax.old, monthly: -tax.old/12, color: '#94A3B8', bold: false },
+  ]
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ background: '#1E293B', borderRadius: 14, padding: '20px 24px', marginBottom: 16, color: '#fff' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+          <div>
+            <div style={{ fontSize: 11, color: '#94A3B8', letterSpacing: '0.08em', marginBottom: 4 }}>
+              {source === 'slip' ? 'SALARY SLIP PARSED' : source === 'offer' ? 'OFFER LETTER PARSED' : 'MANUAL ENTRY'}
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>
+              {data.employeeName || data.designation || 'Your Salary'}
+            </div>
+            <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
+              {data.employerName || ''} 
+              {source === 'slip' && data.month ? ` · ${data.month} ${data.year}` : ''}
+              {source === 'offer' && data.joiningDate ? ` · Joining: ${data.joiningDate}` : ''}
+            </div>
+            {increment && (
+              <div style={{ marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(52,211,153,0.15)', border: '1px solid rgba(52,211,153,0.3)', borderRadius: 20, padding: '3px 10px', fontSize: 11, color: '#34D399', fontWeight: 600 }}>
+                🎉 +{increment.pct}% increment in {increment.months} months — projected
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={onEdit} style={{ padding: '7px 14px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 7, color: 'rgba(255,255,255,0.7)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+              ✏️ Edit
+            </button>
+            <button onClick={onReset} style={{ padding: '7px 14px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 7, color: 'rgba(255,255,255,0.7)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+              ↺ New
+            </button>
+          </div>
+        </div>
+
+        {/* Annual vs Monthly tiles */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+          <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 10, padding: '14px 16px' }}>
+            <div style={{ fontSize: 10, color: '#94A3B8', marginBottom: 4, letterSpacing: '0.06em' }}>ANNUAL TAKE-HOME (NEW)</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: '#34D399' }}>
+              {fmt(annualGross - 75000 - tax.new)}
+            </div>
+            <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>After tax + std. deduction</div>
+          </div>
+          <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 10, padding: '14px 16px' }}>
+            <div style={{ fontSize: 10, color: '#94A3B8', marginBottom: 4, letterSpacing: '0.06em' }}>MONTHLY TAKE-HOME (NEW)</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: '#34D399' }}>
+              {fmtM(annualGross - 75000 - tax.new)}
+            </div>
+            <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Approx. monthly equivalent</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Tax comparison */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+        <div style={{ background: tax.recommended === 'new' ? '#F0FDF4' : '#F8FAFC', border: `1.5px solid ${tax.recommended === 'new' ? '#059669' : '#E2E8F0'}`, borderRadius: 12, padding: '16px' }}>
+          {tax.recommended === 'new' && (
+            <div style={{ fontSize: 9, background: '#059669', color: '#fff', fontWeight: 700, padding: '2px 8px', borderRadius: 20, display: 'inline-block', marginBottom: 8, letterSpacing: '0.05em' }}>RECOMMENDED</div>
+          )}
+          <div style={{ fontSize: 11, color: '#64748B', marginBottom: 4, fontWeight: 600 }}>NEW REGIME</div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: '#059669' }}>{fmt(tax.new)}</div>
+          <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>Annual · {fmtM(tax.new)}/mo</div>
+        </div>
+        <div style={{ background: tax.recommended === 'old' ? '#F0FDF4' : '#F8FAFC', border: `1.5px solid ${tax.recommended === 'old' ? '#059669' : '#E2E8F0'}`, borderRadius: 12, padding: '16px' }}>
+          {tax.recommended === 'old' && (
+            <div style={{ fontSize: 9, background: '#059669', color: '#fff', fontWeight: 700, padding: '2px 8px', borderRadius: 20, display: 'inline-block', marginBottom: 8, letterSpacing: '0.05em' }}>RECOMMENDED</div>
+          )}
+          <div style={{ fontSize: 11, color: '#64748B', marginBottom: 4, fontWeight: 600 }}>OLD REGIME</div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: '#DC2626' }}>{fmt(tax.old)}</div>
+          <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>Annual · {fmtM(tax.old)}/mo</div>
+        </div>
+      </div>
+
+      {/* Savings callout */}
+      {tax.savings > 0 && (
+        <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 10, padding: '12px 16px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#065F46' }}>Switch to {tax.recommended === 'new' ? 'New' : 'Old'} Regime</div>
+            <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Saves {fmtM(tax.savings)}/month · {fmt(tax.savings)}/year</div>
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: '#059669' }}>{fmt(tax.savings)}</div>
+        </div>
+      )}
+
+      {/* Full breakdown */}
+      <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: '16px 20px', marginBottom: 16 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: '#64748B', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Full Breakdown</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 0 }}>
+          <div style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600, marginBottom: 8 }}>COMPONENT</div>
+          <div style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600, marginBottom: 8, textAlign: 'right', paddingRight: 24 }}>ANNUAL</div>
+          <div style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600, marginBottom: 8, textAlign: 'right' }}>MONTHLY</div>
+          {rows.map((row, i) => row.annual !== 0 && (
+            <>
+              <div key={`l${i}`} style={{ fontSize: 13, color: '#374151', padding: '6px 0', borderTop: i > 0 ? '1px solid #F1F5F9' : 'none', fontWeight: row.bold ? 700 : 400 }}>{row.label}</div>
+              <div key={`a${i}`} style={{ fontSize: 13, color: row.color, fontWeight: 600, padding: '6px 24px 6px 0', borderTop: i > 0 ? '1px solid #F1F5F9' : 'none', textAlign: 'right' }}>
+                {row.annual < 0 ? '−' : ''}{fmt(Math.abs(row.annual))}
+              </div>
+              <div key={`m${i}`} style={{ fontSize: 13, color: '#94A3B8', padding: '6px 0', borderTop: i > 0 ? '1px solid #F1F5F9' : 'none', textAlign: 'right' }}>
+                {row.monthly < 0 ? '−' : ''}{fmtM(Math.abs(row.annual))}
+              </div>
+            </>
+          ))}
+        </div>
+      </div>
+
+      {/* Offer letter notes */}
+      {source === 'offer' && data.notes && (
+        <div style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: 12, color: '#78350F', lineHeight: 1.6 }}>
+          ⚠️ <strong>Conditions:</strong> {data.notes}
+        </div>
+      )}
+
+      {/* Salary components */}
+      {data.components?.length > 0 && (
+        <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: '16px 20px', marginBottom: 16 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#64748B', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.06em' }}>All Components</div>
+          {data.components.filter((c: any) => c.amount > 0).map((c: any, i: number) => {
+            const isDeduction = c.type === 'deduction'
+            const isVariable = c.type === 'variable'
+            const isOneTime = c.frequency === 'one-time'
+            return (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #F1F5F9' }}>
+                <div>
+                  <span style={{ fontSize: 13, color: '#374151' }}>{c.label}</span>
+                  {isOneTime && <span style={{ fontSize: 10, color: '#D97706', background: '#FEF3C7', padding: '1px 6px', borderRadius: 4, marginLeft: 6, fontWeight: 600 }}>ONE-TIME</span>}
+                  {isVariable && <span style={{ fontSize: 10, color: '#7C3AED', background: '#F5F3FF', padding: '1px 6px', borderRadius: 4, marginLeft: 6, fontWeight: 600 }}>VARIABLE</span>}
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: isDeduction ? '#DC2626' : '#1E293B' }}>
+                    {isDeduction ? '−' : ''}{fmt(source === 'slip' ? c.amount : (c.frequency === 'monthly' ? c.amount * 12 : c.amount))}
+                    <span style={{ fontSize: 10, color: '#94A3B8', marginLeft: 4 }}>yr</span>
+                  </div>
+                  {!isOneTime && (
+                    <div style={{ fontSize: 11, color: '#94A3B8' }}>
+                      {fmt(source === 'slip' ? c.amount : (c.frequency === 'monthly' ? c.amount : c.amount / 12))}/mo
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      <Link href="/dashboard/other-income"
+        style={{ display: 'block', padding: '14px', background: '#059669', color: '#fff', borderRadius: 10, fontWeight: 700, fontSize: 14, textDecoration: 'none', textAlign: 'center' }}>
+        Next: Add Other Income →
+      </Link>
+    </div>
+  )
+}
+
+// ─── Upload zone ─────────────────────────────────────────────────────────────
+function UploadZone({ onFile, loading, label }: { onFile: (f: File) => void; loading: boolean; label: string }) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  return (
+    <div
+      onClick={() => !loading && fileRef.current?.click()}
+      style={{ border: '1.5px dashed #A7F3D0', borderRadius: 12, padding: '40px 24px', textAlign: 'center', background: '#F8FFFE', cursor: loading ? 'wait' : 'pointer' }}>
+      <div style={{ fontSize: 40, marginBottom: 12 }}>📄</div>
+      <div style={{ fontSize: 15, fontWeight: 600, color: '#1E293B', marginBottom: 6 }}>
+        {loading ? 'Analysing…' : `Upload ${label}`}
+      </div>
+      <div style={{ fontSize: 13, color: '#64748B', marginBottom: 16 }}>PDF, JPG, PNG — any format</div>
+      {!loading && (
+        <div style={{ display: 'inline-flex', padding: '9px 24px', background: '#059669', color: '#fff', borderRadius: 8, fontSize: 14, fontWeight: 600 }}>
+          Browse Files
+        </div>
+      )}
+      {loading && <div style={{ fontSize: 13, color: '#059669', fontWeight: 500 }}>AI is reading your document…</div>}
+      <input ref={fileRef} type="file" accept=".pdf,image/*" style={{ display: 'none' }}
+        onChange={e => e.target.files?.[0] && onFile(e.target.files[0])} />
+    </div>
+  )
+}
+
+// ─── Manual entry form ────────────────────────────────────────────────────────
+function ManualForm({ onSave }: { onSave: (d: ParsedSalaryData) => void }) {
+  const [f, setF] = useState({ name: '', company: '', basic: '', hra: '', special: '', other: '', pf: '', tds: '', pt: '' })
+  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) => setF(p => ({ ...p, [k]: e.target.value }))
+  const n = (v: string) => parseFloat(v) || 0
+
+  const handleSave = () => {
+    const gross = n(f.basic) + n(f.hra) + n(f.special) + n(f.other)
+    const totalDed = n(f.pf) + n(f.tds) + n(f.pt)
+    if (!gross) { toast.error('Please enter at least basic salary'); return }
+    onSave({
+      employeeName: f.name, employerName: f.company,
+      basicSalary: n(f.basic), hra: n(f.hra), specialAllowance: n(f.special), otherAllowances: n(f.other),
+      grossSalary: gross, employeePF: n(f.pf), tdsDeducted: n(f.tds), professionalTax: n(f.pt),
+      totalDeductions: totalDed, netSalary: gross - totalDed,
+      ctcMonthly: gross + n(f.pf) * 0.2, ctcAnnual: (gross + n(f.pf) * 0.2) * 12,
+      components: [
+        { label: 'Basic Salary', amount: n(f.basic), type: 'earning' },
+        { label: 'HRA', amount: n(f.hra), type: 'earning' },
+        { label: 'Special Allowance', amount: n(f.special), type: 'earning' },
+        { label: 'Other Allowances', amount: n(f.other), type: 'earning' },
+        { label: 'Provident Fund', amount: n(f.pf), type: 'deduction' },
+        { label: 'TDS', amount: n(f.tds), type: 'deduction' },
+        { label: 'Professional Tax', amount: n(f.pt), type: 'deduction' },
+      ].filter(c => c.amount > 0),
+    } as ParsedSalaryData)
+  }
+
+  const inp = (label: string, key: string, placeholder = '0') => (
+    <div>
+      <label style={{ fontSize: 12, fontWeight: 500, color: '#475569', display: 'block', marginBottom: 4 }}>{label} <span style={{ color: '#94A3B8', fontWeight: 400 }}>(monthly ₹)</span></label>
+      <div style={{ display: 'flex', border: '1px solid #CBD5E1', borderRadius: 8, overflow: 'hidden' }}>
+        <span style={{ padding: '9px 10px', background: '#F8FAFC', fontSize: 13, color: '#64748B', borderRight: '1px solid #E2E8F0' }}>₹</span>
+        <input type="number" value={(f as any)[key]} onChange={set(key)} placeholder={placeholder}
+          style={{ flex: 1, padding: '9px 12px', border: 'none', fontSize: 14, outline: 'none', fontFamily: 'inherit' }} />
+      </div>
+    </div>
+  )
+
+  return (
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+        <div style={{ gridColumn: '1/-1' }}>
+          <label style={{ fontSize: 12, fontWeight: 500, color: '#475569', display: 'block', marginBottom: 4 }}>Your name</label>
+          <input value={f.name} onChange={set('name')} placeholder="Full name"
+            style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 8, fontSize: 14, fontFamily: 'inherit', outline: 'none' }} />
+        </div>
+        <div style={{ gridColumn: '1/-1' }}>
+          <label style={{ fontSize: 12, fontWeight: 500, color: '#475569', display: 'block', marginBottom: 4 }}>Company</label>
+          <input value={f.company} onChange={set('company')} placeholder="Employer name"
+            style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 8, fontSize: 14, fontFamily: 'inherit', outline: 'none' }} />
+        </div>
+        <div style={{ gridColumn: '1/-1', height: 1, background: '#F1F5F9', margin: '4px 0' }} />
+        <div style={{ fontSize: 11, gridColumn: '1/-1', color: '#059669', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Earnings</div>
+        {inp('Basic Salary', 'basic')}
+        {inp('HRA', 'hra')}
+        {inp('Special Allowance', 'special')}
+        {inp('Other Allowances', 'other')}
+        <div style={{ height: 1, background: '#F1F5F9', gridColumn: '1/-1', margin: '4px 0' }} />
+        <div style={{ fontSize: 11, gridColumn: '1/-1', color: '#DC2626', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Deductions</div>
+        {inp('Provident Fund (EPF)', 'pf')}
+        {inp('TDS / Income Tax', 'tds')}
+        {inp('Professional Tax', 'pt')}
+      </div>
+      <button onClick={handleSave}
+        style={{ width: '100%', padding: '13px', background: '#059669', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: 'pointer', fontFamily: 'inherit' }}>
+        Calculate Tax →
+      </button>
+    </div>
+  )
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
 export default function SalaryPage() {
   const { salary, setSalary } = useAppStore()
-  const router = useRouter()
+  const [tab, setTab] = useState<'slip' | 'offer' | 'manual'>('slip')
   const [loading, setLoading] = useState(false)
-  const [mode, setMode] = useState<'upload' | 'manual'>('upload')
+  const [offerData, setOfferData] = useState<any>(null)
+  const [editMode, setEditMode] = useState(false)
 
-  const processFile = useCallback(async (file: File) => {
-    const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif']
-    if (!allowed.includes(file.type)) { toast.error('Please upload a PDF or image'); return }
-    if (file.size > 10 * 1024 * 1024) { toast.error('File must be under 10MB'); return }
+  // Slip-specific: parsed but not yet reviewed
+  const [pendingSlip, setPendingSlip] = useState<ParsedSalaryData | null>(null)
+  // After review: adjusted annual gross + increment info for display
+  const [adjustedData, setAdjustedData] = useState<{ annualGross: number; increment: { pct: number; months: number } | null } | null>(null)
+
+  const showReview = !!pendingSlip && !salary
+  const showResult = salary && !editMode && !pendingSlip
+  const showOfferResult = offerData && !editMode
+
+  const handleSlipFile = async (file: File) => {
     setLoading(true)
-    const toastId = toast.loading('Reading your salary slip with AI…')
+    const tid = toast.loading('Reading salary slip…')
     try {
       const base64Data = await fileToBase64(file)
       const res = await fetch('/api/parse-salary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ base64Data, mediaType: file.type, fileName: file.name }),
+        body: JSON.stringify({ base64Data, mediaType: file.type }),
       })
       const json = await res.json()
-      if (!res.ok) throw new Error(json.error || 'Parsing failed')
-      setSalary(json.data)
-      toast.success('Salary parsed! Now add other income sources.', { id: toastId })
+      if (!res.ok) throw new Error(json.error || 'Failed to parse')
+      setPendingSlip(json.data)
+      toast.success('Slip parsed — please review components', { id: tid })
     } catch (e: any) {
-      toast.error(e.message || 'Failed to parse. Try a clearer image.', { id: toastId })
+      toast.error(e.message, { id: tid })
     } finally {
       setLoading(false)
     }
-  }, [setSalary])
+  }
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop: files => files[0] && processFile(files[0]),
-    accept: { 'application/pdf': [], 'image/*': [] },
-    multiple: false,
-    disabled: loading,
-  })
+  const handleReviewConfirm = (components: ReviewComponent[], increment: { pct: number; months: number } | null) => {
+    if (!pendingSlip) return
+
+    // Recalculate annual gross from reviewed components
+    const fixedMonthly = components
+      .filter(c => !c.isDeduction && c.tag === 'fixed')
+      .reduce((s, c) => s + c.amount, 0)
+    const variableAnnual = components
+      .filter(c => !c.isDeduction && c.tag === 'variable')
+      .reduce((s, c) => s + c.amount, 0)
+    const onetimeAnnual = components
+      .filter(c => !c.isDeduction && c.tag === 'onetime')
+      .reduce((s, c) => s + c.amount, 0)
+
+    let annualGross = fixedMonthly * 12 + variableAnnual + onetimeAnnual
+
+    // Apply increment: X months at current, rest at hiked
+    if (increment) {
+      const monthsBefore = Math.max(0, Math.min(12, increment.months))
+      const monthsAfter = 12 - monthsBefore
+      const hikedMonthly = fixedMonthly * (1 + increment.pct / 100)
+      annualGross = fixedMonthly * monthsBefore + hikedMonthly * monthsAfter + variableAnnual + onetimeAnnual
+    }
+
+    // Update components on the saved salary for display
+    const updatedComponents = components.map(c => ({
+      label: c.label,
+      amount: c.amount,
+      type: (c.isDeduction ? 'deduction' : (c.tag === 'variable' ? 'earning' : c.tag === 'onetime' ? 'earning' : 'earning')) as 'earning' | 'deduction' | 'computed',
+    }))
+
+    setSalary({ ...pendingSlip, components: updatedComponents })
+    setAdjustedData({ annualGross, increment })
+    setPendingSlip(null)
+    toast.success('Tax calculated with your adjustments!')
+  }
+
+  const handleOfferFile = async (file: File) => {
+    setLoading(true)
+    const tid = toast.loading('Reading offer letter…')
+    try {
+      const base64Data = await fileToBase64(file)
+      const res = await fetch('/api/parse-offer-letter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base64Data, mediaType: file.type }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Failed to parse')
+      setOfferData(json.data)
+      setEditMode(false)
+      toast.success('Offer letter parsed!', { id: tid })
+    } catch (e: any) {
+      toast.error(e.message, { id: tid })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleManualSave = (data: ParsedSalaryData) => {
+    setSalary(data)
+    setAdjustedData(null)
+    setEditMode(false)
+    toast.success('Salary saved!')
+  }
+
+  const handleSlipReset = () => {
+    setSalary(null)
+    setPendingSlip(null)
+    setAdjustedData(null)
+    setEditMode(false)
+  }
 
   return (
     <div className="fade-in">
-      <div style={{ marginBottom: 24 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, color: '#1C2833', marginBottom: 6 }}>Salary Slip</h2>
-        <p style={{ fontSize: 14, color: '#5D6D7E', lineHeight: 1.65, maxWidth: 580 }}>
-          Upload your salary slip or enter the details manually.
-        </p>
+      <div style={{ marginBottom: 20 }}>
+        <h2 style={{ fontSize: 20, fontWeight: 700, color: '#1E293B', marginBottom: 6 }}>Salary</h2>
+        <p style={{ fontSize: 14, color: '#64748B' }}>Upload a salary slip, offer letter, or enter manually. We'll show your annual and monthly tax.</p>
       </div>
 
-      {salary ? (
-        <SalaryBreakdown data={salary} />
-      ) : (
-        <>
-          {/* Upload / Manual toggle */}
-          <div style={{ display: 'flex', gap: 10, marginBottom: 24 }}>
-            {[
-              { key: 'upload', label: '📄 Upload Salary Slip', desc: 'AI reads any format automatically' },
-              { key: 'manual', label: '✏️ Enter Manually', desc: 'Type in your salary components' },
-            ].map(m => (
-              <button key={m.key} onClick={() => setMode(m.key as any)}
-                style={{ flex: 1, padding: '14px 20px', background: mode === m.key ? '#1A3C5E' : '#fff', color: mode === m.key ? '#fff' : '#1C2833', border: `2px solid ${mode === m.key ? '#1A3C5E' : '#E5E9ED'}`, borderRadius: 12, cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s' }}>
-                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 3 }}>{m.label}</div>
-                <div style={{ fontSize: 12, opacity: 0.7 }}>{m.desc}</div>
-              </button>
-            ))}
-          </div>
+      {/* Tab switcher — hidden during review and result */}
+      {(!showResult && !showOfferResult && !showReview) && (
+        <div style={{ display: 'flex', gap: 2, background: '#F1F5F9', borderRadius: 10, padding: 4, marginBottom: 20, width: 'fit-content' }}>
+          {([
+            ['slip', '📄', 'Salary Slip'],
+            ['offer', '📨', 'Offer Letter'],
+            ['manual', '✏️', 'Enter Manually'],
+          ] as const).map(([key, icon, label]) => (
+            <button key={key} onClick={() => setTab(key)}
+              style={{ padding: '8px 18px', borderRadius: 8, border: 'none', fontSize: 13, fontWeight: tab === key ? 700 : 400, cursor: 'pointer', fontFamily: 'inherit', background: tab === key ? '#fff' : 'transparent', color: tab === key ? '#059669' : '#64748B', boxShadow: tab === key ? '0 1px 4px rgba(0,0,0,0.08)' : 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 15 }}>{icon}</span> {label}
+            </button>
+          ))}
+        </div>
+      )}
 
-          {mode === 'upload' ? (
-            <>
-              <div {...getRootProps()} className={`upload-zone${isDragActive ? ' active' : ''}`}
-                style={{ padding: '64px 40px', textAlign: 'center', marginBottom: 20, cursor: 'pointer' }}>
-                <input {...getInputProps()} />
-                {loading ? (
-                  <>
-                    <div style={{ fontSize: 48, marginBottom: 16 }}>🔍</div>
-                    <div style={{ fontSize: 16, fontWeight: 600, color: '#1C2833', marginBottom: 8 }}>Analysing with Claude Vision…</div>
-                    <div style={{ fontSize: 13, color: '#5D6D7E', marginBottom: 24 }}>Extracting every salary component</div>
-                    <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-                      {['Reading layout', 'Finding components', 'Calculating totals'].map((s, i) => (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#E8F1FA', borderRadius: 20, padding: '5px 14px', fontSize: 12, color: '#1A3C5E' }}>
-                          <div className="skeleton" style={{ width: 7, height: 7, borderRadius: '50%' }} />{s}
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div style={{ fontSize: 52, marginBottom: 14 }}>{isDragActive ? '📂' : '📄'}</div>
-                    <div style={{ fontSize: 17, fontWeight: 600, color: '#1C2833', marginBottom: 8 }}>
-                      {isDragActive ? 'Drop to parse' : 'Drop your salary slip here'}
-                    </div>
-                    <div style={{ fontSize: 13, color: '#5D6D7E', marginBottom: 22 }}>PDF, JPG, PNG, WebP · Max 10MB · Any employer format</div>
-                    <button type="button" style={{ padding: '11px 28px', background: '#C9A84C', color: '#0F2640', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-                      Browse Files
-                    </button>
-                  </>
-                )}
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12, marginBottom: 20 }}>
-                {[
-                  { icon: '🖨️', title: 'PDF Payslips', desc: 'Email PDFs, HR system exports' },
-                  { icon: '📸', title: 'Photo / Image', desc: 'Phone camera photos of payslips' },
-                  { icon: '🏢', title: 'Any Employer', desc: 'IT, PSU, SME, startup formats' },
-                  { icon: '🔒', title: 'Stays Private', desc: 'Never stored on any server' },
-                ].map(f => (
-                  <div key={f.title} style={{ background: '#fff', border: '1px solid #E5E9ED', borderRadius: 10, padding: '14px 16px' }}>
-                    <div style={{ fontSize: 22, marginBottom: 8 }}>{f.icon}</div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#1C2833', marginBottom: 4 }}>{f.title}</div>
-                    <div style={{ fontSize: 12, color: '#5D6D7E', lineHeight: 1.5 }}>{f.desc}</div>
-                  </div>
-                ))}
-              </div>
-              <InfoBox variant="info" icon="🔒">
-                <strong>Privacy:</strong> Processed by Claude AI, converted to numbers. Raw document never saved.
-              </InfoBox>
-            </>
-          ) : (
-            <ManualEntryForm onSubmit={data => { setSalary(data) }} />
-          )}
+      {/* Upload zones */}
+      {tab === 'slip' && !showResult && !showReview && (
+        <UploadZone onFile={handleSlipFile} loading={loading} label="Salary Slip" />
+      )}
+      {tab === 'offer' && !showOfferResult && (
+        <>
+          <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 10, padding: '10px 16px', marginBottom: 14, fontSize: 13, color: '#1D4ED8' }}>
+            💡 Just got an offer? Upload your offer letter and see exactly how much you'll take home and what tax you'll pay — before joining.
+          </div>
+          <UploadZone onFile={handleOfferFile} loading={loading} label="Offer Letter" />
         </>
+      )}
+      {tab === 'manual' && !showResult && (
+        <ManualForm onSave={handleManualSave} />
+      )}
+
+      {/* Review step — slip only */}
+      {showReview && pendingSlip && (
+        <ComponentReview
+          data={pendingSlip}
+          onConfirm={handleReviewConfirm}
+        />
+      )}
+
+      {/* Results */}
+      {tab === 'slip' && showResult && (
+        <ResultView
+          data={{ ...salary, _adjustedAnnual: adjustedData?.annualGross }}
+          source="slip"
+          increment={adjustedData?.increment ?? null}
+          onEdit={() => { setSalary(null); setPendingSlip(salary); setEditMode(false) }}
+          onReset={handleSlipReset}
+        />
+      )}
+      {tab === 'offer' && showOfferResult && (
+        <ResultView
+          data={offerData}
+          source="offer"
+          increment={null}
+          onEdit={() => setEditMode(true)}
+          onReset={() => { setOfferData(null); setEditMode(false) }}
+        />
+      )}
+      {tab === 'manual' && showResult && (
+        <ResultView
+          data={salary}
+          source="manual"
+          increment={null}
+          onEdit={() => setEditMode(true)}
+          onReset={() => { setSalary(null); setEditMode(false) }}
+        />
       )}
     </div>
   )
