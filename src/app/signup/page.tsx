@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
@@ -16,49 +16,125 @@ function Logo({ size = 32 }: { size?: number }) {
   )
 }
 
+// Tiny helpers
+const isValidPhone = (p: string) => /^[6-9]\d{9}$/.test(p)
+const isValidPAN = (p: string) => /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(p.toUpperCase())
+const isValidAadhaar = (a: string) => /^\d{12}$/.test(a)
+
+type Step = 'phone' | 'phone_otp' | 'pan' | 'aadhaar_consent' | 'aadhaar_otp' | 'password'
+
 export default function SignupPage() {
   const { setUser } = useAppStore()
   const router = useRouter()
+  const [step, setStep] = useState<Step>('phone')
   const [loading, setLoading] = useState(false)
-  const [form, setForm] = useState({ name: '', email: '', password: '' })
+  const [otpTimer, setOtpTimer] = useState(0)
 
-  const handleOAuth = (provider: 'google' | 'facebook' | 'apple') => {
-    toast('OAuth sign-up coming soon. Please use email for now.', { icon: '🔒', duration: 3500 })
+  // Form data across steps
+  const [phone, setPhone] = useState('')
+  const [phoneOtp, setPhoneOtp] = useState('')
+  const [pan, setPan] = useState('')
+  const [dob, setDob] = useState('')
+  const [kycConsent, setKycConsent] = useState(true)
+  const [aadhaar, setAadhaar] = useState('')
+  const [aadhaarOtp, setAadhaarOtp] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+
+  // OTP countdown timer
+  useEffect(() => {
+    if (otpTimer <= 0) return
+    const t = setInterval(() => setOtpTimer(v => v - 1), 1000)
+    return () => clearInterval(t)
+  }, [otpTimer])
+
+  const handleSendPhoneOtp = () => {
+    if (!isValidPhone(phone)) { toast.error('Please enter a valid 10-digit mobile number starting with 6-9'); return }
+    setLoading(true)
+    setTimeout(() => {
+      setLoading(false)
+      setStep('phone_otp')
+      setOtpTimer(30)
+      toast.success('OTP sent! (For now, any 6 digits will work)')
+    }, 700)
   }
 
-  const handleSignup = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!form.name || !form.email || !form.password) {
-      toast.error('Please fill all fields'); return
-    }
-    if (form.password.length < 6) {
-      toast.error('Password must be at least 6 characters'); return
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-      toast.error('Please enter a valid email'); return
-    }
+  const handleVerifyPhoneOtp = () => {
+    if (phoneOtp.length !== 6) { toast.error('Enter the 6-digit OTP'); return }
+    setLoading(true)
+    setTimeout(() => {
+      setLoading(false)
+      setStep('pan')
+      toast.success('Mobile verified')
+    }, 600)
+  }
+
+  const handleResendOtp = () => {
+    if (otpTimer > 0) return
+    setOtpTimer(30)
+    toast.success('OTP resent')
+  }
+
+  const handleSubmitPan = () => {
+    if (!isValidPAN(pan)) { toast.error('PAN format: ABCDE1234F'); return }
+    if (!dob || !/^\d{4}-\d{2}-\d{2}$/.test(dob)) { toast.error('Please enter your date of birth'); return }
+    if (!kycConsent) { toast.error('Please agree to CKYC consent to continue'); return }
+    setLoading(true)
+    setTimeout(() => {
+      setLoading(false)
+      setStep('aadhaar_consent')
+      toast.success('PAN verified')
+    }, 700)
+  }
+
+  const handleAadhaarContinue = () => {
+    setStep('aadhaar_otp')
+    setOtpTimer(30)
+    toast('Redirecting to Digilocker…', { icon: '🔒' })
+  }
+
+  const handleVerifyAadhaarOtp = () => {
+    if (!isValidAadhaar(aadhaar)) { toast.error('Enter your 12-digit Aadhaar number'); return }
+    if (aadhaarOtp.length !== 6) { toast.error('Enter the 6-digit Aadhaar OTP'); return }
+    setLoading(true)
+    setTimeout(() => {
+      setLoading(false)
+      setStep('password')
+      toast.success('Aadhaar KYC complete')
+    }, 800)
+  }
+
+  const handleSetPassword = () => {
+    if (password.length < 6) { toast.error('Password must be at least 6 characters'); return }
+    if (password !== confirmPassword) { toast.error('Passwords do not match'); return }
     setLoading(true)
     setTimeout(() => {
       setUser({
-        email: form.email, name: form.name, provider: 'email',
+        email: `${phone}@arthvo.local`,
+        name: `User ${phone.slice(-4)}`,
+        provider: 'email',
         createdAt: new Date().toISOString(),
       })
-      toast.success(`Welcome, ${form.name}!`)
+      toast.success('Account created! Welcome to ArthVo 🎉')
       router.push('/dashboard/ais')
-    }, 600)
+    }, 800)
   }
+
+  const stepNumber: Record<Step, number> = { phone: 1, phone_otp: 2, pan: 3, aadhaar_consent: 4, aadhaar_otp: 5, password: 6 }
+  const currentStep = stepNumber[step]
+  const totalSteps = 6
 
   return (
     <div style={{ minHeight: '100vh', background: '#FFFFFF', fontFamily: '"Sora",-apple-system,sans-serif', display: 'flex', flexDirection: 'column' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        .oauth-btn { transition: background 0.15s, border-color 0.15s; }
-        .oauth-btn:hover { background: #F8FAFC !important; border-color: #94A3B8 !important; }
         .cta { transition: opacity 0.15s, transform 0.15s; }
-        .cta:hover { opacity: 0.92; transform: translateY(-1px); }
+        .cta:hover:not(:disabled) { opacity: 0.92; transform: translateY(-1px); }
+        .cta:disabled { opacity: 0.5; cursor: not-allowed; }
         .input { transition: border-color 0.15s, box-shadow 0.15s; }
         .input:focus { outline: none; border-color: #059669 !important; box-shadow: 0 0 0 3px rgba(5,150,105,0.1); }
+        .otp-input { text-align: center; letter-spacing: 0.5em; font-size: 18px; font-weight: 600; }
       `}</style>
 
       {/* Nav */}
@@ -76,67 +152,198 @@ export default function SignupPage() {
         </div>
       </nav>
 
+      {/* Progress bar */}
+      <div style={{ padding: '16px 52px 0', maxWidth: 520, margin: '0 auto', width: '100%' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 12, color: '#64748B' }}>
+          <span style={{ fontWeight: 600, color: '#059669' }}>Step {currentStep} of {totalSteps}</span>
+          <span>{Math.round((currentStep / totalSteps) * 100)}% complete</span>
+        </div>
+        <div style={{ height: 4, background: '#E2E8F0', borderRadius: 10, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${(currentStep / totalSteps) * 100}%`, background: '#059669', transition: 'width 0.4s ease', borderRadius: 10 }} />
+        </div>
+      </div>
+
       {/* Form */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 24px' }}>
-        <div style={{ width: '100%', maxWidth: 420 }}>
-          <div style={{ textAlign: 'center', marginBottom: 32 }}>
-            <h1 style={{ fontSize: 28, fontWeight: 800, color: '#1E293B', letterSpacing: '-0.025em', marginBottom: 8 }}>Create your ArthVo account</h1>
-            <p style={{ fontSize: 14, color: '#64748B', lineHeight: 1.6 }}>Start saving on taxes in under 2 minutes. No credit card needed.</p>
-          </div>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '32px 24px 48px' }}>
+        <div style={{ width: '100%', maxWidth: 460 }}>
 
-          {/* OAuth */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
-            <button onClick={() => handleOAuth('google')} className="oauth-btn" style={{ padding: '11px 14px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 10, fontSize: 14, fontWeight: 500, color: '#1E293B', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-              <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-              Continue with Google
-            </button>
-            <button onClick={() => handleOAuth('facebook')} className="oauth-btn" style={{ padding: '11px 14px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 10, fontSize: 14, fontWeight: 500, color: '#1E293B', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-              Continue with Facebook
-            </button>
-            <button onClick={() => handleOAuth('apple')} className="oauth-btn" style={{ padding: '11px 14px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 10, fontSize: 14, fontWeight: 500, color: '#1E293B', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="#000"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg>
-              Continue with Apple
-            </button>
-          </div>
+          {/* STEP 1: Phone */}
+          {step === 'phone' && (
+            <>
+              <h1 style={{ fontSize: 26, fontWeight: 800, color: '#1E293B', letterSpacing: '-0.025em', marginBottom: 6 }}>Sign up now</h1>
+              <p style={{ fontSize: 14, color: '#64748B', marginBottom: 28 }}>Join thousands of Indians taking control of their taxes.</p>
+              <label style={{ fontSize: 13, fontWeight: 500, color: '#334155', display: 'block', marginBottom: 6 }}>Mobile number</label>
+              <div style={{ display: 'flex', gap: 0, marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', background: '#F8FAFC', border: '1px solid #CBD5E1', borderRight: 'none', borderRadius: '10px 0 0 10px', fontSize: 14, color: '#334155', fontWeight: 500 }}>
+                  🇮🇳 +91
+                </div>
+                <input type="tel" value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="10-digit mobile number" className="input" maxLength={10}
+                  style={{ flex: 1, padding: '12px 14px', border: '1px solid #CBD5E1', borderRadius: '0 10px 10px 0', fontSize: 15, fontFamily: 'inherit' }} />
+              </div>
+              <button onClick={handleSendPhoneOtp} disabled={loading || !isValidPhone(phone)} className="cta"
+                style={{ width: '100%', padding: '14px', background: '#059669', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                {loading ? 'Sending OTP…' : 'Get OTP →'}
+              </button>
+              <p style={{ fontSize: 11, color: '#94A3B8', textAlign: 'center', marginTop: 18, lineHeight: 1.6 }}>
+                By proceeding, you agree to our <a href="#" style={{ color: '#64748B', textDecoration: 'underline' }}>Terms</a> and{' '}
+                <a href="/privacy" style={{ color: '#64748B', textDecoration: 'underline' }}>Privacy Policy</a>
+              </p>
+            </>
+          )}
 
-          {/* Divider */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '20px 0' }}>
-            <div style={{ flex: 1, height: 1, background: '#E2E8F0' }} />
-            <span style={{ fontSize: 11, color: '#94A3B8', letterSpacing: '0.08em', textTransform: 'uppercase' }}>or with email</span>
-            <div style={{ flex: 1, height: 1, background: '#E2E8F0' }} />
-          </div>
+          {/* STEP 2: Phone OTP */}
+          {step === 'phone_otp' && (
+            <>
+              <h1 style={{ fontSize: 26, fontWeight: 800, color: '#1E293B', letterSpacing: '-0.025em', marginBottom: 6 }}>Mobile OTP</h1>
+              <p style={{ fontSize: 14, color: '#64748B', marginBottom: 28 }}>
+                Sent to +91 {phone}{' '}
+                <button onClick={() => setStep('phone')} style={{ color: '#059669', background: 'none', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>(change)</button>
+              </p>
+              <label style={{ fontSize: 13, fontWeight: 500, color: '#334155', display: 'block', marginBottom: 6 }}>Enter 6-digit OTP</label>
+              <input type="tel" value={phoneOtp} onChange={e => setPhoneOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="••••••" className="input otp-input" maxLength={6} autoFocus
+                style={{ width: '100%', padding: '14px', border: '1px solid #CBD5E1', borderRadius: 10, fontFamily: 'inherit', marginBottom: 12 }} />
+              <div style={{ fontSize: 12, color: '#64748B', marginBottom: 20 }}>
+                {otpTimer > 0 ? (
+                  <>Resend OTP in <span style={{ color: '#059669', fontWeight: 500 }}>{otpTimer}s</span></>
+                ) : (
+                  <button onClick={handleResendOtp} style={{ background: 'none', border: 'none', color: '#059669', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, padding: 0 }}>Resend OTP</button>
+                )}
+              </div>
+              <button onClick={handleVerifyPhoneOtp} disabled={loading || phoneOtp.length !== 6} className="cta"
+                style={{ width: '100%', padding: '14px', background: '#059669', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                {loading ? 'Verifying…' : 'Continue →'}
+              </button>
+            </>
+          )}
 
-          {/* Email form */}
-          <form onSubmit={handleSignup} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div>
-              <label style={{ fontSize: 13, fontWeight: 500, color: '#334155', display: 'block', marginBottom: 6 }}>Full name</label>
-              <input type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                placeholder="Rahul Sharma" className="input"
-                style={{ width: '100%', padding: '11px 14px', border: '1px solid #CBD5E1', borderRadius: 10, fontSize: 14, fontFamily: 'inherit' }} />
-            </div>
-            <div>
-              <label style={{ fontSize: 13, fontWeight: 500, color: '#334155', display: 'block', marginBottom: 6 }}>Email</label>
-              <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                placeholder="you@example.com" className="input"
-                style={{ width: '100%', padding: '11px 14px', border: '1px solid #CBD5E1', borderRadius: 10, fontSize: 14, fontFamily: 'inherit' }} />
-            </div>
-            <div>
-              <label style={{ fontSize: 13, fontWeight: 500, color: '#334155', display: 'block', marginBottom: 6 }}>Password</label>
-              <input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+          {/* STEP 3: PAN + DOB */}
+          {step === 'pan' && (
+            <>
+              <h1 style={{ fontSize: 26, fontWeight: 800, color: '#1E293B', letterSpacing: '-0.025em', marginBottom: 6 }}>Let's get started</h1>
+              <p style={{ fontSize: 14, color: '#64748B', marginBottom: 24 }}>We need your PAN to fetch tax info from the Income Tax Department.</p>
+
+              <label style={{ fontSize: 13, fontWeight: 500, color: '#334155', display: 'block', marginBottom: 6 }}>PAN</label>
+              <input type="text" value={pan} onChange={e => setPan(e.target.value.toUpperCase().slice(0, 10))}
+                placeholder="ABCDE1234F" className="input" maxLength={10}
+                style={{ width: '100%', padding: '12px 14px', border: '1px solid #CBD5E1', borderRadius: 10, fontSize: 15, fontFamily: 'inherit', marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.05em' }} />
+
+              <label style={{ fontSize: 13, fontWeight: 500, color: '#334155', display: 'block', marginBottom: 6 }}>Date of birth <span style={{ color: '#94A3B8', fontWeight: 400 }}>(as per PAN)</span></label>
+              <input type="date" value={dob} onChange={e => setDob(e.target.value)}
+                className="input"
+                style={{ width: '100%', padding: '12px 14px', border: '1px solid #CBD5E1', borderRadius: 10, fontSize: 15, fontFamily: 'inherit', marginBottom: 18 }} />
+
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 20, cursor: 'pointer' }}>
+                <input type="checkbox" checked={kycConsent} onChange={e => setKycConsent(e.target.checked)}
+                  style={{ width: 16, height: 16, marginTop: 2, accentColor: '#059669', cursor: 'pointer', flexShrink: 0 }} />
+                <span style={{ fontSize: 13, color: '#475569', lineHeight: 1.6 }}>
+                  I authorise ArthVo to fetch my KYC information from the CKYC registry with my PAN.
+                </span>
+              </label>
+
+              <button onClick={handleSubmitPan} disabled={loading || !isValidPAN(pan) || !dob || !kycConsent} className="cta"
+                style={{ width: '100%', padding: '14px', background: '#059669', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                {loading ? 'Verifying PAN…' : 'Continue →'}
+              </button>
+            </>
+          )}
+
+          {/* STEP 4: Aadhaar consent */}
+          {step === 'aadhaar_consent' && (
+            <>
+              <h1 style={{ fontSize: 26, fontWeight: 800, color: '#1E293B', letterSpacing: '-0.025em', marginBottom: 6 }}>Aadhaar KYC</h1>
+              <p style={{ fontSize: 14, color: '#64748B', marginBottom: 24 }}>Verify your identity via Digilocker — takes 30 seconds.</p>
+
+              <div style={{ background: '#F0FDF4', border: '1px solid #A7F3D0', borderRadius: 10, padding: '16px 18px', marginBottom: 20 }}>
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <li style={{ fontSize: 13, color: '#334155', lineHeight: 1.6, display: 'flex', gap: 10 }}>
+                    <span style={{ color: '#059669', fontWeight: 700, flexShrink: 0 }}>•</span>
+                    The Aadhaar and PAN <strong style={{ color: '#1E293B' }}>{pan}</strong> should belong to you.
+                  </li>
+                  <li style={{ fontSize: 13, color: '#334155', lineHeight: 1.6, display: 'flex', gap: 10 }}>
+                    <span style={{ color: '#059669', fontWeight: 700, flexShrink: 0 }}>•</span>
+                    You'll be redirected to Digilocker for Aadhaar OTP verification.
+                  </li>
+                  <li style={{ fontSize: 13, color: '#334155', lineHeight: 1.6, display: 'flex', gap: 10 }}>
+                    <span style={{ color: '#059669', fontWeight: 700, flexShrink: 0 }}>•</span>
+                    By proceeding, you consent to share PAN and Aadhaar info (excluding number) with ArthVo.
+                  </li>
+                </ul>
+              </div>
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => setStep('pan')}
+                  style={{ padding: '14px 20px', background: '#fff', border: '1px solid #CBD5E1', borderRadius: 10, fontSize: 15, fontWeight: 500, color: '#475569', cursor: 'pointer', fontFamily: 'inherit' }}>
+                  ← Back
+                </button>
+                <button onClick={handleAadhaarContinue} className="cta"
+                  style={{ flex: 1, padding: '14px', background: '#059669', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  Continue to Digilocker →
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* STEP 5: Aadhaar OTP */}
+          {step === 'aadhaar_otp' && (
+            <>
+              <h1 style={{ fontSize: 26, fontWeight: 800, color: '#1E293B', letterSpacing: '-0.025em', marginBottom: 6 }}>Aadhaar verification</h1>
+              <p style={{ fontSize: 14, color: '#64748B', marginBottom: 24 }}>Enter your Aadhaar number and the OTP sent to your registered mobile.</p>
+
+              <label style={{ fontSize: 13, fontWeight: 500, color: '#334155', display: 'block', marginBottom: 6 }}>Aadhaar number</label>
+              <input type="tel" value={aadhaar} onChange={e => setAadhaar(e.target.value.replace(/\D/g, '').slice(0, 12))}
+                placeholder="12-digit Aadhaar number" className="input" maxLength={12}
+                style={{ width: '100%', padding: '12px 14px', border: '1px solid #CBD5E1', borderRadius: 10, fontSize: 15, fontFamily: 'inherit', marginBottom: 16, letterSpacing: '0.1em' }} />
+
+              <label style={{ fontSize: 13, fontWeight: 500, color: '#334155', display: 'block', marginBottom: 6 }}>Aadhaar OTP</label>
+              <input type="tel" value={aadhaarOtp} onChange={e => setAadhaarOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="••••••" className="input otp-input" maxLength={6}
+                style={{ width: '100%', padding: '14px', border: '1px solid #CBD5E1', borderRadius: 10, fontFamily: 'inherit', marginBottom: 12 }} />
+
+              <div style={{ fontSize: 12, color: '#64748B', marginBottom: 20 }}>
+                {otpTimer > 0 ? (
+                  <>Resend OTP in <span style={{ color: '#059669', fontWeight: 500 }}>{otpTimer}s</span></>
+                ) : (
+                  <button onClick={() => setOtpTimer(30)} style={{ background: 'none', border: 'none', color: '#059669', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, padding: 0 }}>Resend OTP</button>
+                )}
+              </div>
+
+              <button onClick={handleVerifyAadhaarOtp} disabled={loading || !isValidAadhaar(aadhaar) || aadhaarOtp.length !== 6} className="cta"
+                style={{ width: '100%', padding: '14px', background: '#059669', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                {loading ? 'Verifying Aadhaar…' : 'Complete KYC →'}
+              </button>
+            </>
+          )}
+
+          {/* STEP 6: Password */}
+          {step === 'password' && (
+            <>
+              <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 10, padding: '12px 16px', marginBottom: 24, fontSize: 13, color: '#065F46' }}>
+                ✅ KYC verified successfully! Just one more step.
+              </div>
+              <h1 style={{ fontSize: 26, fontWeight: 800, color: '#1E293B', letterSpacing: '-0.025em', marginBottom: 6 }}>Set your password</h1>
+              <p style={{ fontSize: 14, color: '#64748B', marginBottom: 24 }}>
+                Your User ID will be your mobile number: <strong style={{ color: '#1E293B' }}>+91 {phone}</strong>
+              </p>
+
+              <label style={{ fontSize: 13, fontWeight: 500, color: '#334155', display: 'block', marginBottom: 6 }}>Create password</label>
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)}
                 placeholder="Minimum 6 characters" className="input"
-                style={{ width: '100%', padding: '11px 14px', border: '1px solid #CBD5E1', borderRadius: 10, fontSize: 14, fontFamily: 'inherit' }} />
-            </div>
-            <button type="submit" disabled={loading} className="cta"
-              style={{ padding: '13px', background: '#059669', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', marginTop: 4 }}>
-              {loading ? 'Creating account…' : 'Create account →'}
-            </button>
-          </form>
+                style={{ width: '100%', padding: '12px 14px', border: '1px solid #CBD5E1', borderRadius: 10, fontSize: 15, fontFamily: 'inherit', marginBottom: 16 }} />
 
-          <p style={{ fontSize: 11, color: '#94A3B8', textAlign: 'center', marginTop: 18, lineHeight: 1.6 }}>
-            By signing up you agree to our <a href="#" style={{ color: '#64748B', textDecoration: 'underline' }}>Terms</a> and{' '}
-            <a href="/privacy" style={{ color: '#64748B', textDecoration: 'underline' }}>Privacy Policy</a>.
-          </p>
+              <label style={{ fontSize: 13, fontWeight: 500, color: '#334155', display: 'block', marginBottom: 6 }}>Confirm password</label>
+              <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
+                placeholder="Re-enter password" className="input"
+                style={{ width: '100%', padding: '12px 14px', border: '1px solid #CBD5E1', borderRadius: 10, fontSize: 15, fontFamily: 'inherit', marginBottom: 20 }} />
+
+              <button onClick={handleSetPassword} disabled={loading || password.length < 6 || password !== confirmPassword} className="cta"
+                style={{ width: '100%', padding: '14px', background: '#059669', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                {loading ? 'Creating account…' : 'Create account →'}
+              </button>
+            </>
+          )}
+
         </div>
       </div>
     </div>
