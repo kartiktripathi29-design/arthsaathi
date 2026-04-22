@@ -1,8 +1,8 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { Toaster } from 'react-hot-toast'
-import { PasswordGate } from '@/components/PasswordGate'
 import { Analytics } from '@vercel/analytics/react'
+import { AppProvider } from '@/store/AppStore'
 
 export const metadata: Metadata = {
   title: 'ArthVo — Wealth Evolved',
@@ -13,18 +13,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <PasswordGate>
-        {children}
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            duration: 4000,
-            style: { background: '#1A3C5E', color: '#fff', borderRadius: '10px', fontSize: '14px', padding: '12px 16px' },
-            success: { style: { background: '#1E8449' } },
-            error: { style: { background: '#C0392B' } },
-          }}
-        />
-        </PasswordGate>
+        <AppProvider>
+          {children}
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              duration: 4000,
+              style: { background: '#1E293B', color: '#fff', borderRadius: '10px', fontSize: '14px', padding: '12px 16px' },
+              success: { style: { background: '#059669' } },
+              error: { style: { background: '#DC2626' } },
+            }}
+          />
+        </AppProvider>
         <Analytics />
       </body>
     </html>

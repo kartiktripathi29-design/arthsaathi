@@ -2,7 +2,7 @@
 import { useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { AppProvider, useAppStore } from '@/store/AppStore'
+import { useAppStore } from '@/store/AppStore'
 
 const NAV = [
   { href: '/dashboard',              icon: '⊞',  label: 'Overview' },
@@ -135,13 +135,11 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
-    <AppProvider>
-      <AuthGate>
-        <div style={{ display: 'flex', minHeight: '100vh' }}>
-          <Sidebar />
-          <DashboardContent>{children}</DashboardContent>
-        </div>
-      </AuthGate>
-    </AppProvider>
+    <AuthGate>
+      <div style={{ display: 'flex', minHeight: '100vh' }}>
+        <Sidebar />
+        <DashboardContent>{children}</DashboardContent>
+      </div>
+    </AuthGate>
   )
 }
