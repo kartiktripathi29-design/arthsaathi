@@ -2,24 +2,37 @@ import { NextRequest, NextResponse } from 'next/server'
 import { parseOfferLetterFromBase64 } from '@/lib/claude'
 
 export const maxDuration = 60
-export const config = { api: { bodyParser: { sizeLimit: '20mb' } } }
 
 export async function POST(req: NextRequest) {
   try {
-    let body: any
-    try {
-      body = await req.json()
-    } catch {
-      return NextResponse.json({ error: 'Request too large or invalid. Try a smaller file (under 10MB).' }, { status: 413 })
-    }
+    let base64Data: string
+    let mediaType: string
 
-    const { base64Data, mediaType } = body
+    const contentType = req.headers.get('content-type') || ''
+
+    if (contentType.includes('multipart/form-data')) {
+      // FormData approach — no base64 bloat
+      const form = await req.formData()
+      const file = form.get('file') as File | null
+      if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
+      const buffer = await file.arrayBuffer()
+      base64Data = Buffer.from(buffer).toString('base64')
+      mediaType = file.type
+    } else {
+      // Legacy JSON approach
+      let body: any
+      try { body = await req.json() } catch {
+        return NextResponse.json({ error: 'Invalid request. Please try again.' }, { status: 400 })
+      }
+      base64Data = body.base64Data
+      mediaType = body.mediaType
+    }
 
     if (!base64Data || !mediaType) {
       return NextResponse.json({ error: 'base64Data and mediaType are required' }, { status: 400 })
     }
 
-    const parsed = await parseOfferLetterFromBase64(base64Data, mediaType)
+    const parsed = await parseOfferLetterFromBase64(base64Data, mediaType as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' | 'application/pdf')
 
     if (!parsed.totalCTC && !parsed.fixedCTC) {
       return NextResponse.json(

@@ -584,16 +584,17 @@ export default function SalaryPage() {
     setLoading(true)
     const tid = toast.loading('Reading offer letter…')
     try {
-      const base64Data = await fileToBase64(file)
+      // Use FormData — avoids base64 33% size overhead
+      const form = new FormData()
+      form.append('file', file)
       const res = await fetch('/api/parse-offer-letter', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ base64Data, mediaType: file.type }),
+        body: form,
       })
       let json: any
       const text = await res.text()
       try { json = JSON.parse(text) } catch {
-        throw new Error(res.status === 413 ? 'File too large. Please try a smaller PDF (under 10MB).' : 'Server error. Please try again.')
+        throw new Error(res.status === 413 ? 'File too large. Please try a PDF under 8MB.' : 'Server error. Please try again.')
       }
       if (!res.ok) throw new Error(json.error || 'Failed to parse')
       setOfferData(json.data)
