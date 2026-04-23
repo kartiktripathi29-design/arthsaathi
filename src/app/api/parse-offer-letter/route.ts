@@ -2,10 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { parseOfferLetterFromBase64 } from '@/lib/claude'
 
 export const maxDuration = 60
+export const config = { api: { bodyParser: { sizeLimit: '20mb' } } }
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json()
+    let body: any
+    try {
+      body = await req.json()
+    } catch {
+      return NextResponse.json({ error: 'Request too large or invalid. Try a smaller file (under 10MB).' }, { status: 413 })
+    }
+
     const { base64Data, mediaType } = body
 
     if (!base64Data || !mediaType) {

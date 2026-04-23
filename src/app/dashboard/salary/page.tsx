@@ -590,7 +590,11 @@ export default function SalaryPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ base64Data, mediaType: file.type }),
       })
-      const json = await res.json()
+      let json: any
+      const text = await res.text()
+      try { json = JSON.parse(text) } catch {
+        throw new Error(res.status === 413 ? 'File too large. Please try a smaller PDF (under 10MB).' : 'Server error. Please try again.')
+      }
       if (!res.ok) throw new Error(json.error || 'Failed to parse')
       setOfferData(json.data)
       setEditMode(false)
