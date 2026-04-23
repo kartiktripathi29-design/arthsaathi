@@ -198,6 +198,39 @@ export async function parseOfferLetterFromBase64(
   return parsed
 }
 
+export async function parseOfferLetterMultiPage(
+  pages: { base64: string; mediaType: string }[]
+): Promise<any> {
+  // Send all pages as images in a single Claude call
+  const content: Anthropic.MessageParam['content'] = [
+    ...pages.map(p => ({
+      type: 'image' as const,
+      source: {
+        type: 'base64' as const,
+        media_type: p.mediaType as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif',
+        data: p.base64,
+      },
+    })),
+    {
+      type: 'text' as const,
+      text: `These are ${pages.length} pages of an Indian offer letter. Parse ALL pages together and return the complete JSON as specified. Extract every compensation component accurately.`,
+    },
+  ]
+
+  const response = await client.messages.create({
+    model: 'claude-opus-4-5',
+    max_tokens: 2000,
+    system: OFFER_LETTER_PARSE_SYSTEM,
+    messages: [{ role: 'user', content }],
+  })
+
+  const text = response.content[0].type === 'text' ? response.content[0].text : ''
+  const jsonMatch = text.match(/\{[\s\S]*\}/)
+  if (!jsonMatch) throw new Error('Could not extract JSON from Claude response')
+
+  return JSON.parse(jsonMatch[0])
+}
+
 // ─── AI Financial Chat ────────────────────────────────────────────────────
 
 export function buildChatSystem(userContext: string): string {
