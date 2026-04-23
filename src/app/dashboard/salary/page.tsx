@@ -278,8 +278,8 @@ function ResultView({
             <button onClick={onEdit} style={{ padding: '7px 14px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 7, color: 'rgba(255,255,255,0.7)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
               ✏️ Edit
             </button>
-            <button onClick={onReset} style={{ padding: '7px 14px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 7, color: 'rgba(255,255,255,0.7)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
-              ↺ New
+            <button onClick={onReset} style={{ padding: '7px 14px', background: 'rgba(220,38,38,0.15)', border: '1px solid rgba(220,38,38,0.3)', borderRadius: 7, color: '#FCA5A5', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>
+              ↺ Upload new
             </button>
           </div>
         </div>
@@ -393,6 +393,13 @@ function ResultView({
           })}
         </div>
       )}
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#FFF5F5', border: '1px solid #FECACA', borderRadius: 10, padding: '12px 16px', marginBottom: 10 }}>
+        <div style={{ fontSize: 13, color: '#7F1D1D' }}>Uploaded the wrong document?</div>
+        <button onClick={onReset} style={{ padding: '7px 16px', background: '#DC2626', color: '#fff', border: 'none', borderRadius: 7, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+          ↺ Start over
+        </button>
+      </div>
 
       <Link href="/dashboard/other-income"
         style={{ display: 'block', padding: '14px', background: '#059669', color: '#fff', borderRadius: 10, fontWeight: 700, fontSize: 14, textDecoration: 'none', textAlign: 'center' }}>

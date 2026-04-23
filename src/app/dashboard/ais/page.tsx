@@ -177,7 +177,7 @@ export default function AISPage() {
           )}
 
           {/* Next step */}
-          <div style={{ background: '#E9F7EF', border: '1px solid #A9DFBF', borderRadius: 12, padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ background: '#E9F7EF', border: '1px solid #A9DFBF', borderRadius: 12, padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <div>
               <div style={{ fontSize: 14, fontWeight: 700, color: '#1E5631' }}>✅ AIS loaded — data auto-filled</div>
               <div style={{ fontSize: 12, color: '#27AE60', marginTop: 3 }}>Next: confirm your salary details</div>
@@ -186,6 +186,14 @@ export default function AISPage() {
               style={{ padding: '10px 20px', background: '#1A3C5E', color: '#fff', borderRadius: 9, fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>
               Go to Salary Slip →
             </Link>
+          </div>
+
+          {/* Reset */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#FFF5F5', border: '1px solid #FECACA', borderRadius: 10, padding: '12px 16px' }}>
+            <div style={{ fontSize: 13, color: '#7F1D1D' }}>Uploaded the wrong document?</div>
+            <button onClick={() => setAisData(null)} style={{ padding: '7px 16px', background: '#DC2626', color: '#fff', border: 'none', borderRadius: 7, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+              ↺ Start over
+            </button>
           </div>
         </>
       ) : (
