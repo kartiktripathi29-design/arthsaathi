@@ -14,7 +14,7 @@ export async function pdfToCompressedImages(file: File, maxPages = 3, quality = 
 
   for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
     const page = await pdf.getPage(pageNum)
-    const viewport = page.getViewport({ scale: 1.5 }) // 1.5x = good quality/size balance
+    const viewport = page.getViewport({ scale: 1.2 }) // reduced from 1.5 — still readable, smaller file
 
     const canvas = document.createElement('canvas')
     canvas.width = viewport.width

@@ -420,10 +420,15 @@ function UploadZone({ onFile, loading, label }: { onFile: (f: File) => void; loa
       <div style={{ fontSize: 15, fontWeight: 600, color: '#1E293B', marginBottom: 6 }}>
         {loading ? 'Analysing…' : `Upload ${label}`}
       </div>
-      <div style={{ fontSize: 13, color: '#64748B', marginBottom: 16 }}>PDF, JPG, PNG — any format</div>
+      <div style={{ fontSize: 13, color: '#64748B', marginBottom: 10 }}>PDF, JPG, PNG — any format</div>
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#FEF3C7', color: '#92400E', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20, marginBottom: 16 }}>
+        ⚠ Max file size: 10MB
+      </div>
       {!loading && (
-        <div style={{ display: 'inline-flex', padding: '9px 24px', background: '#059669', color: '#fff', borderRadius: 8, fontSize: 14, fontWeight: 600 }}>
-          Browse Files
+        <div>
+          <div style={{ display: 'inline-flex', padding: '9px 24px', background: '#059669', color: '#fff', borderRadius: 8, fontSize: 14, fontWeight: 600 }}>
+            Browse Files
+          </div>
         </div>
       )}
       {loading && <div style={{ fontSize: 13, color: '#059669', fontWeight: 500 }}>AI is reading your document…</div>}
@@ -523,6 +528,10 @@ export default function SalaryPage() {
   const showOfferResult = offerData && !editMode
 
   const handleSlipFile = async (file: File) => {
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File too large. Please upload a PDF under 10MB.')
+      return
+    }
     setLoading(true)
     const tid = toast.loading('Reading salary slip…')
     try {
@@ -581,18 +590,33 @@ export default function SalaryPage() {
   }
 
   const handleOfferFile = async (file: File) => {
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File too large. Please upload a PDF under 10MB.')
+      return
+    }
     setLoading(true)
     const tid = toast.loading('Reading offer letter…')
     try {
       let body: string
-      let headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
 
       if (file.type === 'application/pdf') {
-        // Convert PDF pages to compressed JPEGs client-side to avoid 4.5MB Vercel limit
-        toast.loading('Compressing PDF…', { id: tid })
-        const { pdfToCompressedImages } = await import('@/lib/pdfToImages')
-        const pages = await pdfToCompressedImages(file, 4, 0.75)
-        body = JSON.stringify({ pages })
+        try {
+          toast.loading('Compressing PDF pages…', { id: tid })
+          const { pdfToCompressedImages } = await import('@/lib/pdfToImages')
+          const pages = await pdfToCompressedImages(file, 4, 0.6) // lower quality = smaller size
+          // Safety check — if still too big, drop quality further
+          const totalSize = pages.reduce((s, p) => s + p.base64.length, 0)
+          if (totalSize > 3_000_000) {
+            const smallerPages = await pdfToCompressedImages(file, 4, 0.4)
+            body = JSON.stringify({ pages: smallerPages })
+          } else {
+            body = JSON.stringify({ pages })
+          }
+        } catch (compressErr) {
+          console.error('PDF compression failed:', compressErr)
+          throw new Error('Could not read this PDF. Try converting it to an image (JPG/PNG) and uploading that instead.')
+        }
       } else {
         const base64Data = await fileToBase64(file)
         body = JSON.stringify({ base64Data, mediaType: file.type })
@@ -603,7 +627,7 @@ export default function SalaryPage() {
       let json: any
       const text = await res.text()
       try { json = JSON.parse(text) } catch {
-        throw new Error('Server error. Please try again.')
+        throw new Error('Server error. Please try again, or upload a JPG screenshot of the offer letter.')
       }
       if (!res.ok) throw new Error(json.error || 'Failed to parse')
       setOfferData(json.data)

@@ -81,6 +81,10 @@ export default function AISPage() {
   }, [setAisData])
 
   const handleFile = useCallback((file: File, docType: DocType) => {
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File too large. Please upload a PDF under 10MB.')
+      return
+    }
     if (!['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
       toast.error('Please upload a PDF or image'); return
     }
@@ -132,7 +136,7 @@ export default function AISPage() {
                 <div style={{ display: 'inline-block', padding: '8px 20px', background: loading === 'ais' ? '#A7F3D0' : '#059669', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
                   {loading === 'ais' ? 'Reading…' : 'Upload AIS'}
                 </div>
-                <div style={{ fontSize: 10, color: '#94A3B8', marginTop: 8 }}>Optional · Needs password</div>
+                <div style={{ fontSize: 10, color: '#92400E', background: '#FEF3C7', padding: '2px 8px', borderRadius: 20, marginTop: 8, display: 'inline-block', fontWeight: 600 }}>⚠ Max 10MB</div>
               </>
             )}
             {hasAIS && (
@@ -160,7 +164,7 @@ export default function AISPage() {
                 <div style={{ display: 'inline-block', padding: '8px 20px', background: loading === '26as' ? '#E2E8F0' : '#fff', color: '#1E293B', border: '1px solid #CBD5E1', borderRadius: 8, fontSize: 13, fontWeight: 500 }}>
                   {loading === '26as' ? 'Reading…' : 'Upload 26AS'}
                 </div>
-                <div style={{ fontSize: 10, color: '#94A3B8', marginTop: 8 }}>Optional · No password needed</div>
+                <div style={{ fontSize: 10, color: '#92400E', background: '#FEF3C7', padding: '2px 8px', borderRadius: 20, marginTop: 8, display: 'inline-block', fontWeight: 600 }}>⚠ Max 10MB</div>
               </>
             )}
             {has26AS && (
