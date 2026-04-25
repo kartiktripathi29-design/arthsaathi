@@ -181,14 +181,45 @@ function calcTax(income: number, deductions: Deductions, monthlyNet: number) {
 // ─── Initial deductions state ─────────────────────────────────────────────────
 const defaultDed: Deductions = { rentPaid:0, hraReceived:0, isMetro:true, ppf:0, elss:0, lic:0, homeLoanPrincipal:0, tuition:0, nsc:0, epf:0, selfFamily:0, parents:0, parentsSenior:false, selfSenior:false, nps:0, savingsInterest:0, donations100:0, donations50:0, homeLoanInterest:0, eduLoanInterest:0 }
 
+const STEP_LABELS = ['Income','HRA','80C','80D','Other','Results']
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function TaxPage() {
   const { salary } = useAppStore()
-  const [step, setStep] = useState(0)
+  const [step, setStep] = useState(-1) // -1 = welcome screen
   const [ded, setDed] = useState<Deductions>(defaultDed)
   const annual = (salary?.grossSalary || 0) * 12
   const set = (k: keyof Deductions) => (v: number | boolean) => setDed(prev => ({ ...prev, [k]: v }))
-  const reset = () => { setStep(0); setDed(defaultDed) }
+
+  // Load saved progress from localStorage
+  const [savedStep, setSavedStep] = useState<number>(0)
+  useState(() => {
+    try {
+      const saved = localStorage.getItem('av_tax_progress')
+      if (saved) {
+        const d = JSON.parse(saved)
+        if (d.step !== undefined) setSavedStep(d.step)
+        if (d.ded) setDed(d.ded)
+      }
+    } catch {}
+  })
+
+  // Save progress on every change
+  const saveProgress = (s: number, d: Deductions) => {
+    try { localStorage.setItem('av_tax_progress', JSON.stringify({ step: s, ded: d })) } catch {}
+  }
+
+  const goStep = (s: number) => { setStep(s); saveProgress(s, ded) }
+  const updateDed = (k: keyof Deductions) => (v: number | boolean) => {
+    const newDed = { ...ded, [k]: v }
+    setDed(newDed)
+    saveProgress(step, newDed)
+  }
+  const reset = () => {
+    setStep(-1)
+    setDed(defaultDed)
+    try { localStorage.removeItem('av_tax_progress') } catch {}
+  }
 
   const tax = annual ? calcTax(annual, ded, salary?.netSalary||0) : null
 
@@ -200,6 +231,54 @@ export default function TaxPage() {
       <div style={{ background:C.wl, border:`1px solid ${C.wm}`, borderRadius:6, padding:'20px 24px', textAlign:'center' }}>
         <p style={{ fontSize:14, color:C.fg, fontWeight:600, margin:'0 0 8px' }}>Complete your income profile first</p>
         <Link href="/dashboard/profile" style={{ display:'inline-block', padding:'9px 20px', background:C.fg, color:C.wheat, borderRadius:5, fontSize:13, fontWeight:600, textDecoration:'none' }}>Go to My Profile →</Link>
+      </div>
+    </div>
+  )
+
+  // Welcome screen — resume or start over
+  if (step === -1) return (
+    <div style={{ fontFamily:'"Sora",-apple-system,sans-serif', maxWidth:860 }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap')`}</style>
+      <div style={{ marginBottom:20 }}>
+        <h2 style={{ fontSize:20, fontWeight:700, color:C.text, margin:'0 0 4px', letterSpacing:'-0.02em' }}>Tax Optimiser</h2>
+        <p style={{ fontSize:13, color:C.muted, margin:0 }}>We show you exactly how your tax is calculated — you deserve to know</p>
+      </div>
+      <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:6, padding:'14px 16px' }}>
+        {/* Salary info */}
+        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12 }}>
+          <div style={{ width:36, height:36, borderRadius:'50%', background:C.wl, border:`1.5px solid ${C.wm}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, flexShrink:0 }}>📄</div>
+          <div style={{ flex:1, minWidth:0 }}>
+            <p style={{ fontSize:13, fontWeight:600, color:C.text, margin:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{salary?.employerName || 'Your employer'} · {fmt(salary?.netSalary||0)}/mo</p>
+            <p style={{ fontSize:11, color:C.muted, margin:0 }}>Salary data loaded from My Profile</p>
+          </div>
+        </div>
+        {/* Progress pills */}
+        <div style={{ display:'flex', gap:5, flexWrap:'wrap' as const, marginBottom:14 }}>
+          {STEP_LABELS.map((l, i) => {
+            const done = i < savedStep
+            const current = i === savedStep
+            return (
+              <span key={l} style={{ fontSize:10.5, padding:'2px 9px', borderRadius:20, fontWeight:done||current?500:400, background:done?C.wl:current?C.fg:'#F0EBE0', border:`1px solid ${done?C.wm:current?C.fg:C.border}`, color:done?C.fg:current?C.wheat:C.muted }}>
+                {done?'✓ ':current?'→ ':''}{l}
+              </span>
+            )
+          })}
+        </div>
+        {/* Actions */}
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <p style={{ fontSize:12, color:C.muted, margin:0 }}>
+            {savedStep > 0 ? `Continue from where you left off?` : 'Ready to calculate your tax?'}
+          </p>
+          <div style={{ display:'flex', gap:8 }}>
+            {savedStep > 0 && (
+              <button onClick={reset} style={{ padding:'7px 14px', background:'#FBF0F0', color:C.danger, border:`1px solid #F0CECE`, borderRadius:5, fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>↺ Start over</button>
+            )}
+            <button onClick={() => goStep(savedStep > 0 ? savedStep : 0)}
+              style={{ padding:'7px 16px', background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+              {savedStep > 0 ? `Resume from ${STEP_LABELS[savedStep]} →` : 'Start calculating →'}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -237,7 +316,7 @@ export default function TaxPage() {
               ₹75,000 standard deduction is applied automatically to both regimes. The next steps help you find additional deductions for the Old Regime.
             </div>
           </div>
-          <NavButtons onReset={reset} onProceed={() => setStep(1)} proceedLabel="Proceed to HRA →" />
+          <NavButtons onReset={reset} onProceed={() => goStep(1)} proceedLabel="Proceed to HRA →" />
         </div>
       )}
 
@@ -253,12 +332,12 @@ export default function TaxPage() {
             <div style={{ padding:'12px 14px', background:'#FAFAF8', borderBottom:`1px solid ${C.border}`, fontSize:12, color:C.muted, lineHeight:1.65 }}>
               If you pay rent and receive HRA in your salary, part of it is tax-exempt. Skip this section if you own your home or don't receive HRA.
             </div>
-            <Row label="Monthly rent you pay"><AmtInput value={ded.rentPaid} onChange={set('rentPaid')} /></Row>
-            <Row label="Monthly HRA received in salary"><AmtInput value={ded.hraReceived} onChange={set('hraReceived')} /></Row>
+            <Row label="Monthly rent you pay"><AmtInput value={ded.rentPaid} onChange={updateDed('rentPaid')} /></Row>
+            <Row label="Monthly HRA received in salary"><AmtInput value={ded.hraReceived} onChange={updateDed('hraReceived')} /></Row>
             <Row label="City type">
               <div style={{ display:'flex', gap:6 }}>
                 {[['Metro (Delhi, Mumbai, Chennai, Kolkata)', true], ['Non-Metro', false]].map(([l, v]) => (
-                  <button key={String(v)} onClick={() => set('isMetro')(v as boolean)}
+                  <button key={String(v)} onClick={() => updateDed('isMetro')(v as boolean)}
                     style={{ padding:'6px 12px', borderRadius:4, border:`1px solid ${ded.isMetro===v?C.fg:C.border}`, background:ded.isMetro===v?C.wl:C.card, color:ded.isMetro===v?C.fg:C.muted, fontSize:11.5, cursor:'pointer', fontFamily:'inherit', fontWeight:ded.isMetro===v?600:400 }}>
                     {String(l)}
                   </button>
@@ -280,7 +359,7 @@ export default function TaxPage() {
               </div>
             )}
           </div>
-          <NavButtons onBack={() => setStep(0)} onReset={reset} onProceed={() => setStep(2)} proceedLabel="Proceed to 80C →" />
+          <NavButtons onBack={() => goStep(0)} onReset={reset} onProceed={() => goStep(2)} proceedLabel="Proceed to 80C →" />
         </div>
       )}
 
@@ -290,18 +369,18 @@ export default function TaxPage() {
           <div style={sCard}>
             <div style={sCH}>80C — Investments & Payments <span style={{ fontSize:10, background:C.fg, color:C.wheat, padding:'2px 8px', borderRadius:3, fontWeight:600, textTransform:'none', letterSpacing:0 }}>Max ₹1,50,000</span></div>
             <DeductionBar used={clamp(ded.ppf+ded.elss+ded.lic+ded.homeLoanPrincipal+ded.tuition+ded.nsc+ded.epf,150000)} max={150000} label="80C deduction used" />
-            <Row label="PPF contribution"><AmtInput value={ded.ppf} onChange={set('ppf')} /></Row>
-            <Row label="ELSS mutual fund investment"><AmtInput value={ded.elss} onChange={set('elss')} /></Row>
-            <Row label="LIC / Life insurance premium"><AmtInput value={ded.lic} onChange={set('lic')} /></Row>
-            <Row label="Home loan — principal repayment"><AmtInput value={ded.homeLoanPrincipal} onChange={set('homeLoanPrincipal')} /></Row>
-            <Row label="Children's tuition fees"><AmtInput value={ded.tuition} onChange={set('tuition')} /></Row>
-            <Row label="NSC / Tax saver FD / SCSS"><AmtInput value={ded.nsc} onChange={set('nsc')} /></Row>
-            <Row label="EPF employee contribution (if not in payslip)"><AmtInput value={ded.epf} onChange={set('epf')} /></Row>
+            <Row label="PPF contribution"><AmtInput value={ded.ppf} onChange={updateDed('ppf')} /></Row>
+            <Row label="ELSS mutual fund investment"><AmtInput value={ded.elss} onChange={updateDed('elss')} /></Row>
+            <Row label="LIC / Life insurance premium"><AmtInput value={ded.lic} onChange={updateDed('lic')} /></Row>
+            <Row label="Home loan — principal repayment"><AmtInput value={ded.homeLoanPrincipal} onChange={updateDed('homeLoanPrincipal')} /></Row>
+            <Row label="Children's tuition fees"><AmtInput value={ded.tuition} onChange={updateDed('tuition')} /></Row>
+            <Row label="NSC / Tax saver FD / SCSS"><AmtInput value={ded.nsc} onChange={updateDed('nsc')} /></Row>
+            <Row label="EPF employee contribution (if not in payslip)"><AmtInput value={ded.epf} onChange={updateDed('epf')} /></Row>
             <div style={{ padding:'10px 14px', background:'#FAFAF8', borderTop:`1px solid ${C.border}`, fontSize:11.5, color:C.muted, lineHeight:1.65 }}>
               All of the above pool into a single ₹1,50,000 limit. Any amount beyond ₹1.5L gives no additional benefit in Old Regime.
             </div>
           </div>
-          <NavButtons onBack={() => setStep(1)} onReset={reset} onProceed={() => setStep(3)} proceedLabel="Proceed to 80D →" />
+          <NavButtons onBack={() => goStep(1)} onReset={reset} onProceed={() => goStep(3)} proceedLabel="Proceed to 80D →" />
         </div>
       )}
 
@@ -316,7 +395,7 @@ export default function TaxPage() {
             <Row label="Are you a senior citizen? (60+)">
               <div style={{ display:'flex', gap:6 }}>
                 {[['Yes', true], ['No', false]].map(([l,v]) => (
-                  <button key={String(v)} onClick={() => set('selfSenior')(v as boolean)}
+                  <button key={String(v)} onClick={() => updateDed('selfSenior')(v as boolean)}
                     style={{ padding:'6px 14px', borderRadius:4, border:`1px solid ${ded.selfSenior===v?C.fg:C.border}`, background:ded.selfSenior===v?C.wl:C.card, color:ded.selfSenior===v?C.fg:C.muted, fontSize:11.5, cursor:'pointer', fontFamily:'inherit', fontWeight:ded.selfSenior===v?600:400 }}>
                     {String(l)}
                   </button>
@@ -324,12 +403,12 @@ export default function TaxPage() {
               </div>
             </Row>
             <Row label={`Self + family insurance premium (max ${fmt(ded.selfSenior?50000:25000)})`}>
-              <AmtInput value={ded.selfFamily} onChange={set('selfFamily')} max={ded.selfSenior?50000:25000} />
+              <AmtInput value={ded.selfFamily} onChange={updateDed('selfFamily')} max={ded.selfSenior?50000:25000} />
             </Row>
             <Row label="Are your parents senior citizens? (60+)">
               <div style={{ display:'flex', gap:6 }}>
                 {[['Yes', true], ['No', false]].map(([l,v]) => (
-                  <button key={String(v)} onClick={() => set('parentsSenior')(v as boolean)}
+                  <button key={String(v)} onClick={() => updateDed('parentsSenior')(v as boolean)}
                     style={{ padding:'6px 14px', borderRadius:4, border:`1px solid ${ded.parentsSenior===v?C.fg:C.border}`, background:ded.parentsSenior===v?C.wl:C.card, color:ded.parentsSenior===v?C.fg:C.muted, fontSize:11.5, cursor:'pointer', fontFamily:'inherit', fontWeight:ded.parentsSenior===v?600:400 }}>
                     {String(l)}
                   </button>
@@ -337,14 +416,14 @@ export default function TaxPage() {
               </div>
             </Row>
             <Row label={`Parents' insurance premium (max ${fmt(ded.parentsSenior?50000:25000)})`}>
-              <AmtInput value={ded.parents} onChange={set('parents')} max={ded.parentsSenior?50000:25000} />
+              <AmtInput value={ded.parents} onChange={updateDed('parents')} max={ded.parentsSenior?50000:25000} />
             </Row>
             <div style={{ padding:'10px 14px', background:C.wl, borderTop:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between' }}>
               <span style={{ fontSize:12.5, fontWeight:600, color:C.fg }}>Total 80D deduction</span>
               <span style={{ fontSize:15, fontWeight:700, color:C.fg }}>{fmt(clamp(ded.selfFamily, ded.selfSenior?50000:25000) + clamp(ded.parents, ded.parentsSenior?50000:25000))}</span>
             </div>
           </div>
-          <NavButtons onBack={() => setStep(2)} onReset={reset} onProceed={() => setStep(4)} proceedLabel="Proceed to Other Deductions →" />
+          <NavButtons onBack={() => goStep(2)} onReset={reset} onProceed={() => goStep(4)} proceedLabel="Proceed to Other Deductions →" />
         </div>
       )}
 
@@ -359,7 +438,7 @@ export default function TaxPage() {
               </span>
               <span style={{ fontSize:10, background:C.fg, color:C.wheat, padding:'2px 8px', borderRadius:3, fontWeight:600, textTransform:'none', letterSpacing:0 }}>Max ₹50,000</span>
             </div>
-            <Row label="NPS contribution this FY (voluntary, over employer)"><AmtInput value={ded.nps} onChange={set('nps')} max={50000} /></Row>
+            <Row label="NPS contribution this FY (voluntary, over employer)"><AmtInput value={ded.nps} onChange={updateDed('nps')} max={50000} /></Row>
           </div>
 
           {/* 24B */}
@@ -370,7 +449,7 @@ export default function TaxPage() {
               </span>
               <span style={{ fontSize:10, background:C.fg, color:C.wheat, padding:'2px 8px', borderRadius:3, fontWeight:600, textTransform:'none', letterSpacing:0 }}>Max ₹2,00,000</span>
             </div>
-            <Row label="Home loan interest paid this FY"><AmtInput value={ded.homeLoanInterest} onChange={set('homeLoanInterest')} max={200000} /></Row>
+            <Row label="Home loan interest paid this FY"><AmtInput value={ded.homeLoanInterest} onChange={updateDed('homeLoanInterest')} max={200000} /></Row>
           </div>
 
           {/* 80TTA */}
@@ -381,14 +460,14 @@ export default function TaxPage() {
               </span>
               <span style={{ fontSize:10, background:C.fg, color:C.wheat, padding:'2px 8px', borderRadius:3, fontWeight:600, textTransform:'none', letterSpacing:0 }}>{ded.selfSenior?'Max ₹50,000 (80TTB)':'Max ₹10,000'}</span>
             </div>
-            <Row label={ded.selfSenior?'Savings + FD interest earned (80TTB)':'Savings account interest earned'}><AmtInput value={ded.savingsInterest} onChange={set('savingsInterest')} max={ded.selfSenior?50000:10000} /></Row>
+            <Row label={ded.selfSenior?'Savings + FD interest earned (80TTB)':'Savings account interest earned'}><AmtInput value={ded.savingsInterest} onChange={updateDed('savingsInterest')} max={ded.selfSenior?50000:10000} /></Row>
           </div>
 
           {/* 80E */}
           <div style={sCard}>
             <div style={sCH}>80E — Education Loan Interest <span style={{ fontSize:10, background:C.fg, color:C.wheat, padding:'2px 8px', borderRadius:3, fontWeight:600, textTransform:'none', letterSpacing:0 }}>No upper limit</span></div>
             <div style={{ padding:'8px 14px', background:'#FAFAF8', borderBottom:`1px solid ${C.border}`, fontSize:11.5, color:C.muted }}>The entire interest paid on an education loan is deductible. Available for 8 years or until interest is fully repaid.</div>
-            <Row label="Education loan interest paid this FY"><AmtInput value={ded.eduLoanInterest} onChange={set('eduLoanInterest')} /></Row>
+            <Row label="Education loan interest paid this FY"><AmtInput value={ded.eduLoanInterest} onChange={updateDed('eduLoanInterest')} /></Row>
           </div>
 
           {/* 80G */}
@@ -398,11 +477,11 @@ export default function TaxPage() {
                 <Info text="Donations to government-approved funds qualify. PM Relief Fund, CMs Relief Fund = 100% deduction. Most charitable trusts = 50% deduction. Cash donations above ₹2,000 are NOT eligible." />
               </span>
             </div>
-            <Row label="100% qualifying donations (PM Relief Fund etc.)"><AmtInput value={ded.donations100} onChange={set('donations100')} /></Row>
-            <Row label="50% qualifying donations (charitable trusts etc.)"><AmtInput value={ded.donations50} onChange={set('donations50')} /></Row>
+            <Row label="100% qualifying donations (PM Relief Fund etc.)"><AmtInput value={ded.donations100} onChange={updateDed('donations100')} /></Row>
+            <Row label="50% qualifying donations (charitable trusts etc.)"><AmtInput value={ded.donations50} onChange={updateDed('donations50')} /></Row>
           </div>
 
-          <NavButtons onBack={() => setStep(3)} onReset={reset} onProceed={() => setStep(5)} proceedLabel="See my tax results →" />
+          <NavButtons onBack={() => goStep(3)} onReset={reset} onProceed={() => goStep(5)} proceedLabel="See my tax results →" />
         </div>
       )}
 
@@ -510,7 +589,7 @@ export default function TaxPage() {
           </div>
 
           <div style={{ display:'flex', gap:8 }}>
-            <button onClick={() => setStep(4)} style={{ flex:1, padding:'10px', background:C.card, color:C.muted, border:`1px solid ${C.border}`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit' }}>← Back</button>
+            <button onClick={() => goStep(4)} style={{ flex:1, padding:'10px', background:C.card, color:C.muted, border:`1px solid ${C.border}`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit' }}>← Back</button>
             <button onClick={reset} style={{ flex:1, padding:'10px', background:'#FBF0F0', color:C.danger, border:`1px solid #F0CECE`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit' }}>↺ Start over</button>
             <Link href="/dashboard/invest" style={{ flex:2, padding:'10px', background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:'inherit', textDecoration:'none', display:'flex', alignItems:'center', justifyContent:'center' }}>Proceed to Investments →</Link>
           </div>
