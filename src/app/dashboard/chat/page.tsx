@@ -1,242 +1,148 @@
 'use client'
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useAppStore } from '@/store/AppStore'
-import { formatINR } from '@/lib/tax-engine'
 
-interface Message { id: string; role: 'user' | 'assistant'; content: string; ts: Date }
+const C = { fg:'#3A4B41', wheat:'#E6CFA7', wl:'#F5ECD8', wm:'#D4B98A', bg:'#FDFAF6', card:'#fff', border:'#E4DDD1', text:'#1C2B22', muted:'#7A8A7E', danger:'#B94040' }
+const fmt = (n:number) => `₹${Math.round(n).toLocaleString('en-IN')}`
 
-const QUICK_PROMPTS = [
-  { label: 'Save max tax this year', icon: '📊' },
-  { label: 'New vs Old regime for me', icon: '⚖️' },
-  { label: 'Best SIP for ₹5,000/mo', icon: '📈' },
-  { label: 'How to claim HRA exemption', icon: '🏠' },
-  { label: 'EPF vs NPS — which is better', icon: '🏦' },
-  { label: 'Build ₹1 Crore in 10 years', icon: '🎯' },
-  { label: 'What is Section 80C?', icon: '📋' },
-  { label: 'Should I buy term insurance', icon: '🛡️' },
+interface Message { role:'user'|'assistant'; content:string }
+
+const SUGGESTIONS = [
+  'Should I switch to New Regime?',
+  'How much should I invest in SIP?',
+  'Can I afford a ₹50,000 purchase?',
+  'What is 80C and how do I use it?',
+  'How do I build an emergency fund?',
 ]
 
-// Simple markdown-like renderer for assistant messages
-function MessageContent({ content }: { content: string }) {
-  const lines = content.split('\n')
-  return (
-    <div>
-      {lines.map((line, i) => {
-        if (!line.trim()) return <div key={i} style={{ height: 6 }} />
-        // Bold (**text**)
-        const rendered = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        // Bullet points
-        if (line.startsWith('- ') || line.startsWith('• ')) {
-          return (
-            <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
-              <span style={{ color: '#E67E22', flexShrink: 0, marginTop: 1 }}>•</span>
-              <span dangerouslySetInnerHTML={{ __html: rendered.replace(/^[-•]\s/, '') }} />
-            </div>
-          )
-        }
-        // Numbered list
-        const numMatch = line.match(/^(\d+)\.\s(.+)/)
-        if (numMatch) {
-          return (
-            <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
-              <span style={{ color: '#E67E22', flexShrink: 0, minWidth: 18, fontWeight: 600 }}>{numMatch[1]}.</span>
-              <span dangerouslySetInnerHTML={{ __html: numMatch[2].replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
-            </div>
-          )
-        }
-        // SEBI disclaimer line
-        if (line.startsWith('⚠️')) {
-          return (
-            <div key={i} style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid rgba(0,0,0,0.08)', fontSize: 11, opacity: 0.65, lineHeight: 1.5 }}
-              dangerouslySetInnerHTML={{ __html: rendered }} />
-          )
-        }
-        return <div key={i} style={{ marginBottom: 2, lineHeight: 1.65 }} dangerouslySetInnerHTML={{ __html: rendered }} />
-      })}
-    </div>
-  )
-}
-
-function TypingIndicator() {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 0' }}>
-      {[0, 1, 2].map(i => (
-        <div key={i} className="typing-dot" style={{ animationDelay: i === 0 ? '-0.32s' : i === 1 ? '-0.16s' : '0s' }} />
-      ))}
-    </div>
-  )
-}
-
 export default function ChatPage() {
-  const { salary, taxComparison } = useAppStore()
+  const { salary } = useAppStore()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
-  const [streaming, setStreaming] = useState(false)
-  const [showQuick, setShowQuick] = useState(true)
+  const [loading, setLoading] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  // Build initial greeting
-  useEffect(() => {
-    const greeting = salary
-      ? `Namaste! 🙏 I'm **ArthVo**, your SEBI-backed AI financial advisor.\n\nI can see your salary data: **₹${salary.netSalary?.toLocaleString('en-IN')}/mo take-home** from ${salary.employerName || 'your employer'}${taxComparison ? ` · Best regime: **${taxComparison.recommendation === 'new' ? 'New' : 'Old'} Regime** (saves ₹${taxComparison.savings.toLocaleString('en-IN')}/yr)` : ''}.\n\nAsk me anything about your taxes, investments, salary components, or financial goals. I follow SEBI guidelines and Indian tax law.`
-      : `Namaste! 🙏 I'm **ArthVo**, your SEBI-backed AI financial advisor.\n\nI give personalised guidance on:\n- Indian income tax & regime comparison\n- Salary components & HRA exemption\n- SIP, ELSS, NPS & direct MF investment\n- Goal-based financial planning\n- Emergency funds & insurance\n\nUpload your salary slip for hyper-personalised advice, or ask me anything!`
-
-    setMessages([{
-      id: 'welcome',
-      role: 'assistant',
-      content: greeting,
-      ts: new Date(),
-    }])
-  }, [])
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
-
-  const buildContext = useCallback(() => {
-    if (!salary) return 'No salary data uploaded. Give general Indian financial advice.'
-    const parts = [
-      `Employee: ${salary.employeeName} | Employer: ${salary.employerName} | ${salary.month} ${salary.year}`,
-      `Monthly: Gross ₹${salary.grossSalary?.toLocaleString('en-IN')} | Net ₹${salary.netSalary?.toLocaleString('en-IN')} | TDS ₹${salary.tdsDeducted?.toLocaleString('en-IN')}`,
-      `CTC Annual: ₹${(salary.ctcAnnual || salary.grossSalary * 12)?.toLocaleString('en-IN')}`,
-      `PF: Employee ₹${salary.employeePF?.toLocaleString('en-IN')}/mo | Employer ₹${(salary.employerPF || salary.employeePF)?.toLocaleString('en-IN')}/mo`,
-    ]
-    if (taxComparison) {
-      parts.push(`Tax: Old regime ₹${taxComparison.old.totalTax?.toLocaleString('en-IN')}/yr | New regime ₹${taxComparison.new.totalTax?.toLocaleString('en-IN')}/yr | Recommended: ${taxComparison.recommendation} (saves ₹${taxComparison.savings?.toLocaleString('en-IN')}/yr)`)
-    }
-    return parts.join('\n')
-  }, [salary, taxComparison])
-
-  const sendMessage = useCallback(async (text?: string) => {
-    const content = (text || input).trim()
-    if (!content || streaming) return
-    setInput('')
-    setShowQuick(false)
-
-    const userMsg: Message = { id: `u${Date.now()}`, role: 'user', content, ts: new Date() }
-    const aId = `a${Date.now() + 1}`
-    const aMsg: Message = { id: aId, role: 'assistant', content: '', ts: new Date() }
-
-    setMessages(prev => [...prev, userMsg, aMsg])
-    setStreaming(true)
-
+  // Build context from profile + salary
+  const buildContext = () => {
+    let ctx = ''
+    if (salary) ctx += `Salary: take-home ₹${salary.netSalary}/mo, gross ₹${salary.grossSalary}/mo at ${salary.employerName||'employer'}. `
     try {
-      const history = [...messages, userMsg]
-        .filter(m => m.id !== 'welcome')
-        .map(m => ({ role: m.role, content: m.content }))
-
-      const res = await fetch('/api/chat', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history, userContext: buildContext() }),
-      })
-
-      const reader = res.body!.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue
-          const data = line.slice(6)
-          if (data === '[DONE]') continue
-          try {
-            const { text } = JSON.parse(data)
-            if (text) setMessages(prev => prev.map(m => m.id === aId ? { ...m, content: m.content + text } : m))
-          } catch {}
-        }
+      const p = localStorage.getItem('av_profile')
+      if (p) {
+        const d = JSON.parse(p)
+        const exp = (d.expenses||[]).reduce((s:number,e:any)=>s+e.amount,0)
+        const sav = (d.savings||[]).reduce((s:number,sv:any)=>s+sv.amount,0)
+        const free = Math.max(0,(salary?.netSalary||0)-exp-sav)
+        ctx += `Monthly fixed expenses: ₹${exp}. Monthly savings: ₹${sav}. Free to spend: ₹${free}. `
       }
-    } catch {
-      setMessages(prev => prev.map(m => m.id === aId ? { ...m, content: 'Sorry, something went wrong. Please try again.' } : m))
-    } finally {
-      setStreaming(false)
-      inputRef.current?.focus()
-    }
-  }, [input, messages, streaming, buildContext])
-
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
+    } catch {}
+    return ctx
   }
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 100px)', maxWidth: 780 }}>
-      {/* Context strip */}
-      {salary && (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-          <div style={{ fontSize: 11, background: '#E8F1FA', color: '#1A3C5E', padding: '4px 10px', borderRadius: 20, fontWeight: 500 }}>
-            📄 {salary.employeeName} · ₹{salary.netSalary?.toLocaleString('en-IN')}/mo
-          </div>
-          {taxComparison && (
-            <div style={{ fontSize: 11, background: '#FEF3E2', color: '#92400E', padding: '4px 10px', borderRadius: 20, fontWeight: 500 }}>
-              📊 {taxComparison.recommendation === 'new' ? 'New' : 'Old'} Regime saves ₹{(taxComparison.savings / 1000).toFixed(0)}K/yr
-            </div>
-          )}
-          <div style={{ fontSize: 11, background: '#E9F7EF', color: '#1E5631', padding: '4px 10px', borderRadius: 20, fontWeight: 500 }}>
-            🔒 Context-aware responses
-          </div>
-        </div>
-      )}
+  const send = async (text: string) => {
+    if (!text.trim() || loading) return
+    const userMsg: Message = { role:'user', content:text }
+    const newMessages = [...messages, userMsg]
+    setMessages(newMessages)
+    setInput('')
+    setLoading(true)
+    try {
+      const context = buildContext()
+      const res = await fetch('/api/chat', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({
+          messages: newMessages.map(m => ({ role:m.role, content:m.content })),
+          userContext: context,
+        })
+      })
+      const json = await res.json()
+      if (json.message) setMessages(prev => [...prev, { role:'assistant', content:json.message }])
+    } catch { setMessages(prev => [...prev, { role:'assistant', content:"Sorry, I couldn't connect. Please try again." }]) }
+    finally { setLoading(false) }
+  }
 
-      {/* Messages */}
-      <div style={{ flex: 1, overflowY: 'auto', paddingRight: 4, paddingBottom: 12 }}>
-        {messages.map(msg => {
-          const isUser = msg.role === 'user'
-          return (
-            <div key={msg.id} className="fade-in" style={{ display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start', marginBottom: 14 }}>
-              {!isUser && (
-                <div style={{ width: 34, height: 34, background: '#0F2640', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, color: '#E67E22', marginRight: 10, flexShrink: 0, alignSelf: 'flex-end', marginBottom: 2 }}>₹</div>
-              )}
-              <div className={isUser ? 'chat-user' : 'chat-assistant'}
-                style={{ maxWidth: '76%', padding: isUser ? '11px 16px' : '14px 18px', fontSize: 14, lineHeight: 1.65, color: isUser ? '#fff' : '#1C2833' }}>
-                {msg.content === '' && !isUser ? <TypingIndicator /> : <MessageContent content={msg.content} />}
-                <div style={{ fontSize: 10, opacity: 0.45, marginTop: 6, textAlign: 'right' }}>
-                  {msg.ts.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                </div>
-              </div>
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:'smooth' }) }, [messages, loading])
+
+  // Greeting based on time
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+
+  return (
+    <div style={{ fontFamily:'"Sora",-apple-system,sans-serif', maxWidth:720, height:'calc(100vh - 120px)', display:'flex', flexDirection:'column' }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap')`}</style>
+
+      <div style={{ marginBottom:16, flexShrink:0 }}>
+        <h2 style={{ fontSize:20, fontWeight:700, color:C.text, margin:'0 0 4px', letterSpacing:'-0.02em' }}>AI Advisor</h2>
+        <p style={{ fontSize:13, color:C.muted, margin:0 }}>Knows your full financial picture — ask anything</p>
+      </div>
+
+      {/* Chat area */}
+      <div style={{ flex:1, background:C.card, border:`1px solid ${C.border}`, borderRadius:6, padding:'16px', overflow:'auto', marginBottom:10, display:'flex', flexDirection:'column', gap:10 }}>
+
+        {/* Welcome state */}
+        {messages.length === 0 && (
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, textAlign:'center', gap:12 }}>
+            <div style={{ width:48, height:48, borderRadius:'50%', background:C.wl, border:`2px solid ${C.wm}`, display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <svg width="24" height="24" viewBox="0 0 120 120" fill="none"><polygon points="9,9 21,9 60,101 99,9 111,9 60,111" fill={C.fg}/></svg>
             </div>
-          )
-        })}
+            <div>
+              <p style={{ fontSize:15, fontWeight:600, color:C.text, margin:'0 0 4px' }}>{greeting}! I'm your ArthVo Advisor.</p>
+              <p style={{ fontSize:12.5, color:C.muted, margin:0, maxWidth:380 }}>
+                {salary ? `I can see your salary from ${salary.employerName||'your employer'}. Ask me anything about tax, investments or spending.` : 'Complete your profile in My Profile for personalised advice.'}
+              </p>
+            </div>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:6, justifyContent:'center', marginTop:4 }}>
+              {SUGGESTIONS.map(s => (
+                <button key={s} onClick={() => send(s)} style={{ padding:'7px 12px', background:C.wl, border:`1px solid ${C.wm}`, borderRadius:20, fontSize:12, color:C.fg, cursor:'pointer', fontFamily:'inherit', fontWeight:500 }}>{s}</button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Messages */}
+        {messages.map((m,i) => (
+          <div key={i} style={{ display:'flex', justifyContent:m.role==='user'?'flex-end':'flex-start' }}>
+            {m.role === 'assistant' && (
+              <div style={{ width:28, height:28, borderRadius:'50%', background:C.wl, border:`1px solid ${C.wm}`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginRight:8, marginTop:2 }}>
+                <svg width="14" height="14" viewBox="0 0 120 120" fill="none"><polygon points="9,9 21,9 60,101 99,9 111,9 60,111" fill={C.fg}/></svg>
+              </div>
+            )}
+            <div style={{
+              maxWidth:'75%', padding:'10px 14px', borderRadius: m.role==='user' ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
+              background: m.role==='user' ? C.fg : C.wl,
+              border: `1px solid ${m.role==='user' ? 'transparent' : C.border}`,
+              fontSize:13, color: m.role==='user' ? C.wheat : C.text, lineHeight:1.65,
+              whiteSpace:'pre-wrap', wordBreak:'break-word',
+            }}>
+              {m.content}
+            </div>
+          </div>
+        ))}
+
+        {loading && (
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            <div style={{ width:28, height:28, borderRadius:'50%', background:C.wl, border:`1px solid ${C.wm}`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+              <svg width="14" height="14" viewBox="0 0 120 120" fill="none"><polygon points="9,9 21,9 60,101 99,9 111,9 60,111" fill={C.fg}/></svg>
+            </div>
+            <div style={{ background:C.wl, border:`1px solid ${C.border}`, borderRadius:'12px 12px 12px 2px', padding:'10px 14px', fontSize:13, color:C.muted }}>
+              Thinking…
+            </div>
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
 
-      {/* Quick prompts */}
-      {showQuick && (
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 11, color: '#95A5A6', marginBottom: 8, fontWeight: 500 }}>Quick questions</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {QUICK_PROMPTS.map(q => (
-              <button key={q.label} onClick={() => sendMessage(q.label)}
-                style={{ padding: '6px 13px', background: '#fff', border: '1px solid #E5E9ED', borderRadius: 20, fontSize: 12, color: '#1A3C5E', cursor: 'pointer', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.12s' }}
-                onMouseEnter={e => { const el = e.currentTarget; el.style.background = '#E8F1FA'; el.style.borderColor = '#A8CCE8' }}
-                onMouseLeave={e => { const el = e.currentTarget; el.style.background = '#fff'; el.style.borderColor = '#E5E9ED' }}>
-                <span style={{ fontSize: 13 }}>{q.icon}</span> {q.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Input box */}
-      <div style={{ background: '#fff', border: '1px solid #E5E9ED', borderRadius: 14, padding: '10px 14px 10px 16px', display: 'flex', alignItems: 'flex-end', gap: 10, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', transition: 'border-color 0.15s' }}
-        onFocusCapture={e => (e.currentTarget.style.borderColor = '#1A3C5E')}
-        onBlurCapture={e => (e.currentTarget.style.borderColor = '#E5E9ED')}>
-        <textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={onKeyDown}
-          placeholder="Ask about taxes, salary, investments… (Enter to send)"
-          disabled={streaming} rows={1}
-          style={{ flex: 1, border: 'none', outline: 'none', resize: 'none', fontSize: 14, color: '#1C2833', background: 'transparent', maxHeight: 120, lineHeight: 1.55, fontFamily: 'inherit', padding: '2px 0' }} />
-        <button onClick={() => sendMessage()} disabled={!input.trim() || streaming}
-          style={{ padding: '8px 18px', background: input.trim() && !streaming ? '#1A3C5E' : '#F0F0F0', color: input.trim() && !streaming ? '#fff' : '#95A5A6', border: 'none', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: input.trim() && !streaming ? 'pointer' : 'default', transition: 'all 0.15s', flexShrink: 0, lineHeight: 1 }}>
-          {streaming ? '…' : '↑'}
+      {/* Input */}
+      <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+        <input value={input} onChange={e=>setInput(e.target.value)}
+          onKeyDown={e => e.key==='Enter' && !e.shiftKey && (e.preventDefault(), send(input))}
+          placeholder="Ask about your taxes, investments, goals…"
+          style={{ flex:1, padding:'10px 14px', border:`1px solid ${C.border}`, borderRadius:5, fontSize:13, fontFamily:'inherit', outline:'none', color:C.text, background:C.card }} />
+        <button onClick={() => send(input)} disabled={!input.trim()||loading}
+          style={{ padding:'10px 18px', background:input.trim()&&!loading?C.fg:'#C8D4C8', color:input.trim()&&!loading?C.wheat:'#8A9A8A', border:'none', borderRadius:5, fontSize:13, fontWeight:600, cursor:input.trim()&&!loading?'pointer':'not-allowed', fontFamily:'inherit' }}>
+          Send →
         </button>
-      </div>
-
-      <div style={{ fontSize: 11, color: '#95A5A6', marginTop: 8, textAlign: 'center', lineHeight: 1.5 }}>
-        ⚠️ AI advice is for educational purposes only. Consult a CA for ITR filing and a SEBI-registered RIA for investments above ₹5L.
       </div>
     </div>
   )
