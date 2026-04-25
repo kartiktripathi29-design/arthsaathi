@@ -131,7 +131,7 @@ export default function InvestPage() {
 
   const generate = useCallback(() => {
     if (!freeToSpend) return
-    const newPlan = buildPlan(goals, risk, freeToSpend, monthlyExp)
+    const newPlan = buildPlan(goals, risk, investable, monthlyExp)
     setPlan(newPlan)
     setGenerated(true)
   }, [goals, risk, freeToSpend, monthlyExp])
@@ -295,7 +295,12 @@ export default function InvestPage() {
                 </div>
               )}
 
-              {/* Deviation insight */}
+              {/* Buffer callout */}
+          <div style={{ background:'#FAFAF8', border:`1px solid ${C.border}`, borderRadius:5, padding:'9px 14px', fontSize:12, color:C.muted, marginBottom:12, lineHeight:1.65 }}>
+            💡 <strong style={{ color:C.text }}>Why not all of your free money?</strong> ArthVo allocates 70% of your truly free amount (` + fmt(Math.round(freeToSpend * 0.3)) + ` kept as buffer for fuel, medical, surprise expenses and daily life).
+          </div>
+
+          {/* Deviation insight */}
               {deviations.length > 0 && (
                 <div style={{ background:C.wl, border:`1px solid ${C.wm}`, borderRadius:5, padding:'10px 14px', fontSize:12.5, color:C.fg, lineHeight:1.65, marginBottom:12 }}>
                   💡 You've changed {deviations.length} item{deviations.length>1?'s':''} from the recommendation.{' '}

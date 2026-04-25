@@ -132,10 +132,12 @@ interface Deductions {
 
 function calcHRAExempt(d: Deductions, salary: number): number {
   if (d.rentPaid === 0 || d.hraReceived === 0) return 0
-  const basicSalary = salary * 0.4
-  const rule1 = d.hraReceived
-  const rule2 = d.rentPaid - 0.1 * basicSalary
-  const rule3 = d.isMetro ? 0.5 * basicSalary : 0.4 * basicSalary
+  const basicAnnual = salary * 0.4
+  const hraAnnual   = d.hraReceived * 12   // monthly → annual
+  const rentAnnual  = d.rentPaid * 12       // monthly → annual
+  const rule1 = hraAnnual
+  const rule2 = rentAnnual - 0.1 * basicAnnual
+  const rule3 = d.isMetro ? 0.5 * basicAnnual : 0.4 * basicAnnual
   return Math.max(0, Math.min(rule1, Math.max(0, rule2), rule3))
 }
 
@@ -191,7 +193,7 @@ export default function TaxPage() {
   const annual = (salary?.grossSalary || 0) * 12
   const set = (k: keyof Deductions) => (v: number | boolean) => setDed(prev => ({ ...prev, [k]: v }))
 
-  // Load saved progress from localStorage
+  // Load saved progress from localStorage + auto-fill from salary/profile
   const [savedStep, setSavedStep] = useState<number>(0)
   useState(() => {
     try {
@@ -200,7 +202,18 @@ export default function TaxPage() {
         const d = JSON.parse(saved)
         if (d.step !== undefined) setSavedStep(d.step)
         if (d.ded) setDed(d.ded)
+        return
       }
+      // Auto-fill on first visit from salary slip + profile savings
+      const profile = localStorage.getItem('av_profile')
+      const autoFill: Partial<Deductions> = {}
+      if (profile) {
+        const p = JSON.parse(profile)
+        // 80C: auto-fill SIP from savings
+        const sip = (p.savings||[]).find((s:any) => s.label?.toLowerCase().includes('sip') || s.label?.toLowerCase().includes('mutual'))
+        if (sip?.amount) autoFill.elss = sip.amount * 12
+      }
+      if (Object.keys(autoFill).length > 0) setDed(prev => ({ ...prev, ...autoFill }))
     } catch {}
   })
 
@@ -313,7 +326,7 @@ export default function TaxPage() {
               ))}
             </div>
             <div style={{ padding:'10px 14px', background:'#FAFAF8', borderTop:`1px solid ${C.border}`, fontSize:12, color:C.muted, lineHeight:1.65 }}>
-              ₹75,000 standard deduction is applied automatically to both regimes. The next steps help you find additional deductions for the Old Regime.
+              ₹75,000 standard deduction applies to both regimes. The next steps find additional deductions for Old Regime — which may or may not save more than New Regime based on your actual investments.
             </div>
           </div>
           <NavButtons onReset={reset} onProceed={() => goStep(1)} proceedLabel="Proceed to HRA →" />
@@ -349,8 +362,8 @@ export default function TaxPage() {
                 <div style={{ fontSize:11, color:C.muted, marginBottom:8, lineHeight:1.6 }}>
                   <strong style={{ color:C.fg }}>How your HRA exemption is calculated:</strong><br/>
                   Rule 1 — Actual HRA received: <strong>{fmt(ded.hraReceived*12)}/yr</strong><br/>
-                  Rule 2 — Rent minus 10% of basic: <strong>{fmt(Math.max(0,(ded.rentPaid - 0.1*(annual*0.4)/12)*12))}/yr</strong><br/>
-                  Rule 3 — {ded.isMetro?'50%':'40%'} of basic salary: <strong>{fmt(annual*(ded.isMetro?0.5:0.4)*0.4)}/yr</strong>
+                  Rule 2 — Rent minus 10% of basic: <strong>{fmt(Math.max(0, ded.rentPaid*12 - 0.1*(annual*0.4)))}/yr</strong><br/>
+                  Rule 3 — {ded.isMetro?'50%':'40%'} of basic salary: <strong>{fmt(annual*0.4*(ded.isMetro?0.5:0.4))}/yr</strong>
                 </div>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                   <span style={{ fontSize:13, fontWeight:600, color:C.fg }}>Your HRA exemption (minimum of 3)</span>

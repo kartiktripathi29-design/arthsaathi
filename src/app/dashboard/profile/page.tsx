@@ -106,23 +106,34 @@ export default function ProfilePage() {
     { id: uid(), label: 'Emergency Fund', amount: 0, icon: '🆘' },
     { id: uid(), label: 'RD / FD', amount: 0, icon: '🏦' },
   ])
+  const [variable, setVariable] = useState([
+    { id: uid(), label: 'Fuel / Transport', amount: 0, icon: '🚗' },
+    { id: uid(), label: 'Dining out / Takeaway', amount: 0, icon: '🍽️' },
+    { id: uid(), label: 'Shopping / Clothing', amount: 0, icon: '🛍️' },
+    { id: uid(), label: 'Medicine / Healthcare', amount: 0, icon: '💊' },
+    { id: uid(), label: 'Entertainment / OTT', amount: 0, icon: '🎬' },
+    { id: uid(), label: 'Travel (monthly avg)', amount: 0, icon: '✈️' },
+    { id: uid(), label: 'Other variable spend', amount: 0, icon: '📦' },
+  ])
 
   // Load saved profile
   useEffect(() => {
     try {
       const p = localStorage.getItem('av_profile')
-      if (p) { const d = JSON.parse(p); if (d.expenses) setExpenses(d.expenses); if (d.savings) setSavings(d.savings) }
+      if (p) { const d = JSON.parse(p); if (d.expenses) setExpenses(d.expenses); if (d.savings) setSavings(d.savings); if (d.variable) setVariable(d.variable) }
     } catch {}
   }, [])
 
-  const saveProfile = useCallback((exp = expenses, sav = savings) => {
-    try { localStorage.setItem('av_profile', JSON.stringify({ expenses: exp, savings: sav })) } catch {}
-  }, [expenses, savings])
+  const saveProfile = useCallback((exp = expenses, sav = savings, vari = variable) => {
+    try { localStorage.setItem('av_profile', JSON.stringify({ expenses: exp, savings: sav, variable: vari })) } catch {}
+  }, [expenses, savings, variable])
 
-  const updExp = (id: string, amount: number) => { const u = expenses.map(e => e.id === id ? { ...e, amount } : e); setExpenses(u); saveProfile(u, savings) }
-  const updSav = (id: string, amount: number) => { const u = savings.map(s => s.id === id ? { ...s, amount } : s); setSavings(u); saveProfile(expenses, u) }
-  const addExp = () => { const u = [...expenses, { id: uid(), label: 'Custom expense', amount: 0, icon: '💸' }]; setExpenses(u); saveProfile(u, savings) }
-  const addSav = () => { const u = [...savings, { id: uid(), label: 'New savings goal', amount: 0, icon: '🎯' }]; setSavings(u); saveProfile(expenses, u) }
+  const updExp  = (id: string, amount: number) => { const u = expenses.map(e => e.id === id ? { ...e, amount } : e); setExpenses(u); saveProfile(u, savings, variable) }
+  const updSav  = (id: string, amount: number) => { const u = savings.map(s => s.id === id ? { ...s, amount } : s); setSavings(u); saveProfile(expenses, u, variable) }
+  const updVar  = (id: string, amount: number) => { const u = variable.map(v => v.id === id ? { ...v, amount } : v); setVariable(u); saveProfile(expenses, savings, u) }
+  const addExp  = () => { const u = [...expenses, { id: uid(), label: 'Custom expense', amount: 0, icon: '💸' }]; setExpenses(u); saveProfile(u, savings, variable) }
+  const addSav  = () => { const u = [...savings, { id: uid(), label: 'New savings goal', amount: 0, icon: '🎯' }]; setSavings(u); saveProfile(expenses, u, variable) }
+  const addVar  = () => { const u = [...variable, { id: uid(), label: 'Other', amount: 0, icon: '📦' }]; setVariable(u); saveProfile(expenses, savings, u) }
 
   // Auto-fill from AIS
   useEffect(() => {
@@ -140,14 +151,17 @@ export default function ProfilePage() {
   const totalAnnual = salMonthly * 12 + otherAnnual
   const totalExp = expenses.reduce((s, e) => s + e.amount, 0)
   const totalSav = savings.reduce((s, sv) => s + sv.amount, 0)
-  const freeToSpend = Math.max(0, salMonthly - totalExp - totalSav)
+  const totalVar = variable.reduce((s, v) => s + v.amount, 0)
+  const trulyFree = Math.max(0, salMonthly - totalExp - totalVar - totalSav)
+  const freeToSpend = trulyFree  // alias kept for backward compat
   const savRate = salMonthly > 0 ? totalSav / salMonthly : 0
 
   // Health score
   let health = 100
   if (savRate < 0.1) health -= 25; else if (savRate < 0.2) health -= 10
-  if (salMonthly > 0 && totalExp / salMonthly > 0.6) health -= 20; else if (salMonthly > 0 && totalExp / salMonthly > 0.5) health -= 10
-  if (freeToSpend < 0) health -= 30
+  const totalCommitted = (totalExp + totalVar) / (salMonthly || 1)
+  if (totalCommitted > 0.7) health -= 20; else if (totalCommitted > 0.6) health -= 10
+  if (trulyFree < 0) health -= 30
   health = Math.max(0, Math.min(100, health))
   const healthGrade = health >= 80 ? 'Excellent' : health >= 65 ? 'Good' : health >= 50 ? 'Fair' : 'Needs work'
 
@@ -444,12 +458,12 @@ export default function ProfilePage() {
         <div>
           {salMonthly > 0 && (
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: '14px 16px', marginBottom: 18, display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-              <Donut exp={totalExp} sav={totalSav} free={freeToSpend} total={salMonthly} />
+              <Donut exp={totalExp + totalVar} sav={totalSav} free={trulyFree} total={salMonthly} />
               <div style={{ flex: 1, minWidth: 150 }}>
-                <p style={{ fontSize: 20, fontWeight: 700, color: C.fg, margin: '0 0 2px', letterSpacing: '-0.02em' }}>{fmt(freeToSpend)}</p>
-                <p style={{ fontSize: 11, color: C.muted, margin: '0 0 8px' }}>free to spend / month</p>
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                  {[{ c: C.danger, l: `${fmt(totalExp)} bills` }, { c: C.wm, l: `${fmt(totalSav)} savings` }].map(d => (
+                <p style={{ fontSize: 20, fontWeight: 700, color: C.fg, margin: '0 0 2px', letterSpacing: '-0.02em' }}>{fmt(trulyFree)}</p>
+                <p style={{ fontSize: 11, color: C.muted, margin: '0 0 8px' }}>truly free / month</p>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' as const }}>
+                  {[{ c: C.danger, l: `${fmt(totalExp)} fixed` }, { c: '#D97706', l: `${fmt(totalVar)} variable` }, { c: C.wm, l: `${fmt(totalSav)} savings` }].map(d => (
                     <span key={d.l} style={{ fontSize: 11, color: C.muted, display: 'flex', alignItems: 'center', gap: 4 }}>
                       <span style={{ width: 7, height: 7, borderRadius: '50%', background: d.c, display: 'inline-block' }} />{d.l}
                     </span>
@@ -478,6 +492,21 @@ export default function ProfilePage() {
                 ))}
               </div>
               <div style={S.card}>
+                <div style={{ ...S.cardHead, background: '#FBF6EE', borderColor: '#EDD898' }}>
+                  Variable Monthly Expenses
+                  <button onClick={addVar} style={{ fontSize: 11, color: '#8A6A1A', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500, textTransform: 'none' as const, letterSpacing: 0 }}>+ Add</button>
+                </div>
+                <div style={{ padding: '8px 14px', background: '#FAFAF6', borderBottom: `1px solid #FAF7F2`, fontSize: 11.5, color: C.muted, lineHeight: 1.6 }}>
+                  Your typical monthly variable spend. Enter honest averages — this makes every ArthVo decision accurate.
+                </div>
+                {variable.map((v, i) => (
+                  <div key={v.id} className="av-row" style={{ ...S.row, borderBottom: i < variable.length - 1 ? `1px solid #FAF7F2` : 'none' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span>{v.icon}</span>{v.label}</span>
+                    <AmtInput value={v.amount} onChange={amt => updVar(v.id, amt)} />
+                  </div>
+                ))}
+              </div>
+              <div style={S.card}>
                 <div style={S.cardHead}>Monthly Savings <button onClick={addSav} style={{ fontSize: 11, color: C.fg, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>+ Add</button></div>
                 {savings.map((sv, i) => (
                   <div key={sv.id} className="av-row" style={{ ...S.row, borderBottom: i < savings.length - 1 ? `1px solid #FAF7F2` : 'none' }}>
@@ -498,9 +527,10 @@ export default function ProfilePage() {
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
                     {[
-                      { dot: C.danger, label: 'Bills', val: fmt(totalExp) },
+                      { dot: C.danger, label: 'Fixed bills', val: fmt(totalExp) },
+                      { dot: '#D97706', label: 'Variable', val: fmt(totalVar) },
                       { dot: C.wm, label: 'Savings', val: fmt(totalSav) },
-                      { dot: C.fg, label: 'Free', val: fmt(freeToSpend), bold: true },
+                      { dot: C.fg, label: 'Truly free', val: fmt(trulyFree), bold: true },
                     ].map(r => (
                       <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, paddingTop: r.bold ? 6 : 0, borderTop: r.bold ? `1px solid ${C.border}` : 'none' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: r.bold ? C.fg : C.muted, fontWeight: r.bold ? 600 : 400 }}>

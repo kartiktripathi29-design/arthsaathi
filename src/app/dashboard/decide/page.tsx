@@ -26,9 +26,11 @@ export default function DecidePage() {
       if (p) {
         const d = JSON.parse(p)
         const netSal = salary?.netSalary || 0
-        const totalExp = (d.expenses||[]).reduce((s:number,e:any)=>s+e.amount,0)
-        const totalSav = (d.savings||[]).reduce((s:number,sv:any)=>s+sv.amount,0)
-        setFreeToSpend(Math.max(0, netSal-totalExp-totalSav))
+        const totalExp  = (d.expenses||[]).reduce((s:number,e:any)=>s+e.amount,0)
+        const totalVar  = (d.variable||[]).reduce((s:number,v:any)=>s+v.amount,0)
+        const totalSav  = (d.savings||[]).reduce((s:number,sv:any)=>s+sv.amount,0)
+        // trulyFree = income - fixed - variable - savings
+        setFreeToSpend(Math.max(0, netSal - totalExp - totalVar - totalSav))
       } else { setFreeToSpend(salary?.netSalary ? Math.round(salary.netSalary*0.3) : 0) }
     } catch { setFreeToSpend(0) }
   }, [salary])
@@ -64,7 +66,7 @@ export default function DecidePage() {
       <div style={{ marginBottom:20 }}>
         <h2 style={{ fontSize:20, fontWeight:700, color:C.text, margin:'0 0 4px', letterSpacing:'-0.02em' }}>Can I Buy This?</h2>
         <p style={{ fontSize:13, color:C.muted, margin:0 }}>
-          {freeToSpend > 0 ? <>Based on your profile — <strong style={{ color:C.fg }}>{fmt(freeToSpend)}</strong> free this month</> : 'Enter an item and price for a verdict'}
+          {freeToSpend > 0 ? <>Based on your profile — <strong style={{ color:C.fg }}>{fmt(freeToSpend)}</strong> truly free this month</> : 'Enter an item and price for a verdict'}
         </p>
       </div>
 
