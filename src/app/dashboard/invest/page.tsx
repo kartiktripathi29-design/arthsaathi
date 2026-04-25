@@ -131,6 +131,7 @@ export default function InvestPage() {
 
   const generate = useCallback(() => {
     if (!freeToSpend) return
+    const investable = Math.round(freeToSpend * 0.7)
     const newPlan = buildPlan(goals, risk, investable, monthlyExp)
     setPlan(newPlan)
     setGenerated(true)
