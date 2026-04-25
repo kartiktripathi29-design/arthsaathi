@@ -69,8 +69,8 @@ const S = {
   btn: (primary = true): React.CSSProperties => ({ padding: '10px 14px', background: primary ? C.fg : C.card, color: primary ? C.wheat : C.muted, border: primary ? 'none' : `1px solid ${C.border}`, borderRadius: 5, fontSize: 12.5, fontWeight: primary ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit' }),
   upload: (done = false): React.CSSProperties => ({ border: `1.5px dashed ${done ? C.fg : C.border}`, borderRadius: 6, padding: '16px', textAlign: 'center', background: done ? '#EEF2EE' : C.wl, cursor: done ? 'default' : 'pointer' }),
   insight: { background: C.wl, border: `1px solid ${C.wm}`, borderRadius: 5, padding: '9px 12px', fontSize: 12, color: C.fg, lineHeight: 1.6, marginBottom: 12 } as React.CSSProperties,
-  stab: (on: boolean): React.CSSProperties => ({ padding: '0 12px 9px', fontSize: 12, cursor: 'pointer', borderBottom: `2px solid ${on ? C.wm : 'transparent'}`, color: on ? C.fg : C.muted, fontWeight: on ? 600 : 400, background: 'none', border: 'none', borderBottom: `2px solid ${on ? C.wm : 'transparent'}`, fontFamily: 'inherit' }),
-  maintab: (on: boolean): React.CSSProperties => ({ padding: '0 16px 10px', fontSize: 13, cursor: 'pointer', borderBottom: `2px solid ${on ? C.wheat : 'transparent'}`, color: on ? C.fg : C.muted, fontWeight: on ? 600 : 400, background: 'none', border: 'none', borderBottom: `2px solid ${on ? C.wheat : 'transparent'}`, fontFamily: 'inherit' }),
+  stab: (on: boolean): React.CSSProperties => ({ padding: '0 12px 9px', fontSize: 12, cursor: 'pointer', borderTop: 'none', borderLeft: 'none', borderRight: 'none', borderBottom: `2px solid ${on ? C.wm : 'transparent'}`, color: on ? C.fg : C.muted, fontWeight: on ? 600 : 400, background: 'none', fontFamily: 'inherit' }),
+  maintab: (on: boolean): React.CSSProperties => ({ padding: '0 16px 10px', fontSize: 13, cursor: 'pointer', borderTop: 'none', borderLeft: 'none', borderRight: 'none', borderBottom: `2px solid ${on ? C.wheat : 'transparent'}`, color: on ? C.fg : C.muted, fontWeight: on ? 600 : 400, background: 'none', fontFamily: 'inherit' }),
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
