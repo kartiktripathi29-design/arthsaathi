@@ -81,12 +81,37 @@ function ComponentReview({ data, onConfirm }: { data: ParsedSalaryData; onConfir
       if (amount > 0) items.push({ label, amount, tag, isDeduction: false })
     }
     // Add any extra components from parsed components array
+    // Deduplicate by: exact label match OR same amount as already-added item OR known alias
+    const ALIASES: Record<string, string[]> = {
+      'basic salary': ['basic', 'basic pay', 'basic wage'],
+      'hra': ['house rent allowance', 'housing allowance', 'hra allowance'],
+      'conveyance / ta': ['conveyance', 'travel allowance', 'ta', 'transport allowance', 'conveyance allowance'],
+      'medical allowance': ['medical', 'medical reimbursement'],
+      'special allowance': ['special pay', 'flexi allowance', 'flexible allowance', 'other allowance'],
+      'lta': ['leave travel allowance', 'leave travel concession', 'ltc'],
+    }
+
+    const normalize = (s: string) => s.toLowerCase().trim()
+
+    const isAlreadyAdded = (label: string, amount: number): boolean => {
+      const norm = normalize(label)
+      // Check exact match
+      if (items.some(i => normalize(i.label) === norm)) return true
+      // Check alias match
+      for (const [canonical, aliases] of Object.entries(ALIASES)) {
+        if (norm === canonical || aliases.includes(norm)) {
+          if (items.some(i => normalize(i.label) === canonical || aliases.includes(normalize(i.label)))) return true
+        }
+      }
+      // Check same amount already present (likely duplicate with different label)
+      if (amount > 0 && items.filter(i => !i.isDeduction && i.amount === amount).length > 0) return true
+      return false
+    }
+
     if (data.components) {
       for (const c of data.components) {
-        const alreadyAdded = items.some(i => i.label.toLowerCase() === c.label.toLowerCase())
-        if (!alreadyAdded && c.amount > 0 && c.type === 'earning') {
-          // Guess tag based on label
-          const lbl = c.label.toLowerCase()
+        if (!isAlreadyAdded(c.label, c.amount) && c.amount > 0 && c.type === 'earning') {
+          const lbl = normalize(c.label)
           const tag: ComponentTag = lbl.includes('bonus') || lbl.includes('incentive') || lbl.includes('variable') ? 'variable'
             : lbl.includes('joining') || lbl.includes('one-time') || lbl.includes('arrear') || lbl.includes('lta') ? 'onetime'
             : 'fixed'
