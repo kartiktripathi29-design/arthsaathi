@@ -151,6 +151,7 @@ async function parseExcel(buffer: Buffer, password = ''): Promise<string> {
     if (!password) throw new Error('requires_password')
 
     try {
+      // @ts-ignore — officecrypto-tool ships without type declarations
       const officeCrypto = await import('officecrypto-tool')
       const decrypted = await (officeCrypto as any).decrypt(buffer, { password })
       workbook = XLSX.read(decrypted, { type: 'buffer' })
