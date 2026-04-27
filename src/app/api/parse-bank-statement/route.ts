@@ -59,18 +59,10 @@ async function parseExcel(buffer: Buffer): Promise<string> {
 }
 
 async function isEncryptedPdf(buffer: Buffer): Promise<boolean> {
-  // Quick check by reading raw bytes — encrypted PDFs have /Encrypt marker
-  const text = buffer.toString('latin1', 0, Math.min(buffer.length, 8192))
+  // Check 1: raw bytes for /Encrypt marker (most reliable)
+  const text = buffer.toString('latin1', 0, Math.min(buffer.length, 16384))
   if (text.includes('/Encrypt')) return true
-  // Fallback: try loading without password
-  try {
-    const { PDFDocument } = await import('pdf-lib')
-    await PDFDocument.load(buffer, { ignoreEncryption: false } as any)
-    return false
-  } catch (e: any) {
-    if (e.message?.includes('encrypted') || e.message?.includes('password')) return true
-    return false
-  }
+  return false
 }
 
 async function unlockPdf(buffer: Buffer, password: string): Promise<Buffer> {
@@ -80,11 +72,17 @@ async function unlockPdf(buffer: Buffer, password: string): Promise<Buffer> {
     const saved = await pdfDoc.save()
     return Buffer.from(saved.buffer, saved.byteOffset, saved.byteLength) as Buffer
   } catch (e: any) {
-    if (e.message?.includes('encrypted') || e.message?.includes('password')) {
+    const msg = (e.message || '').toLowerCase()
+    if (msg.includes('encrypted') || msg.includes('password') || msg.includes('protect')) {
       throw new Error('incorrect_password')
     }
     throw e
   }
+}
+
+function isPasswordError(err: any): boolean {
+  const msg = (err?.message || err?.error?.message || String(err) || '').toLowerCase()
+  return msg.includes('encrypted') || msg.includes('password') || msg.includes('protect') || msg.includes('locked') || msg.includes('decrypt')
 }
 
 export async function POST(req: NextRequest) {
@@ -103,25 +101,29 @@ export async function POST(req: NextRequest) {
     let messageContent: any[] = []
 
     if (isExcel) {
-      const csvText = await parseExcel(buffer)
-      if (csvText.length > 500_000) return NextResponse.json({ error: 'Excel file too large to process' }, { status: 400 })
-      messageContent = [
-        { type: 'text', text: `Parse this bank statement Excel data:\n\n${csvText}` }
-      ]
+      try {
+        const csvText = await parseExcel(buffer)
+        if (csvText.length > 500_000) return NextResponse.json({ error: 'Excel file too large to process' }, { status: 400 })
+        messageContent = [{ type: 'text', text: `Parse this bank statement Excel data:\n\n${csvText}` }]
+      } catch (e: any) {
+        if (isPasswordError(e)) {
+          return NextResponse.json({ error: 'incorrect_password' }, { status: 422 })
+        }
+        throw e
+      }
     } else {
-      // Proactively check encryption status
+      // PDF flow — proactively check encryption
       const encrypted = await isEncryptedPdf(buffer)
       let pdfBuffer: Buffer = buffer
 
       if (encrypted) {
         if (!password) {
-          // No password yet — ask user
           return NextResponse.json({ error: 'incorrect_password' }, { status: 422 })
         }
         try {
           pdfBuffer = await unlockPdf(buffer, password)
         } catch (e: any) {
-          if (e.message === 'incorrect_password') {
+          if (isPasswordError(e) || e.message === 'incorrect_password') {
             return NextResponse.json({ error: 'incorrect_password' }, { status: 422 })
           }
           throw e
@@ -135,12 +137,21 @@ export async function POST(req: NextRequest) {
       ]
     }
 
-    const response = await client.messages.create({
-      model: 'claude-opus-4-5',
-      max_tokens: 4000,
-      system: SYSTEM,
-      messages: [{ role: 'user', content: messageContent }]
-    })
+    let response
+    try {
+      response = await client.messages.create({
+        model: 'claude-opus-4-5',
+        max_tokens: 4000,
+        system: SYSTEM,
+        messages: [{ role: 'user', content: messageContent }]
+      })
+    } catch (apiErr: any) {
+      // Catch any password-related error from Claude
+      if (isPasswordError(apiErr)) {
+        return NextResponse.json({ error: 'incorrect_password' }, { status: 422 })
+      }
+      throw apiErr
+    }
 
     const text = response.content[0].type === 'text' ? response.content[0].text : ''
     const jsonMatch = text.match(/\{[\s\S]*\}/)

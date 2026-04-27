@@ -164,14 +164,24 @@ export default function ProfilePage() {
       const res = await fetch('/api/parse-bank-statement', { method:'POST', body:form })
       const text = await res.text()
       let json:any
-      try { json = JSON.parse(text) } catch { throw new Error('Could not read statement. Try a different format.') }
-      if (res.status === 422 || json.error === 'incorrect_password') {
+      try { json = JSON.parse(text) } catch { json = { error: text } }
+
+      // Detect password issues from any signal: 422 status, error code, or message containing password keywords
+      const errMsg = (json.error || json.message || text || '').toLowerCase()
+      const isPasswordIssue = res.status === 422 ||
+                              json.error === 'incorrect_password' ||
+                              errMsg.includes('password') ||
+                              errMsg.includes('encrypted') ||
+                              errMsg.includes('protect') ||
+                              errMsg.includes('locked')
+
+      if (isPasswordIssue) {
         toast.dismiss(tid)
         setPwdModal({ open:true, type:'bank', file, error: password ? 'Incorrect password. Please try again.' : '' })
         setPwd('')
         return
       }
-      if (!res.ok) throw new Error(json.error || 'Failed')
+      if (!res.ok) throw new Error(json.error || 'Failed to read statement')
       setBankData(json.data)
       try { localStorage.setItem('av_bank', JSON.stringify(json.data)) } catch {}
       // Auto-fill expenses
@@ -202,6 +212,14 @@ export default function ProfilePage() {
       }
       toast.success(`Statement parsed! ${json.data.transactions?.length || 0} transactions categorised`, { id:tid })
     } catch (e:any) {
+      // Last-resort password detection on raw error
+      const errStr = (e.message || String(e) || '').toLowerCase()
+      if (errStr.includes('password') || errStr.includes('encrypted') || errStr.includes('protect')) {
+        toast.dismiss(tid)
+        setPwdModal({ open:true, type:'bank', file, error: password ? 'Incorrect password. Please try again.' : '' })
+        setPwd('')
+        return
+      }
       toast.error(e.message || 'Failed to parse', { id:tid })
     } finally { setLoadingDoc(null) }
   }
