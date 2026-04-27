@@ -125,7 +125,7 @@ export default function PrivacyPage() {
         </div>
 
         <div style={{ marginTop: 32, textAlign: 'center' }}>
-          <Link href="/dashboard/salary" style={{ display: 'inline-block', padding: '12px 28px', background: '#1A3C5E', color: '#fff', borderRadius: 10, textDecoration: 'none', fontWeight: 600, fontSize: 14 }}>
+          <Link href="/dashboard" style={{ display: 'inline-block', padding: '12px 28px', background: '#1A3C5E', color: '#fff', borderRadius: 10, textDecoration: 'none', fontWeight: 600, fontSize: 14 }}>
             ← Back to Salary Upload
           </Link>
         </div>

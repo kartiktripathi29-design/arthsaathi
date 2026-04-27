@@ -116,7 +116,7 @@ export default function SignupPage() {
         createdAt: new Date().toISOString(),
       })
       toast.success('Account created! Welcome to ArthVo 🎉')
-      router.push('/dashboard/ais')
+      router.push('/dashboard')
     }, 800)
   }
 

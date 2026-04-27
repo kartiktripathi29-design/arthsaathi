@@ -38,7 +38,7 @@ export default function LoginPage() {
         createdAt: new Date().toISOString(),
       })
       toast.success('Welcome back!')
-      router.push('/dashboard/ais')
+      router.push('/dashboard')
     }, 600)
   }
 

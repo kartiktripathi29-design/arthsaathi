@@ -58,6 +58,21 @@ async function parseExcel(buffer: Buffer): Promise<string> {
   return allText
 }
 
+async function isEncryptedPdf(buffer: Buffer): Promise<boolean> {
+  // Quick check by reading raw bytes — encrypted PDFs have /Encrypt marker
+  const text = buffer.toString('latin1', 0, Math.min(buffer.length, 8192))
+  if (text.includes('/Encrypt')) return true
+  // Fallback: try loading without password
+  try {
+    const { PDFDocument } = await import('pdf-lib')
+    await PDFDocument.load(buffer, { ignoreEncryption: false } as any)
+    return false
+  } catch (e: any) {
+    if (e.message?.includes('encrypted') || e.message?.includes('password')) return true
+    return false
+  }
+}
+
 async function unlockPdf(buffer: Buffer, password: string): Promise<Buffer> {
   const { PDFDocument } = await import('pdf-lib')
   try {
@@ -94,16 +109,25 @@ export async function POST(req: NextRequest) {
         { type: 'text', text: `Parse this bank statement Excel data:\n\n${csvText}` }
       ]
     } else {
+      // Proactively check encryption status
+      const encrypted = await isEncryptedPdf(buffer)
       let pdfBuffer: Buffer = buffer
-      if (password) {
+
+      if (encrypted) {
+        if (!password) {
+          // No password yet — ask user
+          return NextResponse.json({ error: 'incorrect_password' }, { status: 422 })
+        }
         try {
           pdfBuffer = await unlockPdf(buffer, password)
         } catch (e: any) {
           if (e.message === 'incorrect_password') {
             return NextResponse.json({ error: 'incorrect_password' }, { status: 422 })
           }
+          throw e
         }
       }
+
       const base64 = pdfBuffer.toString('base64')
       messageContent = [
         { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } } as any,
@@ -111,23 +135,12 @@ export async function POST(req: NextRequest) {
       ]
     }
 
-    let response
-    try {
-      response = await client.messages.create({
-        model: 'claude-opus-4-5',
-        max_tokens: 4000,
-        system: SYSTEM,
-        messages: [{ role: 'user', content: messageContent }]
-      })
-    } catch (apiErr: any) {
-      // PDF likely password-protected if Claude can't read it
-      if (apiErr.message?.includes('encrypted') || apiErr.message?.includes('password') || apiErr.status === 400) {
-        if (!password && !isExcel) {
-          return NextResponse.json({ error: 'incorrect_password' }, { status: 422 })
-        }
-      }
-      throw apiErr
-    }
+    const response = await client.messages.create({
+      model: 'claude-opus-4-5',
+      max_tokens: 4000,
+      system: SYSTEM,
+      messages: [{ role: 'user', content: messageContent }]
+    })
 
     const text = response.content[0].type === 'text' ? response.content[0].text : ''
     const jsonMatch = text.match(/\{[\s\S]*\}/)
