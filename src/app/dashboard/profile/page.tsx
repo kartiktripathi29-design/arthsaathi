@@ -1,8 +1,9 @@
 'use client'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import { useAppStore } from '@/store/AppStore'
+import { MEGA_CATEGORIES, MegaCategory, tagTransactions, matchMega } from '@/lib/categories'
 
 const C = { fg:'#3A4B41', wheat:'#E6CFA7', wl:'#F5ECD8', wm:'#D4B98A', bg:'#FDFAF6', card:'#fff', border:'#E4DDD1', text:'#1C2B22', muted:'#7A8A7E', danger:'#B94040' }
 const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`
@@ -60,204 +61,242 @@ const S = {
   upload: (done=false): React.CSSProperties => ({ border:`1.5px dashed ${done?C.fg:C.border}`, borderRadius:6, padding:14, textAlign:'center' as const, background:done?'#EEF2EE':C.wl, cursor:done?'default':'pointer', display:'flex', flexDirection:'column' as const, alignItems:done?'flex-start':'center', justifyContent:done?'flex-start':'center', gap:6, minHeight:130 }),
 }
 
-// ── Smart detection helpers ──────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────
+// SMART REVIEW DETECTIONS
+// ──────────────────────────────────────────────────────────────────────────
+
 interface Detection {
   id: string
-  type: 'salary' | 'roundtrip' | 'merchant' | 'misc'
+  type: 'salary' | 'roundtrip' | 'mega_group' | 'interest' | 'misc'
+  priority: number  // lower = shown first
+  mega: MegaCategory
   title: string
   subtitle: string
-  amount: number
-  color: string
-  bgColor: string
+  amount: number       // monthly avg
+  totalAmount: number  // gross total
   transactions: any[]
+  brands?: string[]    // e.g. ["Amazon", "Myntra", "Flipkart"]
   note: string
   confirmLabel: string
   rejectLabel: string
-  confirmed: boolean | null
 }
 
 function detectPatterns(transactions: any[], months: number): Detection[] {
-  const detections: Detection[] = []
-  if (!transactions?.length) return detections
+  if (!transactions?.length) return []
+  const tagged = transactions
+  const dets: Detection[] = []
 
-  // 1. Detect likely salary — consistent large credit, same source, same date range
-  const credits = transactions.filter((t:any) => t.type === 'credit' && t.amount > 5000)
+  // ── 1. SALARY DETECTION (top priority) ──
+  // Look for consistent large credits from same source, monthly pattern
+  const credits = tagged.filter((t:any) => t.type === 'credit' && t.amount > 5000)
   const sourceGroups: Record<string, any[]> = {}
   credits.forEach((t:any) => {
-    const key = t.description.split('/')[0].trim().substring(0,20)
+    // Use first part of description as source key
+    const key = (t.description||'').split('/')[0].trim().substring(0,30)
     if (!sourceGroups[key]) sourceGroups[key] = []
     sourceGroups[key].push(t)
   })
+
   Object.entries(sourceGroups).forEach(([source, txns]) => {
-    if (txns.length >= 2) {
-      const amounts = txns.map((t:any) => t.amount)
-      const avg = amounts.reduce((a:number,b:number)=>a+b,0) / amounts.length
-      const variance = amounts.every((a:number) => Math.abs(a - avg) / avg < 0.25)
-      if (variance && avg > 10000) {
-        detections.push({
-          id: 'salary_' + source,
-          type: 'salary',
-          title: `Likely salary from ${source}`,
-          subtitle: `Consistent ${fmt(avg)}/month credit — same source, similar date each month`,
-          amount: Math.round(avg),
-          color: '#2A7A4A',
-          bgColor: '#EEF2EE',
-          transactions: txns,
-          note: 'Same source · consistent amount · monthly pattern → looks like salary or regular income',
-          confirmLabel: 'Yes, this is my salary',
-          rejectLabel: 'Not salary',
-          confirmed: null
-        })
-      }
+    if (txns.length < 2) return
+    const amounts = txns.map((t:any) => t.amount)
+    const avg = amounts.reduce((a:number,b:number)=>a+b,0) / amounts.length
+    const maxDev = Math.max(...amounts.map((a:number) => Math.abs(a - avg) / avg))
+
+    // Variance < 25% AND avg > 10K AND occurs in multiple months
+    if (maxDev < 0.30 && avg > 10000) {
+      const total = amounts.reduce((a:number,b:number)=>a+b,0)
+      dets.push({
+        id: 'salary_' + source.replace(/\W+/g,'_'),
+        type: 'salary',
+        priority: 1,
+        mega: 'salary',
+        title: 'Likely salary detected',
+        subtitle: `Consistent monthly credit from ${source}`,
+        amount: Math.round(avg),
+        totalAmount: total,
+        transactions: txns,
+        note: `Same source · variance ${Math.round(maxDev*100)}% · ${txns.length} occurrences. Looks like salary or recurring income — confirm to set monthly salary.`,
+        confirmLabel: 'Yes, this is salary',
+        rejectLabel: 'Not salary',
+      })
     }
   })
 
-  // 2. Detect round-trip transactions (same amount sent and received within 7 days)
-  const debits = transactions.filter((t:any) => t.type === 'debit')
-  const rtPairs: any[] = []
+  // ── 2. ROUND-TRIP DETECTION ──
+  const debits = tagged.filter((t:any) => t.type === 'debit')
+  const rtPairs: Array<{credit:any; debit:any; amount:number}> = []
+  const usedCredits = new Set<any>(), usedDebits = new Set<any>()
   debits.forEach((d:any) => {
+    if (usedDebits.has(d)) return
     const match = credits.find((c:any) =>
+      !usedCredits.has(c) &&
       Math.abs(c.amount - d.amount) < 1 &&
-      c !== d &&
-      !rtPairs.find((p:any) => p.credit === c || p.debit === d)
+      c !== d
     )
-    if (match) rtPairs.push({ credit: match, debit: d, amount: d.amount })
+    if (match) {
+      rtPairs.push({ credit: match, debit: d, amount: d.amount })
+      usedCredits.add(match); usedDebits.add(d)
+    }
   })
   if (rtPairs.length > 0) {
-    const total = rtPairs.reduce((s:number, p:any) => s + p.amount, 0)
-    detections.push({
+    const total = rtPairs.reduce((s,p)=>s+p.amount,0)
+    dets.push({
       id: 'roundtrip',
       type: 'roundtrip',
+      priority: 2,
+      mega: 'transfer',
       title: 'Round-trip transfers found',
-      subtitle: `${rtPairs.length} transfer${rtPairs.length>1?'s':''} sent and returned — likely temporary`,
-      amount: total,
-      color: '#8A6A1A',
-      bgColor: '#FBF6EE',
-      transactions: rtPairs.flatMap((p:any) => [p.credit, p.debit]),
-      note: 'Same amount in and out. Netting off removes these from both income and expenses for accurate P&L.',
-      confirmLabel: 'Net off (recommended)',
+      subtitle: `${rtPairs.length} transfer${rtPairs.length>1?'s':''} sent and returned`,
+      amount: Math.round(total / months),
+      totalAmount: total,
+      transactions: rtPairs.flatMap(p => [p.credit, p.debit]),
+      note: 'Same amount sent and received. Netting off keeps your P&L accurate by removing these from both income and expenses.',
+      confirmLabel: 'Net off',
       rejectLabel: 'Keep both',
-      confirmed: null
     })
   }
 
-  // 3. Known merchant name resolution
-  const merchantMap: Record<string, string> = {
-    'NEXTBILLION': 'Groww (Nextbillion Technology)',
-    'BILLIONBRAINS': 'Groww',
-    'MYNTRA': 'Myntra — Shopping',
-    'SWIGGY': 'Swiggy — Food delivery',
-    'ZOMATO': 'Zomato — Food delivery',
-    'AMAZON': 'Amazon',
-    'FLIPKART': 'Flipkart',
+  // ── 3. INTEREST / DIVIDEND DETECTION (auto-route to Other Income) ──
+  const interestTxns = tagged.filter((t:any) => t.mega === 'interest' && t.type === 'credit')
+  if (interestTxns.length > 0) {
+    const total = interestTxns.reduce((s:number, t:any) => s + t.amount, 0)
+    const brands = Array.from(new Set(interestTxns.map((t:any) => t.brand).filter(Boolean)))
+    dets.push({
+      id: 'interest',
+      type: 'interest',
+      priority: 3,
+      mega: 'interest',
+      title: 'Interest / Dividend income',
+      subtitle: `${interestTxns.length} credit${interestTxns.length>1?'s':''} totalling ${fmt(total)} → Other Income tab`,
+      amount: Math.round(total / months),
+      totalAmount: total,
+      transactions: interestTxns,
+      brands,
+      note: 'Interest from bank deposits and dividends from shares are taxable income — routing to Other Income tab where it belongs.',
+      confirmLabel: 'Confirm as income',
+      rejectLabel: 'Keep here',
+    })
   }
-  Object.entries(merchantMap).forEach(([key, name]) => {
-    const matched = transactions.filter((t:any) => t.description?.toUpperCase().includes(key))
-    if (matched.length > 0) {
-      const total = matched.reduce((s:number,t:any) => s + t.amount, 0)
-      if (total > 500) {
-        detections.push({
-          id: 'merchant_' + key,
-          type: 'merchant',
-          title: `${key.charAt(0)+key.slice(1).toLowerCase()} identified`,
-          subtitle: `${matched.length} transactions totalling ${fmt(Math.round(total/months))}/month`,
-          amount: Math.round(total/months),
-          color: '#2A5A8A',
-          bgColor: '#EEF4FD',
-          transactions: matched.slice(0,5),
-          note: `Registered as: ${name}`,
-          confirmLabel: 'Categorisation looks right',
-          rejectLabel: 'Change category',
-          confirmed: null
-        })
-      }
-    }
+
+  // ── 4. MEGA-CATEGORY GROUPS (Shopping, Food, Investments, etc.) ──
+  // Group debit transactions by mega-category (excluding misc, transfer, salary, interest)
+  const groupableMegas: MegaCategory[] = ['shopping','food','investments','transport','entertainment','utilities','healthcare']
+  groupableMegas.forEach(mega => {
+    const matched = tagged.filter((t:any) => t.mega === mega && t.type === 'debit')
+    if (matched.length === 0) return
+    const total = matched.reduce((s:number,t:any) => s + t.amount, 0)
+    if (total < 200) return  // skip tiny totals
+    const brands = Array.from(new Set(matched.map((t:any) => t.brand).filter(Boolean))) as string[]
+    const info = MEGA_CATEGORIES[mega]
+    dets.push({
+      id: 'mega_' + mega,
+      type: 'mega_group',
+      priority: 5,
+      mega,
+      title: `${info.label} ${brands.length>0?`(${brands.slice(0,3).join(', ')}${brands.length>3?'...':''})`:''}`,
+      subtitle: `${matched.length} transactions · ${fmt(Math.round(total/months))}/month`,
+      amount: Math.round(total / months),
+      totalAmount: total,
+      transactions: matched.slice().sort((a:any,b:any)=>b.amount-a.amount),
+      brands,
+      note: brands.length > 0 ? `Identified merchants: ${brands.join(', ')}` : `${matched.length} transactions in this category.`,
+      confirmLabel: 'Looks right',
+      rejectLabel: 'Change category',
+    })
   })
 
-  return detections
+  return dets.sort((a,b) => a.priority - b.priority || b.amount - a.amount)
 }
 
-function computePnL(transactions: any[], expenses: any[], variable: any[], savings: any[], salary: any, otherIncome: number, months: number, confirmedDetections: Record<string, boolean>) {
-  if (!transactions?.length) return null
-  const mo = (n:number) => Math.round((n||0) / months)
-  const s: Record<string, number> = {}
-  transactions.forEach((t:any) => {
-    if (!s[t.category]) s[t.category] = 0
-    s[t.category] += t.amount
-  })
+// ──────────────────────────────────────────────────────────────────────────
+// MONTHLY P&L COMPUTATION
+// ──────────────────────────────────────────────────────────────────────────
 
-  // Round-trip netting
-  const netRoundtrip = confirmedDetections['roundtrip'] === true
-  const rtAmount = netRoundtrip ? (transactions.filter((t:any)=>t.type==='credit').reduce((sum:number,t:any)=>{
-    const match = transactions.find((d:any)=>d.type==='debit'&&Math.abs(d.amount-t.amount)<1)
-    return match ? sum + t.amount : sum
-  },0)) : 0
+interface MonthlyPnL {
+  monthKey: string  // "01-2026"
+  monthLabel: string  // "Jan 2026"
+  income: number
+  expenses: number
+  net: number
+  byCategory: Record<MegaCategory, number>
+}
 
-  const totalCredits = transactions.filter((t:any)=>t.type==='credit').reduce((s:number,t:any)=>s+t.amount,0)
-  const totalDebits = transactions.filter((t:any)=>t.type==='debit').reduce((s:number,t:any)=>s+t.amount,0)
-
-  const mappedDebits = (s.food||0)+(s.grocery||0)+(s.fuel||0)+(s.shopping||0)+(s.entertainment||0)+(s.insurance||0)+(s.utility||0)+(s.medical||0)+(s.education||0)+(s.emi||0)+(s.rent||0)+(s.sip||0)+(s.investment||0)
-  const miscDebits = totalDebits - mappedDebits - (s.transfer||0) - rtAmount
-
-  // Income
-  const salaryIncome = salary?.netSalary || mo(s.salary||0)
-  const totalIncome = salaryIncome + otherIncome
-
-  // Expenses
-  const expenseItems = [
-    { label:'Food & Dining', amount: mo(s.food||0), icon:'🍽️' },
-    { label:'Groceries', amount: mo(s.grocery||0), icon:'🛒' },
-    { label:'Shopping', amount: mo(s.shopping||0), icon:'🛍️' },
-    { label:'Investments / SIP', amount: mo(s.sip||0)+mo(s.investment||0), icon:'📈' },
-    { label:'Fuel & Transport', amount: mo(s.fuel||0), icon:'🚗' },
-    { label:'Utilities & Recharges', amount: mo(s.utility||0), icon:'⚡' },
-    { label:'Insurance', amount: mo(s.insurance||0), icon:'🛡️' },
-    { label:'EMI / Loan', amount: mo(s.emi||0)+mo(s.rent||0), icon:'🏠' },
-    { label:'Entertainment', amount: mo(s.entertainment||0), icon:'🎬' },
-    { label:'Medical', amount: mo(s.medical||0), icon:'💊' },
-    { label:'Personal transfers (net)', amount: netRoundtrip ? 0 : mo(s.transfer||0), icon:'🔄', netted: netRoundtrip },
-    { label:'Miscellaneous / Unaccounted', amount: Math.max(0, mo(miscDebits)), icon:'📦' },
-  ].filter(e => e.amount > 0)
-
-  const totalExpenses = expenseItems.reduce((sum,e)=>sum+e.amount,0)
-  const netSurplus = totalIncome - totalExpenses
-  const savingsRate = totalIncome > 0 ? (netSurplus/totalIncome)*100 : 0
-
-  // Monthly cash flows
-  const monthlyData: Record<string, {in:number, out:number}> = {}
-  transactions.forEach((t:any) => {
-    const parts = t.date?.split(/[-/]/) || []
-    if (parts.length < 3) return
-    const key = `${parts[1]?.padStart?.(2,'0')}-${parts[2]}`
-    if (!monthlyData[key]) monthlyData[key] = { in:0, out:0 }
-    if (t.type==='credit') monthlyData[key].in += t.amount
-    else monthlyData[key].out += t.amount
-  })
-
+function computeMonthlyPnL(
+  transactions: any[],
+  confirmedDetections: Record<string, boolean>,
+  rejectedSalaryIds: Set<string>,
+  manualOverrides: Record<string, MegaCategory>
+): MonthlyPnL[] {
+  const monthMap: Record<string, MonthlyPnL> = {}
   const monthNames: Record<string,string> = {'01':'Jan','02':'Feb','03':'Mar','04':'Apr','05':'May','06':'Jun','07':'Jul','08':'Aug','09':'Sep','10':'Oct','11':'Nov','12':'Dec'}
-  const cashFlows = Object.entries(monthlyData)
-    .sort(([a],[b])=>a.localeCompare(b))
-    .map(([key,val]) => {
-      const [mo, yr] = key.split('-')
-      return { month:`${monthNames[mo]||mo} ${yr}`, in:Math.round(val.in), out:Math.round(val.out), net:Math.round(val.in-val.out) }
-    })
 
-  return { totalIncome, totalExpenses, netSurplus, savingsRate, expenseItems, cashFlows, salaryIncome }
+  // Round-trip pairs to subtract if user confirmed netting
+  const rtNetOff = confirmedDetections['roundtrip'] === true
+  const usedCredits = new Set<any>(), usedDebits = new Set<any>()
+  if (rtNetOff) {
+    const credits = transactions.filter((t:any) => t.type === 'credit')
+    const debits = transactions.filter((t:any) => t.type === 'debit')
+    debits.forEach((d:any) => {
+      if (usedDebits.has(d)) return
+      const match = credits.find((c:any) => !usedCredits.has(c) && Math.abs(c.amount - d.amount) < 1)
+      if (match) { usedCredits.add(match); usedDebits.add(d) }
+    })
+  }
+
+  transactions.forEach((t:any) => {
+    if (rtNetOff && (usedCredits.has(t) || usedDebits.has(t))) return
+    const parts = (t.date||'').split(/[-/]/)
+    if (parts.length < 3) return
+    const mo = parts[1]?.padStart?.(2,'0') || parts[1]
+    const yr = parts[2]
+    const key = `${mo}-${yr}`
+    if (!monthMap[key]) {
+      monthMap[key] = {
+        monthKey: key,
+        monthLabel: `${monthNames[mo]||mo} ${yr}`,
+        income: 0, expenses: 0, net: 0,
+        byCategory: {} as Record<MegaCategory, number>
+      }
+    }
+    const m = monthMap[key]
+    // Use mega category, with manual override priority
+    const mega: MegaCategory = manualOverrides[t.id || `${t.date}_${t.amount}`] || t.mega || 'misc'
+    const info = MEGA_CATEGORIES[mega]
+
+    if (mega === 'salary' || mega === 'interest' || mega === 'cashback' || (t.type === 'credit' && info?.routesTo === 'income')) {
+      m.income += t.amount
+    } else if (t.type === 'credit') {
+      // unallocated credit — could be a transfer/refund
+      m.income += t.amount
+    } else {
+      m.expenses += t.amount
+    }
+    m.byCategory[mega] = (m.byCategory[mega] || 0) + t.amount
+  })
+
+  return Object.values(monthMap)
+    .map(m => ({ ...m, net: m.income - m.expenses }))
+    .sort((a,b) => a.monthKey.localeCompare(b.monthKey))
 }
 
 type MainTab = 'docs' | 'income' | 'expenses' | 'pnl'
 
 export default function ProfilePage() {
-  const { salary, setSalary, aisData, setAisData } = useAppStore()
+  const { salary, setSalary, aisData, setAisData, otherIncome, setOtherIncome } = useAppStore() as any
   const [mainTab, setMainTab] = useState<MainTab>('docs')
   const [incTab, setIncTab] = useState<'review'|'salary'|'other'>('review')
   const [salMode, setSalMode] = useState<'slip'|'offer'|'manual'>('slip')
   const [loadingDoc, setLoadingDoc] = useState<string|null>(null)
   const [bankData, setBankData] = useState<any>(null)
+  const [taggedTxns, setTaggedTxns] = useState<any[]>([])
+  const [bankPeriod, setBankPeriod] = useState<{from:string; to:string}|null>(null)
+  const [bankMonths, setBankMonths] = useState(1)
   const [detections, setDetections] = useState<Detection[]>([])
   const [confirmedDetections, setConfirmedDetections] = useState<Record<string,boolean>>({})
   const [expandedDetections, setExpandedDetections] = useState<Record<string,boolean>>({})
-  const [bankMonths, setBankMonths] = useState(1)
+  const [manualOverrides, setManualOverrides] = useState<Record<string, MegaCategory>>({})
+  const [categoryModal, setCategoryModal] = useState<{ open:boolean; detectionId:string|null }>({ open:false, detectionId:null })
   const [pwdModal, setPwdModal] = useState<{ open:boolean; type:string|null; file:File|null; error:string }>({ open:false, type:null, file:null, error:'' })
   const [pwd, setPwd] = useState('')
   const bankRef = useRef<HTMLInputElement>(null)
@@ -300,13 +339,35 @@ export default function ProfilePage() {
       const b = localStorage.getItem('av_bank')
       if (b) {
         const bd = JSON.parse(b)
-        setBankData(bd)
-        const months = detectMonths(bd.transactions||[])
-        setBankMonths(months)
-        setDetections(detectPatterns(bd.transactions||[], months))
+        loadBankData(bd)
       }
     } catch {}
   }, [])
+
+  function detectMonths(transactions: any[]): { months:number; from:string; to:string } {
+    if (!transactions.length) return { months:1, from:'', to:'' }
+    const keys = new Set<string>()
+    let minDate='', maxDate=''
+    transactions.forEach((t:any) => {
+      const parts = (t.date||'').split(/[-/]/)
+      if (parts.length >= 3) {
+        keys.add(`${parts[1]}-${parts[2]}`)
+        if (!minDate || t.date < minDate) minDate = t.date
+        if (!maxDate || t.date > maxDate) maxDate = t.date
+      }
+    })
+    return { months: Math.max(1, keys.size), from:minDate, to:maxDate }
+  }
+
+  function loadBankData(bd: any) {
+    setBankData(bd)
+    const tagged = tagTransactions(bd.transactions||[])
+    setTaggedTxns(tagged)
+    const { months, from, to } = detectMonths(tagged)
+    setBankMonths(months)
+    setBankPeriod({ from, to })
+    setDetections(detectPatterns(tagged, months))
+  }
 
   const saveProfile = useCallback((exp=expenses, sav=savings, vari=variable) => {
     try { localStorage.setItem('av_profile', JSON.stringify({ expenses:exp, savings:sav, variable:vari })) } catch {}
@@ -328,16 +389,6 @@ export default function ProfilePage() {
     if(sel.size>0){setOtherSel(sel);setOtherVals(vals)}
   }, [aisData])
 
-  function detectMonths(transactions: any[]): number {
-    if (!transactions.length) return 1
-    const keys = new Set<string>()
-    transactions.forEach((t:any) => {
-      const parts = (t.date||'').split(/[-/]/)
-      if (parts.length >= 3) keys.add(`${parts[1]}-${parts[2]}`)
-    })
-    return Math.max(1, keys.size)
-  }
-
   const salMonthly = salary?.netSalary || 0
   const otherAnnual = Array.from(otherSel).reduce((s,k)=>s+(otherVals[k]||0),0)
   const totalExp = expenses.reduce((s,e)=>s+e.amount,0)
@@ -350,7 +401,8 @@ export default function ProfilePage() {
   if(trulyFree<0)health-=30
   health=Math.max(0,Math.min(100,health))
 
-  const pnl = bankData ? computePnL(bankData.transactions||[], expenses, variable, savings, salary, otherAnnual/12, bankMonths, confirmedDetections) : null
+  const monthlyPnL = useMemo(() => taggedTxns.length ? computeMonthlyPnL(taggedTxns, confirmedDetections, new Set(), manualOverrides) : [],
+    [taggedTxns, confirmedDetections, manualOverrides])
 
   // ─ Bank statement upload ──────────────────────────────────────────────────
   const handleBankFile = async (file:File, password='') => {
@@ -375,43 +427,9 @@ export default function ProfilePage() {
         if (errCode==='aes_pdf_unsupported') { toast.error('This PDF is AES-encrypted. Try downloading as Excel from your bank app.', { duration:6000 }); return }
         toast.error(json.message || json.error || 'Failed to parse statement'); return
       }
-      setBankData(json.data)
       try { localStorage.setItem('av_bank', JSON.stringify(json.data)) } catch {}
-      const months = detectMonths(json.data.transactions||[])
-      setBankMonths(months)
-      const dets = detectPatterns(json.data.transactions||[], months)
-      setDetections(dets)
-      const mo = (n:number) => Math.round((n||0)/months)
-      const s = json.data.summary || {}
-      const newExp = expenses.map(e => {
-        if (e.label.includes('Rent')) return { ...e, amount: mo(s.rent)||e.amount }
-        if (e.label.includes('Car')||e.label.includes('EMI')) return { ...e, amount: mo(s.emi)||e.amount }
-        if (e.label.includes('Groceries')) return { ...e, amount: mo(s.grocery)||e.amount }
-        if (e.label.includes('Insurance')) return { ...e, amount: mo(s.insurance)||e.amount }
-        return e
-      })
-      const newVar = variable.map(v => {
-        if (v.label.includes('Fuel')||v.label.includes('Transport')) return { ...v, amount: mo(s.fuel)||v.amount }
-        if (v.label.includes('Dining')||v.label.includes('Takeaway')) return { ...v, amount: mo(s.food)||v.amount }
-        if (v.label.includes('Shopping')) return { ...v, amount: mo(s.shopping)||v.amount }
-        if (v.label.includes('Entertainment')) return { ...v, amount: mo(s.entertainment)||v.amount }
-        if (v.label.includes('Medicine')) return { ...v, amount: mo(s.medical)||v.amount }
-        return v
-      })
-      const newSav = savings.map(sv => {
-        if (sv.label.includes('SIP')||sv.label.includes('Mutual')) return { ...sv, amount: mo(s.sip)||sv.amount }
-        if (sv.label.includes('RD')||sv.label.includes('FD')) return { ...sv, amount: mo(s.investment)||sv.amount }
-        return sv
-      })
-      const salaryCredits = (json.data.transactions||[]).filter((t:any)=>t.type==='credit'&&t.category==='salary').reduce((sum:number,t:any)=>sum+t.amount,0)
-      const monthlySal = mo(salaryCredits)
-      if (monthlySal > 0 && !salary) {
-        const empTxn = (json.data.transactions||[]).find((t:any)=>t.type==='credit'&&t.category==='salary')
-        setSalary({ netSalary:monthlySal, grossSalary:Math.round(monthlySal*1.2), employerName: empTxn?.description?.split('/')?.[0]?.replace(/NEFT\s*IN\s*/i,'')?.trim()||'Employer' } as any)
-      }
-      setExpenses(newExp); setVariable(newVar); setSavings(newSav)
-      saveProfile(newExp, newSav, newVar)
-      toast.success(`Statement read · ${json.data.transactions?.length||0} transactions · ${months} months · ${dets.length} items to review`, { id:tid, duration:5000 })
+      loadBankData(json.data)
+      toast.success(`Statement read · ${json.data.transactions?.length||0} transactions across ${detectMonths(json.data.transactions||[]).months} months`, { id:tid, duration:5000 })
       setMainTab('income'); setIncTab('review')
     } catch (e:any) {
       const errStr=(e.message||'').toLowerCase()
@@ -420,9 +438,10 @@ export default function ProfilePage() {
     } finally { setLoadingDoc(null) }
   }
 
-  const clearBank = () => { setBankData(null); setDetections([]); setConfirmedDetections({}); try { localStorage.removeItem('av_bank') } catch {} }
-
-  const fileToBase64 = (f:File): Promise<string> => new Promise((res,rej) => { const r=new FileReader(); r.onload=()=>res((r.result as string).split(',')[1]); r.onerror=rej; r.readAsDataURL(f) })
+  const clearBank = () => {
+    setBankData(null); setTaggedTxns([]); setDetections([]); setConfirmedDetections({}); setBankPeriod(null); setBankMonths(1); setManualOverrides({})
+    try { localStorage.removeItem('av_bank') } catch {}
+  }
 
   const handleAISFile = (file:File, type:'ais'|'26as') => {
     if (file.type==='application/pdf'&&type==='ais') { setPwdModal({ open:true, type, file, error:'' }); setPwd(''); return }
@@ -474,18 +493,59 @@ export default function ProfilePage() {
     else processAIS(pwdModal.file, pwdModal.type, pwd)
   }
 
+  // ─ Detection actions ────────────────────────────────────────────────────
   const confirmDetection = (id:string, confirmed:boolean) => {
+    const det = detections.find(d=>d.id===id)
     setConfirmedDetections(prev => ({ ...prev, [id]: confirmed }))
-    if (confirmed) {
-      const det = detections.find(d=>d.id===id)
-      if (det?.type==='salary') {
-        setSalary({ netSalary:det.amount, grossSalary:Math.round(det.amount*1.2), employerName:det.title.replace('Likely salary from ','') } as any)
+
+    if (!confirmed && det?.type === 'mega_group') {
+      // Reject = open category change modal
+      setCategoryModal({ open:true, detectionId:id })
+      return
+    }
+
+    if (confirmed && det) {
+      if (det.type === 'salary') {
+        setSalary({
+          netSalary: det.amount,
+          grossSalary: Math.round(det.amount * 1.2),
+          employerName: det.subtitle.replace('Consistent monthly credit from ','').substring(0,30) || 'Detected income'
+        } as any)
         toast.success(`Salary set to ${fmt(det.amount)}/month`)
+      } else if (det.type === 'interest') {
+        // Add to other income
+        const annual = det.totalAmount * (12/bankMonths)
+        const newSel = new Set(otherSel); newSel.add('fd')
+        setOtherSel(newSel)
+        setOtherVals(prev => ({ ...prev, fd: Math.round(annual) }))
+        toast.success(`${fmt(annual)} routed to Other Income (FD/Interest)`)
+      } else if (det.type === 'roundtrip') {
+        toast.success('Round-trips netted off')
       }
     }
   }
 
-  const pnlData = pnl
+  const reassignCategory = (newMega: MegaCategory) => {
+    const detId = categoryModal.detectionId
+    if (!detId) return
+    const det = detections.find(d=>d.id===detId)
+    if (!det) return
+    const overrides: Record<string, MegaCategory> = { ...manualOverrides }
+    det.transactions.forEach(t => {
+      const key = t.id || `${t.date}_${t.amount}`
+      overrides[key] = newMega
+    })
+    setManualOverrides(overrides)
+    setCategoryModal({ open:false, detectionId:null })
+    toast.success(`Reassigned to ${MEGA_CATEGORIES[newMega].label}`)
+  }
+
+  // ─ Period mismatch check ────────────────────────────────────────────────
+  const periodMismatch = useMemo(() => {
+    if (!salary?.month || !bankPeriod?.from) return null
+    const slipMo = salary.month  // expecting "March 2026" or similar
+    return null  // TODO: real check based on slip date format
+  }, [salary, bankPeriod])
 
   return (
     <div style={{ fontFamily:'"Sora",-apple-system,sans-serif', maxWidth:860 }}>
@@ -496,7 +556,6 @@ export default function ProfilePage() {
         <p style={{ fontSize:13, color:C.muted, margin:0 }}>Your complete financial picture</p>
       </div>
 
-      {/* MAIN TABS */}
       <div style={{ display:'flex', borderBottom:`1px solid ${C.border}`, marginBottom:20, gap:0, overflowX:'auto' as const }}>
         {([
           { key:'docs', label:'📁 Documents' },
@@ -508,7 +567,7 @@ export default function ProfilePage() {
         ))}
       </div>
 
-      {/* ── DOCUMENTS TAB ── */}
+      {/* DOCUMENTS TAB */}
       {mainTab==='docs' && (
         <div>
           <p style={{ fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:8 }}>Step 1 — Bank statement (recommended)</p>
@@ -518,13 +577,13 @@ export default function ProfilePage() {
               {bankData ? (
                 <>
                   <p style={{ fontSize:14, fontWeight:700, color:C.fg, margin:'0 0 3px' }}>✓ {bankData.bank||'Bank'} statement uploaded</p>
-                  <p style={{ fontSize:11.5, color:C.muted, margin:0 }}>{bankData.transactions?.length||0} transactions · {bankMonths} month{bankMonths>1?'s':''} · {detections.length} items to review</p>
+                  <p style={{ fontSize:11.5, color:C.muted, margin:0 }}>{bankData.transactions?.length||0} transactions · {bankMonths} month{bankMonths>1?'s':''} · {detections.length} items in smart review</p>
                 </>
               ) : (
                 <>
                   <p style={{ fontSize:14, fontWeight:700, color:C.text, margin:'0 0 3px' }}>Bank Statement</p>
                   <p style={{ fontSize:11.5, color:C.muted, margin:0, lineHeight:1.55 }}>Any Indian bank · PDF, Excel, CSV or photo · Password supported</p>
-                  <p style={{ fontSize:10.5, color:C.muted, margin:'4px 0 0' }}>⚡ Auto-fills income, expenses & savings · monthly averages calculated</p>
+                  <p style={{ fontSize:10.5, color:C.muted, margin:'4px 0 0' }}>⚡ Auto-categorises Amazon/Swiggy/Groww · detects salary patterns · routes interest to Other Income</p>
                 </>
               )}
             </div>
@@ -576,7 +635,7 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* ── INCOME TAB ── */}
+      {/* INCOME TAB */}
       {mainTab==='income' && (
         <div>
           <div style={{ display:'flex', borderBottom:`1px solid ${C.border}`, marginBottom:18 }}>
@@ -587,7 +646,6 @@ export default function ProfilePage() {
             <button onClick={() => setIncTab('other')} style={S.stab(incTab==='other')}>🏦 Other Income</button>
           </div>
 
-          {/* Smart Review */}
           {incTab==='review' && (
             <div>
               {!bankData ? (
@@ -599,16 +657,20 @@ export default function ProfilePage() {
                   <div style={{ background:'#1E293B', borderRadius:8, padding:'12px 16px', marginBottom:14 }}>
                     <p style={{ fontSize:10, color:'rgba(230,207,167,0.5)', letterSpacing:'0.08em', margin:'0 0 6px' }}>SMART REVIEW</p>
                     <p style={{ fontSize:13, color:'rgba(255,255,255,0.75)', margin:0, lineHeight:1.6 }}>
-                      ArthVo found {detections.length} items that need your input. Confirm or reject each to improve your P&L accuracy.
+                      ArthVo found {detections.length} items grouped by type. Confirm or change category for each — improves your P&L accuracy.
                     </p>
                   </div>
                   {detections.map(det => {
                     const confirmed = confirmedDetections[det.id]
                     const expanded = expandedDetections[det.id]
+                    const info = MEGA_CATEGORIES[det.mega]
+                    const isSalary = det.type === 'salary'
                     return (
-                      <div key={det.id} style={{ ...S.card, border:`1px solid ${confirmed===true?C.fg:confirmed===false?C.border:det.bgColor==='#EEF2EE'?'#C8D8C8':det.bgColor==='#EEF4FD'?'#B5D4F4':'#EDD898'}` }}>
-                        <div style={{ padding:'10px 14px', background:det.bgColor, borderBottom:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
-                          <span style={{ fontSize:13, fontWeight:600, color:det.color }}>{det.title}</span>
+                      <div key={det.id} style={{ ...S.card, border:`${isSalary?'2px':'1px'} solid ${confirmed===true?C.fg:isSalary?'#2A7A4A':info.borderColor}` }}>
+                        <div style={{ padding:'10px 14px', background:isSalary?'#EEF2EE':info.bgColor, borderBottom:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
+                          <span style={{ fontSize:13, fontWeight:600, color:isSalary?'#2A7A4A':info.color, display:'flex', alignItems:'center', gap:6 }}>
+                            <span style={{ fontSize:15 }}>{isSalary?'💰':info.icon}</span>{det.title}
+                          </span>
                           <div style={{ display:'flex', gap:6, alignItems:'center', flexShrink:0 }}>
                             {confirmed === undefined || confirmed === null ? (
                               <>
@@ -617,7 +679,7 @@ export default function ProfilePage() {
                               </>
                             ) : (
                               <span style={{ fontSize:11, padding:'3px 10px', borderRadius:4, background:confirmed?'#EEF2EE':'#FBF0F0', color:confirmed?'#2A7A4A':C.danger, border:`0.5px solid ${confirmed?'#C8D8C8':'#F0CECE'}` }}>
-                                {confirmed ? '✓ Confirmed' : '✗ Rejected'}
+                                {confirmed ? '✓ Confirmed' : '✗ Reassigned'}
                               </span>
                             )}
                             <button onClick={() => setExpandedDetections(prev=>({...prev,[det.id]:!expanded}))} style={{ width:22, height:22, borderRadius:4, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:14, color:C.fg, display:'flex', alignItems:'center', justifyContent:'center' }}>
@@ -627,17 +689,18 @@ export default function ProfilePage() {
                         </div>
                         <div style={{ ...S.row, fontSize:12.5 }}>
                           <span>{det.subtitle}</span>
-                          <span style={{ fontWeight:600, color:det.color }}>{fmt(det.amount)}/mo</span>
+                          <span style={{ fontWeight:600, color:isSalary?'#2A7A4A':info.color }}>{fmt(det.amount)}/mo</span>
                         </div>
                         {expanded && (
                           <div>
-                            {det.transactions.slice(0,6).map((t:any, i:number) => (
+                            {det.transactions.slice(0,8).map((t:any, i:number) => (
                               <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 14px', fontSize:11.5, borderBottom:`1px solid #FAF7F2`, background:'#FAFAF8', gap:12 }}>
-                                <span style={{ color:C.muted, flexShrink:0 }}>{t.date}</span>
-                                <span style={{ color:C.text, flex:1 }}>{t.description}</span>
+                                <span style={{ color:C.muted, flexShrink:0, minWidth:60 }}>{t.date}</span>
+                                <span style={{ color:C.text, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>{t.brand ? <strong>{t.brand}</strong> : ''}{t.brand?' — ':''}{t.description}</span>
                                 <span style={{ fontWeight:600, color:t.type==='credit'?'#2A7A4A':C.danger, flexShrink:0 }}>{t.type==='credit'?'+':'-'}{fmt(t.amount)}</span>
                               </div>
                             ))}
+                            {det.transactions.length > 8 && <div style={{ padding:'6px 14px', fontSize:11, color:C.muted, background:'#FAFAF8', textAlign:'center' as const }}>+{det.transactions.length-8} more</div>}
                             <div style={{ padding:'8px 14px', background:C.wl, fontSize:11.5, color:C.fg, lineHeight:1.6 }}>{det.note}</div>
                           </div>
                         )}
@@ -652,7 +715,6 @@ export default function ProfilePage() {
             </div>
           )}
 
-          {/* Salary */}
           {incTab==='salary' && (
             <div>
               <div style={{ display:'flex', gap:2, background:'#F0EBE0', borderRadius:5, padding:3, marginBottom:16, width:'fit-content' }}>
@@ -694,10 +756,9 @@ export default function ProfilePage() {
             </div>
           )}
 
-          {/* Other income */}
           {incTab==='other' && (
             <div>
-              {aisData&&otherSel.size>0&&<div style={S.insight}>{otherSel.size} sources auto-filled from AIS</div>}
+              {aisData&&otherSel.size>0&&<div style={S.insight}>{otherSel.size} sources auto-filled from AIS / bank statement</div>}
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:16 }}>
                 {OTHER_TYPES.map(type => {
                   const sel = otherSel.has(type.key)
@@ -722,7 +783,7 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* ── EXPENSES & SAVINGS TAB ── */}
+      {/* EXPENSES & SAVINGS TAB */}
       {mainTab==='expenses' && (
         <div>
           {salMonthly>0 && (
@@ -804,117 +865,138 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* ── P&L + CASH FLOW TAB ── */}
+      {/* P&L + CASH FLOW TAB — MONTHLY BREAKDOWN */}
       {mainTab==='pnl' && (
         <div>
           {!bankData ? (
             <div style={S.insight}>
-              📊 Upload your bank statement in the Documents tab to see your P&L and cash flow.
+              📊 Upload your bank statement in the Documents tab to see your monthly P&L and cash flow.
               <div style={{ marginTop:8 }}>
                 <button onClick={() => setMainTab('docs')} style={{ ...S.btn(true), padding:'8px 16px' }}>Upload Statement →</button>
               </div>
             </div>
-          ) : pnlData ? (
+          ) : monthlyPnL.length > 0 ? (
             <>
-              {/* Metric strip */}
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:1, background:C.border, border:`1px solid ${C.border}`, borderRadius:6, overflow:'hidden', marginBottom:16 }}>
-                {[
-                  { l:'Monthly income', v:fmt(pnlData.totalIncome), pos:true },
-                  { l:'Monthly expenses', v:fmt(pnlData.totalExpenses), pos:false },
-                  { l:'Net surplus', v:fmt(pnlData.netSurplus), pos:pnlData.netSurplus>=0 },
-                  { l:'Savings rate', v:`${Math.round(pnlData.savingsRate)}%`, pos:pnlData.savingsRate>=20 },
-                ].map((s,i) => (
-                  <div key={i} style={{ background:C.card, padding:'13px 16px' }}>
-                    <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>{s.l}</div>
-                    <div style={{ fontSize:17, fontWeight:700, color:s.pos?C.fg:C.danger, letterSpacing:'-0.02em' }}>{s.v}</div>
-                  </div>
-                ))}
+              {/* Period info */}
+              <div style={{ ...S.insight, marginBottom:14 }}>
+                📅 Period: <strong>{bankPeriod?.from || ''} to {bankPeriod?.to || ''}</strong> · {bankMonths} month{bankMonths>1?'s':''} · {taggedTxns.length} transactions
               </div>
 
-              {/* P&L */}
+              {/* Monthly summary table */}
               <div style={S.card}>
-                <div style={S.cardHead}>Profit & Loss — monthly avg ({bankData.period||`${bankMonths} months`})</div>
-                <div style={{ padding:'8px 14px', background:'#FAFAF8', borderBottom:`1px solid ${C.border}`, fontSize:10, fontWeight:700, color:C.muted, letterSpacing:'0.06em', textTransform:'uppercase' as const }}>Income</div>
-                <div style={{ ...S.row, fontWeight:500 }}>
-                  <span>Salary / Regular income</span>
-                  <span style={{ color:'#2A7A4A', fontWeight:600 }}>+{fmt(pnlData.salaryIncome)}</span>
-                </div>
-                {otherAnnual > 0 && (
-                  <div style={S.row}>
-                    <span>Other income</span>
-                    <span style={{ color:'#2A7A4A', fontWeight:600 }}>+{fmt(Math.round(otherAnnual/12))}</span>
-                  </div>
-                )}
-                <div style={{ ...S.row, background:C.wl, fontWeight:700, fontSize:13 }}>
-                  <span>Total income</span>
-                  <span style={{ color:'#2A7A4A' }}>+{fmt(pnlData.totalIncome)}</span>
-                </div>
-
-                <div style={{ padding:'8px 14px', background:'#FAFAF8', borderBottom:`1px solid ${C.border}`, fontSize:10, fontWeight:700, color:C.muted, letterSpacing:'0.06em', textTransform:'uppercase' as const }}>Expenses</div>
-                {pnlData.expenseItems.map((e:any) => (
-                  <div key={e.label} style={S.row}>
-                    <span style={{ display:'flex', alignItems:'center', gap:6 }}>
-                      <span style={{ fontSize:14 }}>{e.icon}</span>
-                      {e.label}
-                      {e.netted && <span style={{ fontSize:10, background:'#EEF2EE', color:'#2A7A4A', padding:'1px 7px', borderRadius:3, border:'1px solid #C8D8C8' }}>netted</span>}
-                    </span>
-                    <span style={{ color:e.amount===0?C.muted:C.danger, fontWeight:500 }}>
-                      {e.amount===0?'₹0':`−${fmt(e.amount)}`}
-                    </span>
-                  </div>
-                ))}
-                <div style={{ ...S.row, background:C.wl, fontWeight:700, fontSize:13 }}>
-                  <span>Total expenses</span>
-                  <span style={{ color:C.danger }}>−{fmt(pnlData.totalExpenses)}</span>
-                </div>
-
-                <div style={{ display:'flex', justifyContent:'space-between', padding:'13px 16px', fontSize:15, fontWeight:700, borderTop:`1.5px solid ${C.border}` }}>
-                  <span style={{ color:C.text }}>Net surplus / deficit</span>
-                  <span style={{ color:pnlData.netSurplus>=0?'#2A7A4A':C.danger }}>
-                    {pnlData.netSurplus>=0?'+':''}{fmt(pnlData.netSurplus)}
-                  </span>
+                <div style={S.cardHead}>Monthly summary</div>
+                <div style={{ overflowX:'auto' as const }}>
+                  <table style={{ width:'100%', borderCollapse:'collapse' as const, fontSize:12.5 }}>
+                    <thead>
+                      <tr style={{ background:C.wl }}>
+                        <th style={{ padding:'8px 14px', textAlign:'left' as const, fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.05em', textTransform:'uppercase' as const }}>Month</th>
+                        <th style={{ padding:'8px 14px', textAlign:'right' as const, fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.05em', textTransform:'uppercase' as const }}>Income</th>
+                        <th style={{ padding:'8px 14px', textAlign:'right' as const, fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.05em', textTransform:'uppercase' as const }}>Expenses</th>
+                        <th style={{ padding:'8px 14px', textAlign:'right' as const, fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.05em', textTransform:'uppercase' as const }}>Net</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {monthlyPnL.map(m => (
+                        <tr key={m.monthKey} style={{ borderBottom:`1px solid #FAF7F2` }}>
+                          <td style={{ padding:'8px 14px', color:C.text, fontWeight:500 }}>{m.monthLabel}</td>
+                          <td style={{ padding:'8px 14px', textAlign:'right' as const, color:'#2A7A4A', fontWeight:500 }}>+{fmt(m.income)}</td>
+                          <td style={{ padding:'8px 14px', textAlign:'right' as const, color:C.danger, fontWeight:500 }}>−{fmt(m.expenses)}</td>
+                          <td style={{ padding:'8px 14px', textAlign:'right' as const, color:m.net>=0?'#2A7A4A':C.danger, fontWeight:700 }}>
+                            {m.net>=0?'+':''}{fmt(m.net)}
+                          </td>
+                        </tr>
+                      ))}
+                      <tr style={{ background:C.wl, fontWeight:700 }}>
+                        <td style={{ padding:'10px 14px' }}>Total</td>
+                        <td style={{ padding:'10px 14px', textAlign:'right' as const, color:'#2A7A4A' }}>+{fmt(monthlyPnL.reduce((s,m)=>s+m.income,0))}</td>
+                        <td style={{ padding:'10px 14px', textAlign:'right' as const, color:C.danger }}>−{fmt(monthlyPnL.reduce((s,m)=>s+m.expenses,0))}</td>
+                        <td style={{ padding:'10px 14px', textAlign:'right' as const, color:monthlyPnL.reduce((s,m)=>s+m.net,0)>=0?'#2A7A4A':C.danger }}>
+                          {monthlyPnL.reduce((s,m)=>s+m.net,0)>=0?'+':''}{fmt(monthlyPnL.reduce((s,m)=>s+m.net,0))}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </div>
 
-              {/* Cash flow */}
+              {/* Category breakdown by month */}
               <div style={S.card}>
-                <div style={S.cardHead}>Cash flow by month</div>
-                <div style={{ display:'grid', gridTemplateColumns:'90px 1fr 1fr 1fr', gap:0, padding:'7px 14px', background:C.wl, fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.05em', textTransform:'uppercase' as const }}>
-                  <span>Month</span>
-                  <span style={{ textAlign:'right' as const }}>In</span>
-                  <span style={{ textAlign:'right' as const }}>Out</span>
-                  <span style={{ textAlign:'right' as const }}>Net</span>
-                </div>
-                {pnlData.cashFlows.map((cf:any,i:number) => (
-                  <div key={i} style={{ display:'grid', gridTemplateColumns:'90px 1fr 1fr 1fr', gap:0, padding:'8px 14px', borderBottom:`1px solid #FAF7F2`, fontSize:12.5, alignItems:'center' }}>
-                    <span style={{ color:C.muted }}>{cf.month}</span>
-                    <span style={{ textAlign:'right' as const, color:'#2A7A4A', fontWeight:500 }}>+{fmt(cf.in)}</span>
-                    <span style={{ textAlign:'right' as const, color:C.danger }}>−{fmt(cf.out)}</span>
-                    <span style={{ textAlign:'right' as const, color:cf.net>=0?'#2A7A4A':C.danger, fontWeight:600 }}>{cf.net>=0?'+':''}{fmt(cf.net)}</span>
-                  </div>
-                ))}
-                <div style={{ display:'grid', gridTemplateColumns:'90px 1fr 1fr 1fr', gap:0, padding:'9px 14px', background:C.wl, fontSize:13, fontWeight:700 }}>
-                  <span>Total</span>
-                  <span style={{ textAlign:'right' as const, color:'#2A7A4A' }}>+{fmt(pnlData.cashFlows.reduce((s:number,cf:any)=>s+cf.in,0))}</span>
-                  <span style={{ textAlign:'right' as const, color:C.danger }}>−{fmt(pnlData.cashFlows.reduce((s:number,cf:any)=>s+cf.out,0))}</span>
-                  <span style={{ textAlign:'right' as const, color:pnlData.cashFlows.reduce((s:number,cf:any)=>s+cf.net,0)>=0?'#2A7A4A':C.danger }}>
-                    {pnlData.cashFlows.reduce((s:number,cf:any)=>s+cf.net,0)>=0?'+':''}{fmt(pnlData.cashFlows.reduce((s:number,cf:any)=>s+cf.net,0))}
-                  </span>
+                <div style={S.cardHead}>Expense breakdown by category — monthly</div>
+                <div style={{ overflowX:'auto' as const }}>
+                  <table style={{ width:'100%', borderCollapse:'collapse' as const, fontSize:12 }}>
+                    <thead>
+                      <tr style={{ background:'#FAFAF8', borderBottom:`1px solid ${C.border}` }}>
+                        <th style={{ padding:'8px 14px', textAlign:'left' as const, fontSize:10, fontWeight:700, color:C.muted, letterSpacing:'0.05em', textTransform:'uppercase' as const }}>Category</th>
+                        {monthlyPnL.map(m => (
+                          <th key={m.monthKey} style={{ padding:'8px 14px', textAlign:'right' as const, fontSize:10, fontWeight:700, color:C.muted, letterSpacing:'0.05em', textTransform:'uppercase' as const }}>{m.monthLabel}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(['food','shopping','investments','transport','entertainment','utilities','healthcare','housing','insurance','transfer','misc'] as MegaCategory[]).map(mega => {
+                        const info = MEGA_CATEGORIES[mega]
+                        const hasAny = monthlyPnL.some(m => (m.byCategory[mega]||0) > 0)
+                        if (!hasAny) return null
+                        return (
+                          <tr key={mega} style={{ borderBottom:`1px solid #FAF7F2` }}>
+                            <td style={{ padding:'7px 14px', color:C.text }}>
+                              <span style={{ fontSize:14, marginRight:6 }}>{info.icon}</span>{info.label}
+                            </td>
+                            {monthlyPnL.map(m => (
+                              <td key={m.monthKey} style={{ padding:'7px 14px', textAlign:'right' as const, color:(m.byCategory[mega]||0) > 0 ? C.text : C.muted }}>
+                                {(m.byCategory[mega]||0) > 0 ? fmt(m.byCategory[mega]) : '—'}
+                              </td>
+                            ))}
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               </div>
 
-              {pnlData.netSurplus < 0 && (
-                <div style={{ background:'#FBF0F0', border:`1px solid #F0CECE`, borderRadius:6, padding:'10px 14px', fontSize:12.5, color:C.danger, lineHeight:1.65 }}>
-                  ⚠️ Your expenses exceed income by {fmt(Math.abs(pnlData.netSurplus))}/month. Review your miscellaneous and variable expenses.
-                </div>
-              )}
-              {pnlData.netSurplus > 0 && pnlData.savingsRate < 20 && (
-                <div style={S.insight}>
-                  💡 Savings rate is {Math.round(pnlData.savingsRate)}%. The 20% target means {fmt(Math.round(pnlData.totalIncome*0.2))}/month — you're {fmt(Math.round(pnlData.totalIncome*0.2-pnlData.netSurplus))} short. One SIP increase away.
+              {/* Income breakdown — manual + auto-detected */}
+              {(salary?.netSalary || otherAnnual > 0) && (
+                <div style={S.card}>
+                  <div style={S.cardHead}>Confirmed income (from your inputs)</div>
+                  {salary?.netSalary > 0 && (
+                    <div style={S.row}>
+                      <span style={{ display:'flex', alignItems:'center', gap:6 }}><span style={{ fontSize:14 }}>💰</span>Salary (confirmed)</span>
+                      <span style={{ color:'#2A7A4A', fontWeight:600 }}>+{fmt(salary.netSalary)}/mo</span>
+                    </div>
+                  )}
+                  {otherAnnual > 0 && (
+                    <div style={S.row}>
+                      <span style={{ display:'flex', alignItems:'center', gap:6 }}><span style={{ fontSize:14 }}>💸</span>Other income (annual {fmt(otherAnnual)})</span>
+                      <span style={{ color:'#2A7A4A', fontWeight:600 }}>+{fmt(Math.round(otherAnnual/12))}/mo</span>
+                    </div>
+                  )}
                 </div>
               )}
             </>
           ) : null}
+        </div>
+      )}
+
+      {/* CATEGORY CHANGE MODAL */}
+      {categoryModal.open && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(28,43,34,0.5)', zIndex:99, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }} onClick={() => setCategoryModal({ open:false, detectionId:null })}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:'#fff', borderRadius:10, padding:20, maxWidth:480, width:'100%', boxShadow:'0 12px 40px rgba(0,0,0,0.18)', maxHeight:'80vh', overflowY:'auto' as const }}>
+            <p style={{ fontSize:16, fontWeight:700, color:C.text, margin:'0 0 4px' }}>Change category</p>
+            <p style={{ fontSize:12, color:C.muted, margin:'0 0 14px' }}>Pick the right category for these transactions:</p>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+              {(Object.keys(MEGA_CATEGORIES) as MegaCategory[]).filter(k => k !== 'cashback').map(key => {
+                const info = MEGA_CATEGORIES[key]
+                return (
+                  <button key={key} onClick={() => reassignCategory(key)} style={{ padding:'10px 12px', background:info.bgColor, border:`1px solid ${info.borderColor}`, borderRadius:5, cursor:'pointer', fontFamily:'inherit', textAlign:'left' as const, display:'flex', alignItems:'center', gap:8 }}>
+                    <span style={{ fontSize:18 }}>{info.icon}</span>
+                    <span style={{ fontSize:12.5, fontWeight:500, color:info.color }}>{info.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+            <button onClick={() => setCategoryModal({ open:false, detectionId:null })} style={{ marginTop:14, width:'100%', padding:9, background:'#fff', color:C.muted, border:`1px solid ${C.border}`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit' }}>Cancel</button>
+          </div>
         </div>
       )}
 
