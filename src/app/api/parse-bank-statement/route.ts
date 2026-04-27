@@ -62,7 +62,8 @@ async function unlockPdf(buffer: Buffer, password: string): Promise<Buffer> {
   const { PDFDocument } = await import('pdf-lib')
   try {
     const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: false, password } as any)
-    return Buffer.from(await pdfDoc.save())
+    const saved = await pdfDoc.save()
+    return Buffer.from(saved.buffer, saved.byteOffset, saved.byteLength) as Buffer
   } catch (e: any) {
     if (e.message?.includes('encrypted') || e.message?.includes('password')) {
       throw new Error('incorrect_password')
@@ -80,22 +81,20 @@ export async function POST(req: NextRequest) {
     if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     if (file.size > 15 * 1024 * 1024) return NextResponse.json({ error: 'File too large (max 15MB)' }, { status: 400 })
 
-    const buffer = Buffer.from(await file.arrayBuffer())
+    const buffer: Buffer = Buffer.from(await file.arrayBuffer())
     const fileName = file.name.toLowerCase()
     const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || file.type.includes('spreadsheet') || file.type.includes('excel')
 
     let messageContent: any[] = []
 
     if (isExcel) {
-      // Parse Excel to CSV-like text and send to Claude
       const csvText = await parseExcel(buffer)
       if (csvText.length > 500_000) return NextResponse.json({ error: 'Excel file too large to process' }, { status: 400 })
       messageContent = [
         { type: 'text', text: `Parse this bank statement Excel data:\n\n${csvText}` }
       ]
     } else {
-      // PDF — try to unlock if password provided
-      let pdfBuffer = buffer
+      let pdfBuffer: Buffer = buffer
       if (password) {
         try {
           pdfBuffer = await unlockPdf(buffer, password)
