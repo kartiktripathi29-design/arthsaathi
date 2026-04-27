@@ -118,8 +118,8 @@ export async function POST(req: NextRequest) {
     let response
     try {
       response = await client.messages.create({
-        model: 'claude-opus-4-5',
-        max_tokens: 16000,  // bumped from 4000 — large statements need it
+        model: 'claude-sonnet-4-6',
+        max_tokens: 16000,
         system: SYSTEM,
         tools: [STATEMENT_TOOL as any],
         tool_choice: { type: 'tool', name: 'submit_bank_statement' } as any,
