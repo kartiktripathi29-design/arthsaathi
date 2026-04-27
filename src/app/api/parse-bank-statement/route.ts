@@ -1,98 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
-import { parseStatement } from '@/lib/statementParser'
+import { parseStatement, detectFileKind } from '@/lib/statementParser'
 
-export const maxDuration = 60
+export const maxDuration = 30
 
-const client = new Anthropic()
+// Render worker URL — set this in Vercel environment variables as PARSER_WORKER_URL
+const WORKER_URL = process.env.PARSER_WORKER_URL || 'https://arthvo-parser.onrender.com'
 
-// ─── TOOL DEFINITION — Forces Claude to output valid JSON ─────────────────────
-const STATEMENT_TOOL = {
-  name: 'submit_bank_statement',
-  description: 'Submit the parsed bank statement data. Use this tool to return the structured transaction data extracted from the bank statement.',
-  input_schema: {
-    type: 'object' as const,
-    properties: {
-      bank: { type: 'string', description: 'Name of the bank (SBI, HDFC, ICICI, etc.)' },
-      accountHolder: { type: 'string', description: 'Account holder name' },
-      period: { type: 'string', description: 'Statement period e.g. "1 Mar 2025 - 31 Mar 2025"' },
-      openingBalance: { type: 'number' },
-      closingBalance: { type: 'number' },
-      totalCredits: { type: 'number' },
-      totalDebits: { type: 'number' },
-      transactions: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            date: { type: 'string' },
-            description: { type: 'string' },
-            amount: { type: 'number' },
-            type: { type: 'string', enum: ['credit', 'debit'] },
-            category: {
-              type: 'string',
-              enum: ['salary','rent','emi','grocery','food','fuel','shopping','entertainment','insurance','investment','sip','transfer','utility','medical','education','other']
-            }
-          },
-          required: ['date','description','amount','type','category']
-        }
-      },
-      summary: {
-        type: 'object',
-        properties: {
-          salary: { type: 'number' },
-          rent: { type: 'number' },
-          emi: { type: 'number' },
-          grocery: { type: 'number' },
-          food: { type: 'number' },
-          fuel: { type: 'number' },
-          shopping: { type: 'number' },
-          entertainment: { type: 'number' },
-          insurance: { type: 'number' },
-          investment: { type: 'number' },
-          sip: { type: 'number' },
-          utility: { type: 'number' },
-          medical: { type: 'number' },
-          education: { type: 'number' },
-          other: { type: 'number' },
-        },
-        required: ['salary','rent','emi','grocery','food','fuel','shopping','entertainment','insurance','investment','sip','utility','medical','education','other']
-      }
-    },
-    required: ['bank','accountHolder','period','openingBalance','closingBalance','totalCredits','totalDebits','transactions','summary']
-  }
-}
-
-const SYSTEM = `You are a precise Indian bank statement parser. Extract ALL transactions from the bank statement provided.
-
-Use the submit_bank_statement tool to return the parsed data. Categorise every transaction:
-- salary: SALARY, NEFT from employer, payroll
-- rent: RENT, house rent
-- emi: EMI, loan repayment, NACH
-- sip: SIP, mutual fund, ZERODHA, GROWW, KUVERA
-- investment: RD, FD, PPF, NPS contributions
-- food: Swiggy, Zomato, restaurants, hotels, cafes
-- grocery: BigBasket, DMart, supermarkets
-- fuel: petrol pump, HPCL, BPCL, Indian Oil, Ola/Uber/Rapido
-- entertainment: Netflix, Hotstar, Spotify, movies, gaming
-- shopping: Amazon, Flipkart, Myntra, retail
-- utility: electricity, gas, internet, mobile
-- medical: pharmacy, hospital, doctor
-- education: school fees, courses
-- transfer: UPI to individuals, NEFT/IMPS to persons
-- other: everything else
-
-All amounts in INR rupees as plain numbers (no symbols, no commas). Sum amounts per category for the summary. If you cannot find transactions, submit with totalCredits=0, totalDebits=0, transactions=[].`
-
-// Map ParseError to HTTP responses
 function errorResponse(error: string, message?: string) {
   const responses: Record<string, { status: number; body: any }> = {
     incorrect_password: { status: 422, body: { error: 'incorrect_password' } },
-    requires_password: { status: 422, body: { error: 'incorrect_password' } },
-    aes_pdf_unsupported: { status: 415, body: { error: 'aes_pdf_unsupported', message: message || 'This PDF format isn\'t supported yet. Try Excel format.' } },
+    requires_password:  { status: 422, body: { error: 'incorrect_password' } },
+    aes_pdf_unsupported:{ status: 415, body: { error: 'aes_pdf_unsupported', message: message || 'Try Excel format.' } },
     unsupported_format: { status: 415, body: { error: 'unsupported_format', message: message || 'File type not supported.' } },
-    corrupt_file: { status: 400, body: { error: 'corrupt_file', message: message || 'Could not read the file.' } },
-    too_large: { status: 413, body: { error: 'too_large', message: message || 'File too large.' } },
+    corrupt_file:       { status: 400, body: { error: 'corrupt_file', message: message || 'Could not read the file.' } },
+    too_large:          { status: 413, body: { error: 'too_large', message: message || 'File too large.' } },
   }
   const r = responses[error] || { status: 500, body: { error } }
   return NextResponse.json(r.body, { status: r.status })
@@ -113,44 +34,48 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer())
     log(`buffer ready (${file.size} bytes)`)
 
-    const result = await parseStatement(buffer, file.name, file.type, password)
-    log(`parseStatement done — ok=${result.ok}, kind=${result.kind}`)
+    // Detect file type — handle encryption checks before calling worker
+    const fileKind = detectFileKind(buffer, file.name, file.type)
+    log(`detected: ${fileKind}`)
 
-    if (!result.ok) {
-      return errorResponse(result.error || 'unsupported_format', result.errorMessage)
+    if (fileKind === 'unknown') return errorResponse('unsupported_format')
+
+    // For PDFs — check encryption here so we can ask for password without worker round-trip
+    if (fileKind === 'pdf') {
+      const { parseStatement: ps } = await import('@/lib/statementParser')
+      const check = await ps(buffer, file.name, file.type, password)
+      if (!check.ok) return errorResponse(check.error || 'unsupported_format', check.errorMessage)
     }
 
-    // Use streaming — prevents Vercel timeout by keeping bytes flowing
-    log('calling Claude API (streaming)')
-    const stream = await client.messages.stream({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 16000,
-      system: SYSTEM,
-      tools: [STATEMENT_TOOL as any],
-      tool_choice: { type: 'tool', name: 'submit_bank_statement' } as any,
-      messages: [{ role: 'user', content: result.claudeContent! }]
-    })
+    // Send to Render worker — no timeout issues there
+    log('calling Render worker')
+    const base64 = buffer.toString('base64')
 
-    const response = await stream.finalMessage()
-    log('Claude API responded')
-
-    const toolUse = response.content.find((c: any) => c.type === 'tool_use')
-    if (!toolUse || toolUse.type !== 'tool_use') {
-      console.error('No tool use in response. Stop reason:', response.stop_reason)
-      return errorResponse('corrupt_file', 'Could not extract transactions. Try a different statement.')
+    let workerRes: Response
+    try {
+      workerRes = await fetch(`${WORKER_URL}/parse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base64, fileName: file.name, mimeType: file.type, password, fileKind }),
+        signal: AbortSignal.timeout(25000)
+      })
+    } catch (e: any) {
+      log('worker timeout or unreachable')
+      return NextResponse.json({ error: 'Parser service unavailable. Try again in a moment.' }, { status: 503 })
     }
 
-    const data = toolUse.input
+    log(`worker responded: ${workerRes.status}`)
+    const workerData = await workerRes.json()
+
+    if (!workerRes.ok) {
+      return errorResponse(workerData.error || 'corrupt_file', workerData.message)
+    }
+
     log('done')
-    return NextResponse.json({ data, fileKind: result.kind })
+    return NextResponse.json(workerData)
   } catch (err: any) {
     log('caught error')
-    console.error('Bank statement parse error:', err)
-    // Handle auth errors
-    const msg = (err.message || '').toLowerCase()
-    if (msg.includes('password') || msg.includes('encrypted')) {
-      return errorResponse('incorrect_password')
-    }
+    console.error('Bank statement route error:', err)
     return NextResponse.json({ error: err.message || 'Failed to parse statement' }, { status: 500 })
   }
 }
