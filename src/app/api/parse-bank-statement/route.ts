@@ -99,16 +99,22 @@ function errorResponse(error: string, message?: string) {
 }
 
 export async function POST(req: NextRequest) {
+  const t0 = Date.now()
+  const log = (label: string) => console.log(`[bank-parse] ${label}: ${Date.now() - t0}ms`)
   try {
     const form = await req.formData()
     const file = form.get('file') as File | null
     const password = (form.get('password') as string) || ''
+    log('formData parsed')
 
     if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     if (file.size > 15 * 1024 * 1024) return errorResponse('too_large', 'Max 15MB')
 
     const buffer = Buffer.from(await file.arrayBuffer())
+    log(`buffer ready (${file.size} bytes)`)
+
     const result = await parseStatement(buffer, file.name, file.type, password)
+    log(`parseStatement done — ok=${result.ok}, kind=${result.kind}`)
 
     if (!result.ok) {
       return errorResponse(result.error || 'unsupported_format', result.errorMessage)
@@ -117,15 +123,18 @@ export async function POST(req: NextRequest) {
     // Use tool calling — forces Claude to output structured JSON, validated by API
     let response
     try {
+      log('calling Claude API')
       response = await client.messages.create({
-        model: 'claude-sonnet-4-6',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 16000,
         system: SYSTEM,
         tools: [STATEMENT_TOOL as any],
         tool_choice: { type: 'tool', name: 'submit_bank_statement' } as any,
         messages: [{ role: 'user', content: result.claudeContent! }]
       })
+      log('Claude API responded')
     } catch (apiErr: any) {
+      log('Claude API failed')
       const msg = (apiErr.message || '').toLowerCase()
       if (msg.includes('password') || msg.includes('encrypted') || msg.includes('protect')) {
         return errorResponse('incorrect_password')
@@ -142,8 +151,10 @@ export async function POST(req: NextRequest) {
     }
 
     const data = toolUse.input
+    log('done')
     return NextResponse.json({ data, fileKind: result.kind })
   } catch (err: any) {
+    log('caught error')
     console.error('Bank statement parse error:', err)
     return NextResponse.json({ error: err.message || 'Failed to parse statement' }, { status: 500 })
   }
