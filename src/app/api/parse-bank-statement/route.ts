@@ -120,30 +120,20 @@ export async function POST(req: NextRequest) {
       return errorResponse(result.error || 'unsupported_format', result.errorMessage)
     }
 
-    // Use tool calling — forces Claude to output structured JSON, validated by API
-    let response
-    try {
-      log('calling Claude API')
-      response = await client.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 16000,
-        system: SYSTEM,
-        tools: [STATEMENT_TOOL as any],
-        tool_choice: { type: 'tool', name: 'submit_bank_statement' } as any,
-        messages: [{ role: 'user', content: result.claudeContent! }]
-      })
-      log('Claude API responded')
-    } catch (apiErr: any) {
-      log('Claude API failed')
-      const msg = (apiErr.message || '').toLowerCase()
-      if (msg.includes('password') || msg.includes('encrypted') || msg.includes('protect')) {
-        return errorResponse('incorrect_password')
-      }
-      console.error('Claude API error:', apiErr)
-      throw apiErr
-    }
+    // Use streaming — prevents Vercel timeout by keeping bytes flowing
+    log('calling Claude API (streaming)')
+    const stream = await client.messages.stream({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 16000,
+      system: SYSTEM,
+      tools: [STATEMENT_TOOL as any],
+      tool_choice: { type: 'tool', name: 'submit_bank_statement' } as any,
+      messages: [{ role: 'user', content: result.claudeContent! }]
+    })
 
-    // Extract tool input — guaranteed valid JSON from Anthropic
+    const response = await stream.finalMessage()
+    log('Claude API responded')
+
     const toolUse = response.content.find((c: any) => c.type === 'tool_use')
     if (!toolUse || toolUse.type !== 'tool_use') {
       console.error('No tool use in response. Stop reason:', response.stop_reason)
@@ -156,6 +146,11 @@ export async function POST(req: NextRequest) {
   } catch (err: any) {
     log('caught error')
     console.error('Bank statement parse error:', err)
+    // Handle auth errors
+    const msg = (err.message || '').toLowerCase()
+    if (msg.includes('password') || msg.includes('encrypted')) {
+      return errorResponse('incorrect_password')
+    }
     return NextResponse.json({ error: err.message || 'Failed to parse statement' }, { status: 500 })
   }
 }
