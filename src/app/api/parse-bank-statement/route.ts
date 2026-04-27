@@ -36,6 +36,12 @@ export async function POST(req: NextRequest) {
     if (fileKind === 'unknown') return NextResponse.json({ error: 'unsupported_format' }, { status: 415 })
 
     const base64 = buffer.toString('base64')
+
+    // Ping the worker first to wake it up (Render free tier sleeps after inactivity)
+    try {
+      await fetch(`${WORKER_URL}/`, { signal: AbortSignal.timeout(10000) })
+    } catch {}
+
     log('calling worker')
 
     let workerRes: Response
