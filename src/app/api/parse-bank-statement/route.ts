@@ -1,55 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { parseStatement, detectFileKind } from '@/lib/statementParser'
 
 export const maxDuration = 30
 
-// Render worker URL — set this in Vercel environment variables as PARSER_WORKER_URL
 const WORKER_URL = process.env.PARSER_WORKER_URL || 'https://arthvo-parser.onrender.com'
 
-function errorResponse(error: string, message?: string) {
-  const responses: Record<string, { status: number; body: any }> = {
-    incorrect_password: { status: 422, body: { error: 'incorrect_password' } },
-    requires_password:  { status: 422, body: { error: 'incorrect_password' } },
-    aes_pdf_unsupported:{ status: 415, body: { error: 'aes_pdf_unsupported', message: message || 'Try Excel format.' } },
-    unsupported_format: { status: 415, body: { error: 'unsupported_format', message: message || 'File type not supported.' } },
-    corrupt_file:       { status: 400, body: { error: 'corrupt_file', message: message || 'Could not read the file.' } },
-    too_large:          { status: 413, body: { error: 'too_large', message: message || 'File too large.' } },
-  }
-  const r = responses[error] || { status: 500, body: { error } }
-  return NextResponse.json(r.body, { status: r.status })
+// Detect file type from magic bytes
+function getFileKind(buffer: Buffer, fileName: string): string {
+  const b = buffer
+  if (b[0]===0x25 && b[1]===0x50 && b[2]===0x44 && b[3]===0x46) return 'pdf'
+  if (b[0]===0x50 && b[1]===0x4B && b[2]===0x03 && b[3]===0x04) return 'excel-xlsx'
+  if (b[0]===0xD0 && b[1]===0xCF && b[2]===0x11 && b[3]===0xE0) return 'excel-xls'
+  if (b[0]===0xFF && b[1]===0xD8 && b[2]===0xFF) return 'image'
+  if (b[0]===0x89 && b[1]===0x50 && b[2]===0x4E && b[3]===0x47) return 'image'
+  if (fileName.toLowerCase().endsWith('.csv')) return 'csv'
+  return 'unknown'
 }
 
 export async function POST(req: NextRequest) {
   const t0 = Date.now()
-  const log = (label: string) => console.log(`[bank-parse] ${label}: ${Date.now() - t0}ms`)
+  const log = (s: string) => console.log(`[bank-parse] ${s}: ${Date.now()-t0}ms`)
+
   try {
     const form = await req.formData()
     const file = form.get('file') as File | null
     const password = (form.get('password') as string) || ''
-    log('formData parsed')
+    log('form parsed')
 
-    if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
-    if (file.size > 15 * 1024 * 1024) return errorResponse('too_large', 'Max 15MB')
+    if (!file) return NextResponse.json({ error: 'No file' }, { status: 400 })
+    if (file.size > 15*1024*1024) return NextResponse.json({ error: 'too_large' }, { status: 413 })
 
     const buffer = Buffer.from(await file.arrayBuffer())
-    log(`buffer ready (${file.size} bytes)`)
+    const fileKind = getFileKind(buffer, file.name)
+    log(`kind=${fileKind} size=${file.size}`)
 
-    // Detect file type — handle encryption checks before calling worker
-    const fileKind = detectFileKind(buffer, file.name, file.type)
-    log(`detected: ${fileKind}`)
+    if (fileKind === 'unknown') return NextResponse.json({ error: 'unsupported_format' }, { status: 415 })
 
-    if (fileKind === 'unknown') return errorResponse('unsupported_format')
-
-    // For PDFs — check encryption here so we can ask for password without worker round-trip
-    if (fileKind === 'pdf') {
-      const { parseStatement: ps } = await import('@/lib/statementParser')
-      const check = await ps(buffer, file.name, file.type, password)
-      if (!check.ok) return errorResponse(check.error || 'unsupported_format', check.errorMessage)
-    }
-
-    // Send to Render worker — no timeout issues there
-    log('calling Render worker')
     const base64 = buffer.toString('base64')
+    log('calling worker')
 
     let workerRes: Response
     try {
@@ -60,22 +47,27 @@ export async function POST(req: NextRequest) {
         signal: AbortSignal.timeout(25000)
       })
     } catch (e: any) {
-      log('worker timeout or unreachable')
-      return NextResponse.json({ error: 'Parser service unavailable. Try again in a moment.' }, { status: 503 })
+      log('worker unreachable')
+      return NextResponse.json({ error: 'Parser unavailable. Try again.' }, { status: 503 })
     }
 
-    log(`worker responded: ${workerRes.status}`)
-    const workerData = await workerRes.json()
+    log(`worker status=${workerRes.status}`)
+    const text = await workerRes.text()
+    log(`worker body length=${text.length}`)
 
-    if (!workerRes.ok) {
-      return errorResponse(workerData.error || 'corrupt_file', workerData.message)
-    }
+    if (!text.trim()) return NextResponse.json({ error: 'Empty response from parser' }, { status: 500 })
+
+    let data: any
+    try { data = JSON.parse(text) }
+    catch { return NextResponse.json({ error: 'Invalid response from parser' }, { status: 500 }) }
+
+    if (!workerRes.ok) return NextResponse.json(data, { status: workerRes.status })
 
     log('done')
-    return NextResponse.json(workerData)
+    return NextResponse.json(data)
   } catch (err: any) {
-    log('caught error')
-    console.error('Bank statement route error:', err)
-    return NextResponse.json({ error: err.message || 'Failed to parse statement' }, { status: 500 })
+    log('error')
+    console.error('Route error:', err)
+    return NextResponse.json({ error: err.message || 'Failed' }, { status: 500 })
   }
 }
