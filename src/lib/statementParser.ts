@@ -134,7 +134,7 @@ async function unlockPdf(buffer: Buffer, password: string): Promise<Buffer> {
 }
 
 // ─── 4. EXCEL PARSING (with optional password) ──────────────────────────────
-async function parseExcel(buffer: Buffer, password = ''): Promise<string> {
+async function parseExcel(buffer: Buffer, password = '', isOle2 = false): Promise<string> {
   const XLSX = await import('xlsx')
   let workbook: any
 
@@ -143,11 +143,26 @@ async function parseExcel(buffer: Buffer, password = ''): Promise<string> {
     workbook = XLSX.read(buffer, { type: 'buffer', password: password || undefined } as any)
   } catch (e: any) {
     const msg = (e.message || '').toLowerCase()
-    if (!msg.includes('password') && !msg.includes('encrypted') && !msg.includes('protect')) {
-      throw e
-    }
 
-    // It's encrypted — need decryption first
+    // Detect ANY encryption-like error. xlsx library is inconsistent — it can throw:
+    //   "File is password-protected"
+    //   "Encrypted file"
+    //   "Bad checksum: ..." (for some encrypted OLE2)
+    //   "Cannot read property of undefined" (when struct is encrypted)
+    // Plus, OLE2 files (D0 CF 11 E0) are almost always encrypted Excel for banks.
+    // So: if it's OLE2, OR the message hints at encryption, treat as encrypted.
+    const isLikelyEncrypted = isOle2 ||
+      msg.includes('password') ||
+      msg.includes('encrypted') ||
+      msg.includes('protect') ||
+      msg.includes('checksum') ||
+      msg.includes('cannot read') ||
+      msg.includes('unsupported') ||
+      msg.includes('cfb')
+
+    if (!isLikelyEncrypted) throw e
+
+    // Encrypted — need decryption first
     if (!password) throw new Error('requires_password')
 
     try {
@@ -157,9 +172,12 @@ async function parseExcel(buffer: Buffer, password = ''): Promise<string> {
       workbook = XLSX.read(decrypted, { type: 'buffer' })
     } catch (decryptErr: any) {
       const dmsg = (decryptErr.message || '').toLowerCase()
-      if (dmsg.includes('password') || dmsg.includes('decrypt') || dmsg.includes('hash')) {
+      // officecrypto-tool throws specific messages on wrong password
+      if (dmsg.includes('password') || dmsg.includes('decrypt') || dmsg.includes('hash') || dmsg.includes('verifier') || dmsg.includes('integrity')) {
         throw new Error('incorrect_password')
       }
+      // If decryption fails for unknown reason on an OLE2 file, still treat as wrong password
+      if (isOle2) throw new Error('incorrect_password')
       throw decryptErr
     }
   }
@@ -257,7 +275,8 @@ export async function parseStatement(
   // ── EXCEL ──
   if (kind === 'excel-xlsx' || kind === 'excel-xls') {
     try {
-      const csvText = await parseExcel(buffer, password)
+      const isOle2 = kind === 'excel-xls'  // OLE2 magic bytes — usually encrypted
+      const csvText = await parseExcel(buffer, password, isOle2)
       if (csvText.length > 500_000) {
         return { ok: false, error: 'too_large', errorMessage: 'Statement has too many rows to process. Try a shorter date range.' }
       }
