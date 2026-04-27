@@ -6,31 +6,66 @@ export const maxDuration = 60
 
 const client = new Anthropic()
 
-const SYSTEM = `You are a precise Indian bank statement parser. Extract ALL transactions from any Indian bank statement.
-
-Return ONLY valid JSON. No markdown:
-{
-  "bank": "string",
-  "accountHolder": "string",
-  "period": "string",
-  "openingBalance": number,
-  "closingBalance": number,
-  "totalCredits": number,
-  "totalDebits": number,
-  "transactions": [
-    { "date": "string", "description": "string", "amount": number, "type": "credit|debit", "category": "salary|rent|emi|grocery|food|fuel|shopping|entertainment|insurance|investment|sip|transfer|utility|medical|education|other" }
-  ],
-  "summary": {
-    "salary": number, "rent": number, "emi": number, "grocery": number,
-    "food": number, "fuel": number, "shopping": number, "entertainment": number,
-    "insurance": number, "investment": number, "sip": number, "utility": number,
-    "medical": number, "education": number, "other": number
+// ─── TOOL DEFINITION — Forces Claude to output valid JSON ─────────────────────
+const STATEMENT_TOOL = {
+  name: 'submit_bank_statement',
+  description: 'Submit the parsed bank statement data. Use this tool to return the structured transaction data extracted from the bank statement.',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      bank: { type: 'string', description: 'Name of the bank (SBI, HDFC, ICICI, etc.)' },
+      accountHolder: { type: 'string', description: 'Account holder name' },
+      period: { type: 'string', description: 'Statement period e.g. "1 Mar 2025 - 31 Mar 2025"' },
+      openingBalance: { type: 'number' },
+      closingBalance: { type: 'number' },
+      totalCredits: { type: 'number' },
+      totalDebits: { type: 'number' },
+      transactions: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            date: { type: 'string' },
+            description: { type: 'string' },
+            amount: { type: 'number' },
+            type: { type: 'string', enum: ['credit', 'debit'] },
+            category: {
+              type: 'string',
+              enum: ['salary','rent','emi','grocery','food','fuel','shopping','entertainment','insurance','investment','sip','transfer','utility','medical','education','other']
+            }
+          },
+          required: ['date','description','amount','type','category']
+        }
+      },
+      summary: {
+        type: 'object',
+        properties: {
+          salary: { type: 'number' },
+          rent: { type: 'number' },
+          emi: { type: 'number' },
+          grocery: { type: 'number' },
+          food: { type: 'number' },
+          fuel: { type: 'number' },
+          shopping: { type: 'number' },
+          entertainment: { type: 'number' },
+          insurance: { type: 'number' },
+          investment: { type: 'number' },
+          sip: { type: 'number' },
+          utility: { type: 'number' },
+          medical: { type: 'number' },
+          education: { type: 'number' },
+          other: { type: 'number' },
+        },
+        required: ['salary','rent','emi','grocery','food','fuel','shopping','entertainment','insurance','investment','sip','utility','medical','education','other']
+      }
+    },
+    required: ['bank','accountHolder','period','openingBalance','closingBalance','totalCredits','totalDebits','transactions','summary']
   }
 }
 
-Rules:
-- All amounts in INR rupees as numbers (no symbols)
-- Categorise every transaction by description
+const SYSTEM = `You are a precise Indian bank statement parser. Extract ALL transactions from the bank statement provided.
+
+Use the submit_bank_statement tool to return the parsed data. Categorise every transaction:
 - salary: SALARY, NEFT from employer, payroll
 - rent: RENT, house rent
 - emi: EMI, loan repayment, NACH
@@ -47,13 +82,13 @@ Rules:
 - transfer: UPI to individuals, NEFT/IMPS to persons
 - other: everything else
 
-If the data is unclear or you cannot find transactions, return JSON with totalCredits=0, totalDebits=0, transactions=[], and an empty summary.`
+All amounts in INR rupees as plain numbers (no symbols, no commas). Sum amounts per category for the summary. If you cannot find transactions, submit with totalCredits=0, totalDebits=0, transactions=[].`
 
 // Map ParseError to HTTP responses
 function errorResponse(error: string, message?: string) {
   const responses: Record<string, { status: number; body: any }> = {
     incorrect_password: { status: 422, body: { error: 'incorrect_password' } },
-    requires_password: { status: 422, body: { error: 'incorrect_password' } },  // same as incorrect — frontend opens modal
+    requires_password: { status: 422, body: { error: 'incorrect_password' } },
     aes_pdf_unsupported: { status: 415, body: { error: 'aes_pdf_unsupported', message: message || 'This PDF format isn\'t supported yet. Try Excel format.' } },
     unsupported_format: { status: 415, body: { error: 'unsupported_format', message: message || 'File type not supported.' } },
     corrupt_file: { status: 400, body: { error: 'corrupt_file', message: message || 'Could not read the file.' } },
@@ -73,21 +108,21 @@ export async function POST(req: NextRequest) {
     if (file.size > 15 * 1024 * 1024) return errorResponse('too_large', 'Max 15MB')
 
     const buffer = Buffer.from(await file.arrayBuffer())
-
-    // Parse — handles all formats, encryption, etc.
     const result = await parseStatement(buffer, file.name, file.type, password)
 
     if (!result.ok) {
       return errorResponse(result.error || 'unsupported_format', result.errorMessage)
     }
 
-    // Send to Claude for JSON extraction
+    // Use tool calling — forces Claude to output structured JSON, validated by API
     let response
     try {
       response = await client.messages.create({
         model: 'claude-opus-4-5',
-        max_tokens: 4000,
+        max_tokens: 16000,  // bumped from 4000 — large statements need it
         system: SYSTEM,
+        tools: [STATEMENT_TOOL as any],
+        tool_choice: { type: 'tool', name: 'submit_bank_statement' } as any,
         messages: [{ role: 'user', content: result.claudeContent! }]
       })
     } catch (apiErr: any) {
@@ -95,16 +130,18 @@ export async function POST(req: NextRequest) {
       if (msg.includes('password') || msg.includes('encrypted') || msg.includes('protect')) {
         return errorResponse('incorrect_password')
       }
+      console.error('Claude API error:', apiErr)
       throw apiErr
     }
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : ''
-    const jsonMatch = text.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      return errorResponse('corrupt_file', 'Could not extract transactions from this statement.')
+    // Extract tool input — guaranteed valid JSON from Anthropic
+    const toolUse = response.content.find((c: any) => c.type === 'tool_use')
+    if (!toolUse || toolUse.type !== 'tool_use') {
+      console.error('No tool use in response. Stop reason:', response.stop_reason)
+      return errorResponse('corrupt_file', 'Could not extract transactions. Try a different statement.')
     }
-    const data = JSON.parse(jsonMatch[0])
 
+    const data = toolUse.input
     return NextResponse.json({ data, fileKind: result.kind })
   } catch (err: any) {
     console.error('Bank statement parse error:', err)
