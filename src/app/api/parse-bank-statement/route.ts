@@ -1,61 +1,130 @@
 import { NextRequest, NextResponse } from 'next/server'
+import Anthropic from '@anthropic-ai/sdk'
+import { parseStatement } from '@/lib/statementParser'
 
-export const maxDuration = 30
+export const maxDuration = 120
 
-const WORKER_URL = process.env.PARSER_WORKER_URL || 'https://arthvo-parser.onrender.com'
+const client = new Anthropic()
 
-function getFileKind(buffer: Buffer, fileName: string): string {
-  const b = buffer
-  if (b[0]===0x25 && b[1]===0x50 && b[2]===0x44 && b[3]===0x46) return 'pdf'
-  if (b[0]===0x50 && b[1]===0x4B && b[2]===0x03 && b[3]===0x04) return 'excel-xlsx'
-  if (b[0]===0xD0 && b[1]===0xCF && b[2]===0x11 && b[3]===0xE0) return 'excel-xls'
-  if (b[0]===0xFF && b[1]===0xD8 && b[2]===0xFF) return 'image'
-  if (b[0]===0x89 && b[1]===0x50 && b[2]===0x4E && b[3]===0x47) return 'image'
-  if (fileName.toLowerCase().endsWith('.csv')) return 'csv'
-  return 'unknown'
+const STATEMENT_TOOL = {
+  name: 'submit_bank_statement',
+  description: 'Submit parsed bank statement data',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      bank: { type: 'string' },
+      accountHolder: { type: 'string' },
+      period: { type: 'string' },
+      openingBalance: { type: 'number' },
+      closingBalance: { type: 'number' },
+      totalCredits: { type: 'number' },
+      totalDebits: { type: 'number' },
+      transactions: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            date: { type: 'string' },
+            description: { type: 'string' },
+            amount: { type: 'number' },
+            type: { type: 'string', enum: ['credit', 'debit'] },
+            category: { type: 'string', enum: ['salary','rent','emi','grocery','food','fuel','shopping','entertainment','insurance','investment','sip','transfer','utility','medical','education','other'] }
+          },
+          required: ['date','description','amount','type','category']
+        }
+      },
+      summary: {
+        type: 'object',
+        properties: {
+          salary: { type: 'number' }, rent: { type: 'number' }, emi: { type: 'number' },
+          grocery: { type: 'number' }, food: { type: 'number' }, fuel: { type: 'number' },
+          shopping: { type: 'number' }, entertainment: { type: 'number' }, insurance: { type: 'number' },
+          investment: { type: 'number' }, sip: { type: 'number' }, utility: { type: 'number' },
+          medical: { type: 'number' }, education: { type: 'number' }, other: { type: 'number' }
+        },
+        required: ['salary','rent','emi','grocery','food','fuel','shopping','entertainment','insurance','investment','sip','utility','medical','education','other']
+      }
+    },
+    required: ['bank','accountHolder','period','openingBalance','closingBalance','totalCredits','totalDebits','transactions','summary']
+  }
 }
+
+const SYSTEM = `You are a precise Indian bank statement parser. Extract ALL transactions from the bank statement provided.
+Use the submit_bank_statement tool to return the parsed data. Categorise every transaction:
+- salary: SALARY, NEFT from employer, payroll
+- rent: RENT, house rent
+- emi: EMI, loan repayment, NACH
+- sip: SIP, mutual fund, ZERODHA, GROWW, KUVERA
+- investment: RD, FD, PPF, NPS contributions
+- food: Swiggy, Zomato, restaurants, hotels, cafes
+- grocery: BigBasket, DMart, supermarkets
+- fuel: petrol pump, HPCL, BPCL, Indian Oil, Ola/Uber/Rapido
+- entertainment: Netflix, Hotstar, Spotify, movies, gaming
+- shopping: Amazon, Flipkart, Myntra, retail
+- utility: electricity, gas, internet, mobile
+- medical: pharmacy, hospital, doctor
+- education: school fees, courses
+- transfer: UPI to individuals, NEFT/IMPS to persons
+- other: everything else
+All amounts as plain numbers. Sum per category for summary.`
 
 export async function POST(req: NextRequest) {
   const t0 = Date.now()
   const log = (s: string) => console.log(`[bank-parse] ${s}: ${Date.now()-t0}ms`)
+
   try {
     const form = await req.formData()
     const file = form.get('file') as File | null
     const password = (form.get('password') as string) || ''
     log('form parsed')
+
     if (!file) return NextResponse.json({ error: 'No file' }, { status: 400 })
     if (file.size > 15*1024*1024) return NextResponse.json({ error: 'too_large' }, { status: 413 })
+
     const buffer = Buffer.from(await file.arrayBuffer())
-    const fileKind = getFileKind(buffer, file.name)
-    log(`kind=${fileKind} size=${file.size}`)
-    if (fileKind === 'unknown') return NextResponse.json({ error: 'unsupported_format' }, { status: 415 })
-    const base64 = buffer.toString('base64')
-    try { await fetch(`${WORKER_URL}/`, { signal: AbortSignal.timeout(8000) }) } catch {}
-    log('calling worker')
-    let workerRes: Response
-    try {
-      workerRes = await fetch(`${WORKER_URL}/parse`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ base64, fileName: file.name, mimeType: file.type, password, fileKind }),
-        signal: AbortSignal.timeout(25000)
-      })
-    } catch (e: any) {
-      log('worker unreachable')
-      return NextResponse.json({ error: 'Parser unavailable. Try again in a moment.' }, { status: 503 })
+    log(`buffer ready (${file.size} bytes)`)
+
+    const result = await parseStatement(buffer, file.name, file.type, password)
+    log(`parseStatement done — ok=${result.ok}, kind=${result.kind}`)
+
+    if (!result.ok) {
+      const statusMap: Record<string, number> = {
+        incorrect_password: 422, requires_password: 422,
+        aes_pdf_unsupported: 415, unsupported_format: 415,
+        corrupt_file: 400, too_large: 413
+      }
+      return NextResponse.json(
+        { error: result.error, message: result.errorMessage },
+        { status: statusMap[result.error || ''] || 500 }
+      )
     }
-    log(`worker status=${workerRes.status}`)
-    const text = await workerRes.text()
-    log(`worker body length=${text.length}`)
-    if (!text.trim()) return NextResponse.json({ error: 'Empty response from parser. Try again.' }, { status: 500 })
-    let data: any
-    try { data = JSON.parse(text) } catch { return NextResponse.json({ error: 'Invalid response from parser' }, { status: 500 }) }
-    if (!workerRes.ok) return NextResponse.json(data, { status: workerRes.status })
+
+    log('calling Claude')
+    const response = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 16000,
+      system: SYSTEM,
+      tools: [STATEMENT_TOOL as any],
+      tool_choice: { type: 'tool', name: 'submit_bank_statement' } as any,
+      messages: [{ role: 'user', content: result.claudeContent! }]
+    })
+    log('Claude done')
+
+    const toolUse = response.content.find((c: any) => c.type === 'tool_use')
+    if (!toolUse || toolUse.type !== 'tool_use') {
+      return NextResponse.json({ error: 'Could not extract transactions' }, { status: 500 })
+    }
+
     log('done')
-    return NextResponse.json(data)
+    return NextResponse.json({ data: toolUse.input, fileKind: result.kind })
+
   } catch (err: any) {
     log('error')
-    console.error('Route error:', err)
+    console.error('Bank parse error:', err)
+    const msg = (err.message || '').toLowerCase()
+    if (msg.includes('password') || msg.includes('encrypted')) {
+      return NextResponse.json({ error: 'incorrect_password' }, { status: 422 })
+    }
     return NextResponse.json({ error: err.message || 'Failed' }, { status: 500 })
   }
 }
