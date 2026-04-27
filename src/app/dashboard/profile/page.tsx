@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import { useAppStore } from '@/store/AppStore'
-import { MEGA_CATEGORIES, MegaCategory, tagTransactions, matchMega } from '@/lib/categories'
+import { MEGA_CATEGORIES, MegaCategory, tagTransactions, detectSalaryCandidates, SalaryCandidate } from '@/lib/categories'
 
 const C = { fg:'#3A4B41', wheat:'#E6CFA7', wl:'#F5ECD8', wm:'#D4B98A', bg:'#FDFAF6', card:'#fff', border:'#E4DDD1', text:'#1C2B22', muted:'#7A8A7E', danger:'#B94040' }
 const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`
@@ -59,231 +59,102 @@ const S = {
   btn: (primary=true): React.CSSProperties => ({ padding:'10px 14px', background:primary?C.fg:C.card, color:primary?C.wheat:C.muted, border:primary?'none':`1px solid ${C.border}`, borderRadius:5, fontSize:12.5, fontWeight:primary?600:400, cursor:'pointer', fontFamily:'inherit' }),
   insight: { background:C.wl, border:`1px solid ${C.wm}`, borderRadius:5, padding:'9px 12px', fontSize:12, color:C.fg, lineHeight:1.6, marginBottom:12 } as React.CSSProperties,
   upload: (done=false): React.CSSProperties => ({ border:`1.5px dashed ${done?C.fg:C.border}`, borderRadius:6, padding:14, textAlign:'center' as const, background:done?'#EEF2EE':C.wl, cursor:done?'default':'pointer', display:'flex', flexDirection:'column' as const, alignItems:done?'flex-start':'center', justifyContent:done?'flex-start':'center', gap:6, minHeight:130 }),
+  bulkBar: { padding:'9px 14px', background:'#1E293B', color:'rgba(230,207,167,0.9)', fontSize:11.5, display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, flexWrap:'wrap' as const } as React.CSSProperties,
+  bulkBtn: { padding:'4px 11px', borderRadius:3, fontSize:11, cursor:'pointer', border:'1px solid rgba(230,207,167,0.3)', background:'transparent', color:C.wheat, fontFamily:'inherit', whiteSpace:'nowrap' as const } as React.CSSProperties,
 }
 
-// ──────────────────────────────────────────────────────────────────────────
-// SMART REVIEW DETECTIONS
-// ──────────────────────────────────────────────────────────────────────────
-
-interface Detection {
-  id: string
-  type: 'salary' | 'roundtrip' | 'mega_group' | 'interest' | 'misc'
-  priority: number  // lower = shown first
+interface PnLLine {
   mega: MegaCategory
-  title: string
-  subtitle: string
-  amount: number       // monthly avg
-  totalAmount: number  // gross total
+  label: string
+  icon: string
+  color: string
+  amount: number
+  monthlyAvg: number
   transactions: any[]
-  brands?: string[]    // e.g. ["Amazon", "Myntra", "Flipkart"]
-  note: string
-  confirmLabel: string
-  rejectLabel: string
 }
-
-function detectPatterns(transactions: any[], months: number): Detection[] {
-  if (!transactions?.length) return []
-  const tagged = transactions
-  const dets: Detection[] = []
-
-  // ── 1. SALARY DETECTION (top priority) ──
-  // Look for consistent large credits from same source, monthly pattern
-  const credits = tagged.filter((t:any) => t.type === 'credit' && t.amount > 5000)
-  const sourceGroups: Record<string, any[]> = {}
-  credits.forEach((t:any) => {
-    // Use first part of description as source key
-    const key = (t.description||'').split('/')[0].trim().substring(0,30)
-    if (!sourceGroups[key]) sourceGroups[key] = []
-    sourceGroups[key].push(t)
-  })
-
-  Object.entries(sourceGroups).forEach(([source, txns]) => {
-    if (txns.length < 2) return
-    const amounts = txns.map((t:any) => t.amount)
-    const avg = amounts.reduce((a:number,b:number)=>a+b,0) / amounts.length
-    const maxDev = Math.max(...amounts.map((a:number) => Math.abs(a - avg) / avg))
-
-    // Variance < 25% AND avg > 10K AND occurs in multiple months
-    if (maxDev < 0.30 && avg > 10000) {
-      const total = amounts.reduce((a:number,b:number)=>a+b,0)
-      dets.push({
-        id: 'salary_' + source.replace(/\W+/g,'_'),
-        type: 'salary',
-        priority: 1,
-        mega: 'salary',
-        title: 'Likely salary detected',
-        subtitle: `Consistent monthly credit from ${source}`,
-        amount: Math.round(avg),
-        totalAmount: total,
-        transactions: txns,
-        note: `Same source · variance ${Math.round(maxDev*100)}% · ${txns.length} occurrences. Looks like salary or recurring income — confirm to set monthly salary.`,
-        confirmLabel: 'Yes, this is salary',
-        rejectLabel: 'Not salary',
-      })
-    }
-  })
-
-  // ── 2. ROUND-TRIP DETECTION ──
-  const debits = tagged.filter((t:any) => t.type === 'debit')
-  const rtPairs: Array<{credit:any; debit:any; amount:number}> = []
-  const usedCredits = new Set<any>(), usedDebits = new Set<any>()
-  debits.forEach((d:any) => {
-    if (usedDebits.has(d)) return
-    const match = credits.find((c:any) =>
-      !usedCredits.has(c) &&
-      Math.abs(c.amount - d.amount) < 1 &&
-      c !== d
-    )
-    if (match) {
-      rtPairs.push({ credit: match, debit: d, amount: d.amount })
-      usedCredits.add(match); usedDebits.add(d)
-    }
-  })
-  if (rtPairs.length > 0) {
-    const total = rtPairs.reduce((s,p)=>s+p.amount,0)
-    dets.push({
-      id: 'roundtrip',
-      type: 'roundtrip',
-      priority: 2,
-      mega: 'transfer',
-      title: 'Round-trip transfers found',
-      subtitle: `${rtPairs.length} transfer${rtPairs.length>1?'s':''} sent and returned`,
-      amount: Math.round(total / months),
-      totalAmount: total,
-      transactions: rtPairs.flatMap(p => [p.credit, p.debit]),
-      note: 'Same amount sent and received. Netting off keeps your P&L accurate by removing these from both income and expenses.',
-      confirmLabel: 'Net off',
-      rejectLabel: 'Keep both',
-    })
-  }
-
-  // ── 3. INTEREST / DIVIDEND DETECTION (auto-route to Other Income) ──
-  const interestTxns = tagged.filter((t:any) => t.mega === 'interest' && t.type === 'credit')
-  if (interestTxns.length > 0) {
-    const total = interestTxns.reduce((s:number, t:any) => s + t.amount, 0)
-    const brands = Array.from(new Set(interestTxns.map((t:any) => t.brand).filter(Boolean)))
-    dets.push({
-      id: 'interest',
-      type: 'interest',
-      priority: 3,
-      mega: 'interest',
-      title: 'Interest / Dividend income',
-      subtitle: `${interestTxns.length} credit${interestTxns.length>1?'s':''} totalling ${fmt(total)} → Other Income tab`,
-      amount: Math.round(total / months),
-      totalAmount: total,
-      transactions: interestTxns,
-      brands,
-      note: 'Interest from bank deposits and dividends from shares are taxable income — routing to Other Income tab where it belongs.',
-      confirmLabel: 'Confirm as income',
-      rejectLabel: 'Keep here',
-    })
-  }
-
-  // ── 4. MEGA-CATEGORY GROUPS (Shopping, Food, Investments, etc.) ──
-  // Group debit transactions by mega-category (excluding misc, transfer, salary, interest)
-  const groupableMegas: MegaCategory[] = ['shopping','food','investments','transport','entertainment','utilities','healthcare']
-  groupableMegas.forEach(mega => {
-    const matched = tagged.filter((t:any) => t.mega === mega && t.type === 'debit')
-    if (matched.length === 0) return
-    const total = matched.reduce((s:number,t:any) => s + t.amount, 0)
-    if (total < 200) return  // skip tiny totals
-    const brands = Array.from(new Set(matched.map((t:any) => t.brand).filter(Boolean))) as string[]
-    const info = MEGA_CATEGORIES[mega]
-    dets.push({
-      id: 'mega_' + mega,
-      type: 'mega_group',
-      priority: 5,
-      mega,
-      title: `${info.label} ${brands.length>0?`(${brands.slice(0,3).join(', ')}${brands.length>3?'...':''})`:''}`,
-      subtitle: `${matched.length} transactions · ${fmt(Math.round(total/months))}/month`,
-      amount: Math.round(total / months),
-      totalAmount: total,
-      transactions: matched.slice().sort((a:any,b:any)=>b.amount-a.amount),
-      brands,
-      note: brands.length > 0 ? `Identified merchants: ${brands.join(', ')}` : `${matched.length} transactions in this category.`,
-      confirmLabel: 'Looks right',
-      rejectLabel: 'Change category',
-    })
-  })
-
-  return dets.sort((a,b) => a.priority - b.priority || b.amount - a.amount)
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-// MONTHLY P&L COMPUTATION
-// ──────────────────────────────────────────────────────────────────────────
 
 interface MonthlyPnL {
-  monthKey: string  // "01-2026"
-  monthLabel: string  // "Jan 2026"
+  monthKey: string
+  monthLabel: string
   income: number
   expenses: number
   net: number
   byCategory: Record<MegaCategory, number>
 }
 
-function computeMonthlyPnL(
-  transactions: any[],
-  confirmedDetections: Record<string, boolean>,
-  rejectedSalaryIds: Set<string>,
-  manualOverrides: Record<string, MegaCategory>
-): MonthlyPnL[] {
-  const monthMap: Record<string, MonthlyPnL> = {}
-  const monthNames: Record<string,string> = {'01':'Jan','02':'Feb','03':'Mar','04':'Apr','05':'May','06':'Jun','07':'Jul','08':'Aug','09':'Sep','10':'Oct','11':'Nov','12':'Dec'}
+function computePnL(transactions: any[], months: number, confirmedDetections: Record<string, boolean>, manualOverrides: Record<string, MegaCategory>, selectedSalaryIds: Set<string>, parkedIds: Set<string>) {
+  const txns = transactions.map(t => {
+    let mega: MegaCategory = manualOverrides[t.id] || t.mega || 'misc'
+    if (selectedSalaryIds.has(t.id)) mega = 'salary'
+    if (parkedIds.has(t.id)) mega = 'misc'
+    return { ...t, megaFinal: mega }
+  })
 
-  // Round-trip pairs to subtract if user confirmed netting
   const rtNetOff = confirmedDetections['roundtrip'] === true
-  const usedCredits = new Set<any>(), usedDebits = new Set<any>()
+  const usedCredits = new Set<string>(), usedDebits = new Set<string>()
   if (rtNetOff) {
-    const credits = transactions.filter((t:any) => t.type === 'credit')
-    const debits = transactions.filter((t:any) => t.type === 'debit')
+    const credits = txns.filter((t:any) => t.type === 'credit')
+    const debits = txns.filter((t:any) => t.type === 'debit')
     debits.forEach((d:any) => {
-      if (usedDebits.has(d)) return
-      const match = credits.find((c:any) => !usedCredits.has(c) && Math.abs(c.amount - d.amount) < 1)
-      if (match) { usedCredits.add(match); usedDebits.add(d) }
+      if (usedDebits.has(d.id)) return
+      const match = credits.find((c:any) => !usedCredits.has(c.id) && Math.abs(c.amount - d.amount) < 1 && (c.megaFinal === 'transfer' || c.megaFinal === 'misc') && (d.megaFinal === 'transfer' || d.megaFinal === 'misc'))
+      if (match) { usedCredits.add(match.id); usedDebits.add(d.id) }
     })
   }
 
-  transactions.forEach((t:any) => {
-    if (rtNetOff && (usedCredits.has(t) || usedDebits.has(t))) return
+  const incomeMap: Record<string, PnLLine> = {}
+  const expenseMap: Record<string, PnLLine> = {}
+
+  txns.forEach((t:any) => {
+    if (rtNetOff && (usedCredits.has(t.id) || usedDebits.has(t.id))) return
+    const mega: MegaCategory = t.megaFinal
+    const info = MEGA_CATEGORIES[mega]
+    const isIncome = mega === 'salary' || mega === 'interest' || mega === 'cashback' || (t.type === 'credit' && info?.routesTo === 'income')
+    const target = (isIncome || (t.type === 'credit' && (mega === 'transfer' || mega === 'misc'))) ? incomeMap : expenseMap
+    if (!target[mega]) {
+      target[mega] = { mega, label: info.label, icon: info.icon, color: info.color, amount: 0, monthlyAvg: 0, transactions: [] }
+    }
+    target[mega].amount += t.amount
+    target[mega].transactions.push(t)
+  })
+
+  const incomeLines = Object.values(incomeMap).map(l => ({ ...l, monthlyAvg: Math.round(l.amount/months) })).sort((a,b)=>b.amount-a.amount)
+  const expenseLines = Object.values(expenseMap).map(l => ({ ...l, monthlyAvg: Math.round(l.amount/months) })).sort((a,b)=>b.amount-a.amount)
+
+  const totalIncome = incomeLines.reduce((s,l)=>s+l.amount,0)
+  const totalExpenses = expenseLines.reduce((s,l)=>s+l.amount,0)
+  const netSurplus = totalIncome - totalExpenses
+  const monthlyIncome = Math.round(totalIncome/months)
+  const monthlyExpenses = Math.round(totalExpenses/months)
+  const monthlyNet = Math.round(netSurplus/months)
+
+  const monthMap: Record<string, MonthlyPnL> = {}
+  const monthNames: Record<string,string> = {'01':'Jan','02':'Feb','03':'Mar','04':'Apr','05':'May','06':'Jun','07':'Jul','08':'Aug','09':'Sep','10':'Oct','11':'Nov','12':'Dec'}
+  txns.forEach((t:any) => {
+    if (rtNetOff && (usedCredits.has(t.id) || usedDebits.has(t.id))) return
     const parts = (t.date||'').split(/[-/]/)
     if (parts.length < 3) return
     const mo = parts[1]?.padStart?.(2,'0') || parts[1]
     const yr = parts[2]
-    const key = `${mo}-${yr}`
-    if (!monthMap[key]) {
-      monthMap[key] = {
-        monthKey: key,
-        monthLabel: `${monthNames[mo]||mo} ${yr}`,
-        income: 0, expenses: 0, net: 0,
-        byCategory: {} as Record<MegaCategory, number>
-      }
-    }
+    const key = `${yr}-${mo}`
+    if (!monthMap[key]) monthMap[key] = { monthKey:key, monthLabel:`${monthNames[mo]||mo} ${yr}`, income:0, expenses:0, net:0, byCategory:{} as any }
     const m = monthMap[key]
-    // Use mega category, with manual override priority
-    const mega: MegaCategory = manualOverrides[t.id || `${t.date}_${t.amount}`] || t.mega || 'misc'
+    const mega: MegaCategory = t.megaFinal
     const info = MEGA_CATEGORIES[mega]
-
-    if (mega === 'salary' || mega === 'interest' || mega === 'cashback' || (t.type === 'credit' && info?.routesTo === 'income')) {
-      m.income += t.amount
-    } else if (t.type === 'credit') {
-      // unallocated credit — could be a transfer/refund
-      m.income += t.amount
-    } else {
-      m.expenses += t.amount
-    }
+    const isIncome = mega === 'salary' || mega === 'interest' || mega === 'cashback' || (t.type === 'credit' && info?.routesTo === 'income')
+    if (isIncome || (t.type === 'credit' && (mega === 'transfer' || mega === 'misc'))) m.income += t.amount
+    else m.expenses += t.amount
     m.byCategory[mega] = (m.byCategory[mega] || 0) + t.amount
   })
+  const monthlyPnL = Object.values(monthMap).map(m => ({ ...m, net: m.income - m.expenses })).sort((a,b)=>a.monthKey.localeCompare(b.monthKey))
 
-  return Object.values(monthMap)
-    .map(m => ({ ...m, net: m.income - m.expenses }))
-    .sort((a,b) => a.monthKey.localeCompare(b.monthKey))
+  return { incomeLines, expenseLines, totalIncome, totalExpenses, netSurplus, monthlyIncome, monthlyExpenses, monthlyNet, monthlyPnL }
 }
 
 type MainTab = 'docs' | 'income' | 'expenses' | 'pnl'
 
 export default function ProfilePage() {
-  const { salary, setSalary, aisData, setAisData, otherIncome, setOtherIncome } = useAppStore() as any
+  const { salary, setSalary, aisData, setAisData } = useAppStore() as any
   const [mainTab, setMainTab] = useState<MainTab>('docs')
   const [incTab, setIncTab] = useState<'review'|'salary'|'other'>('review')
   const [salMode, setSalMode] = useState<'slip'|'offer'|'manual'>('slip')
@@ -292,11 +163,27 @@ export default function ProfilePage() {
   const [taggedTxns, setTaggedTxns] = useState<any[]>([])
   const [bankPeriod, setBankPeriod] = useState<{from:string; to:string}|null>(null)
   const [bankMonths, setBankMonths] = useState(1)
-  const [detections, setDetections] = useState<Detection[]>([])
   const [confirmedDetections, setConfirmedDetections] = useState<Record<string,boolean>>({})
-  const [expandedDetections, setExpandedDetections] = useState<Record<string,boolean>>({})
   const [manualOverrides, setManualOverrides] = useState<Record<string, MegaCategory>>({})
-  const [categoryModal, setCategoryModal] = useState<{ open:boolean; detectionId:string|null }>({ open:false, detectionId:null })
+  // Smart Review state
+  const [salCardOpen, setSalCardOpen] = useState(true)
+  const [rtCardOpen, setRtCardOpen] = useState(false)
+  const [intCardOpen, setIntCardOpen] = useState(false)
+  const [salShowAllCredits, setSalShowAllCredits] = useState(false)
+  // What user has TICKED
+  const [tickedSalary, setTickedSalary] = useState<Set<string>>(new Set())
+  const [tickedRoundtrip, setTickedRoundtrip] = useState<Set<string>>(new Set())  // pair indexes
+  const [tickedInterest, setTickedInterest] = useState<Set<string>>(new Set())
+  // What user has APPLIED
+  const [confirmedSalaryIds, setConfirmedSalaryIds] = useState<Set<string>>(new Set())
+  const [parkedIds, setParkedIds] = useState<Set<string>>(new Set())
+  // Single transaction reassign modal
+  const [singleCategoryModal, setSingleCategoryModal] = useState<{ open:boolean; transaction:any|null }>({ open:false, transaction:null })
+  // Bulk reassign modal (for P&L drill-down)
+  const [bulkCategoryModal, setBulkCategoryModal] = useState<{ open:boolean; transactions:any[]; label:string }>({ open:false, transactions:[], label:'' })
+  // Drill-down expansion in P&L
+  const [pnlExpanded, setPnlExpanded] = useState<Record<string, boolean>>({})
+
   const [pwdModal, setPwdModal] = useState<{ open:boolean; type:string|null; file:File|null; error:string }>({ open:false, type:null, file:null, error:'' })
   const [pwd, setPwd] = useState('')
   const bankRef = useRef<HTMLInputElement>(null)
@@ -337,10 +224,7 @@ export default function ProfilePage() {
       const p = localStorage.getItem('av_profile')
       if (p) { const d=JSON.parse(p); if(d.expenses)setExpenses(d.expenses); if(d.savings)setSavings(d.savings); if(d.variable)setVariable(d.variable) }
       const b = localStorage.getItem('av_bank')
-      if (b) {
-        const bd = JSON.parse(b)
-        loadBankData(bd)
-      }
+      if (b) loadBankData(JSON.parse(b))
     } catch {}
   }, [])
 
@@ -351,7 +235,7 @@ export default function ProfilePage() {
     transactions.forEach((t:any) => {
       const parts = (t.date||'').split(/[-/]/)
       if (parts.length >= 3) {
-        keys.add(`${parts[1]}-${parts[2]}`)
+        keys.add(`${parts[2]}-${parts[1]}`)
         if (!minDate || t.date < minDate) minDate = t.date
         if (!maxDate || t.date > maxDate) maxDate = t.date
       }
@@ -366,7 +250,12 @@ export default function ProfilePage() {
     const { months, from, to } = detectMonths(tagged)
     setBankMonths(months)
     setBankPeriod({ from, to })
-    setDetections(detectPatterns(tagged, months))
+    // Pre-tick the top salary candidate's transactions
+    const candidates = detectSalaryCandidates(tagged)
+    if (candidates.length > 0) {
+      const top = candidates[0]
+      setTickedSalary(new Set(top.transactions.map((t:any) => t.id)))
+    }
   }
 
   const saveProfile = useCallback((exp=expenses, sav=savings, vari=variable) => {
@@ -401,10 +290,48 @@ export default function ProfilePage() {
   if(trulyFree<0)health-=30
   health=Math.max(0,Math.min(100,health))
 
-  const monthlyPnL = useMemo(() => taggedTxns.length ? computeMonthlyPnL(taggedTxns, confirmedDetections, new Set(), manualOverrides) : [],
-    [taggedTxns, confirmedDetections, manualOverrides])
+  const pnl = useMemo(() => taggedTxns.length ? computePnL(taggedTxns, bankMonths, confirmedDetections, manualOverrides, confirmedSalaryIds, parkedIds) : null,
+    [taggedTxns, bankMonths, confirmedDetections, manualOverrides, confirmedSalaryIds, parkedIds])
 
-  // ─ Bank statement upload ──────────────────────────────────────────────────
+  // Auto-detection helpers ─────────────────────────────────────────────
+  const allCredits = useMemo(() => taggedTxns.filter(t => t.type === 'credit').sort((a,b) => b.amount - a.amount), [taggedTxns])
+  const largeCredits = useMemo(() => allCredits.filter(t => t.amount >= 5000), [allCredits])
+
+  const salaryCandidates = useMemo(() => detectSalaryCandidates(taggedTxns), [taggedTxns])
+  const topSalaryCandidate = salaryCandidates[0] || null
+
+  const roundtripPairs = useMemo(() => {
+    const credits = taggedTxns.filter(t => t.type === 'credit')
+    const debits = taggedTxns.filter(t => t.type === 'debit')
+    const pairs: Array<{ id:string; credit:any; debit:any; amount:number }> = []
+    const usedC = new Set<string>(), usedD = new Set<string>()
+    debits.forEach(d => {
+      if (usedD.has(d.id)) return
+      const match = credits.find(c => !usedC.has(c.id) && Math.abs(c.amount - d.amount) < 1)
+      if (match) {
+        pairs.push({ id: `${match.id}_${d.id}`, credit: match, debit: d, amount: d.amount })
+        usedC.add(match.id); usedD.add(d.id)
+      }
+    })
+    return pairs
+  }, [taggedTxns])
+
+  const interestTxns = useMemo(() => taggedTxns.filter(t => t.mega === 'interest' && t.type === 'credit'), [taggedTxns])
+
+  // Pre-tick all interest and roundtrip on load
+  useEffect(() => {
+    if (interestTxns.length > 0 && tickedInterest.size === 0) {
+      setTickedInterest(new Set(interestTxns.map(t => t.id)))
+    }
+  }, [interestTxns.length])
+
+  useEffect(() => {
+    if (roundtripPairs.length > 0 && tickedRoundtrip.size === 0) {
+      setTickedRoundtrip(new Set(roundtripPairs.map(p => p.id)))
+    }
+  }, [roundtripPairs.length])
+
+  // Bank statement upload ─────────────────────────────────────────────
   const handleBankFile = async (file:File, password='') => {
     if (file.size > 15*1024*1024) { toast.error('File too large (max 15MB)'); return }
     setLoadingDoc('bank'); setPwdModal({ open:false, type:null, file:null, error:'' })
@@ -429,7 +356,8 @@ export default function ProfilePage() {
       }
       try { localStorage.setItem('av_bank', JSON.stringify(json.data)) } catch {}
       loadBankData(json.data)
-      toast.success(`Statement read · ${json.data.transactions?.length||0} transactions across ${detectMonths(json.data.transactions||[]).months} months`, { id:tid, duration:5000 })
+      const m = detectMonths(json.data.transactions||[]).months
+      toast.success(`Statement read · ${json.data.transactions?.length||0} transactions across ${m} month${m>1?'s':''}`, { id:tid, duration:5000 })
       setMainTab('income'); setIncTab('review')
     } catch (e:any) {
       const errStr=(e.message||'').toLowerCase()
@@ -439,7 +367,9 @@ export default function ProfilePage() {
   }
 
   const clearBank = () => {
-    setBankData(null); setTaggedTxns([]); setDetections([]); setConfirmedDetections({}); setBankPeriod(null); setBankMonths(1); setManualOverrides({})
+    setBankData(null); setTaggedTxns([]); setConfirmedDetections({}); setBankPeriod(null); setBankMonths(1); setManualOverrides({})
+    setTickedSalary(new Set()); setTickedRoundtrip(new Set()); setTickedInterest(new Set())
+    setConfirmedSalaryIds(new Set()); setParkedIds(new Set())
     try { localStorage.removeItem('av_bank') } catch {}
   }
 
@@ -469,7 +399,7 @@ export default function ProfilePage() {
       const res = await fetch('/api/parse-salary', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ base64Data:b64, mediaType:file.type }) })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error)
-      setSalary(json.data); toast.success('Salary parsed!', { id:tid })
+      setSalary(json.data); toast.success('Salary slip parsed!', { id:tid })
     } catch (e:any) { toast.error(e.message, { id:tid }) }
     finally { setLoadingDoc(null) }
   }
@@ -493,59 +423,93 @@ export default function ProfilePage() {
     else processAIS(pwdModal.file, pwdModal.type, pwd)
   }
 
-  // ─ Detection actions ────────────────────────────────────────────────────
-  const confirmDetection = (id:string, confirmed:boolean) => {
-    const det = detections.find(d=>d.id===id)
-    setConfirmedDetections(prev => ({ ...prev, [id]: confirmed }))
-
-    if (!confirmed && det?.type === 'mega_group') {
-      // Reject = open category change modal
-      setCategoryModal({ open:true, detectionId:id })
-      return
-    }
-
-    if (confirmed && det) {
-      if (det.type === 'salary') {
-        setSalary({
-          netSalary: det.amount,
-          grossSalary: Math.round(det.amount * 1.2),
-          employerName: det.subtitle.replace('Consistent monthly credit from ','').substring(0,30) || 'Detected income'
-        } as any)
-        toast.success(`Salary set to ${fmt(det.amount)}/month`)
-      } else if (det.type === 'interest') {
-        // Add to other income
-        const annual = det.totalAmount * (12/bankMonths)
-        const newSel = new Set(otherSel); newSel.add('fd')
-        setOtherSel(newSel)
-        setOtherVals(prev => ({ ...prev, fd: Math.round(annual) }))
-        toast.success(`${fmt(annual)} routed to Other Income (FD/Interest)`)
-      } else if (det.type === 'roundtrip') {
-        toast.success('Round-trips netted off')
-      }
-    }
+  // Smart Review actions ─────────────────────────────────────────────
+  const useTickedAsSalary = () => {
+    if (tickedSalary.size === 0) { toast.error('Tick at least one credit'); return }
+    const txns = taggedTxns.filter(t => tickedSalary.has(t.id))
+    const total = txns.reduce((s,t) => s + t.amount, 0)
+    const monthly = Math.round(total / bankMonths)
+    setConfirmedSalaryIds(new Set(tickedSalary))
+    setSalary({
+      netSalary: monthly,
+      grossSalary: salary?.grossSalary || Math.round(monthly * 1.2),
+      employerName: txns[0]?.brand || (txns[0]?.description || '').split('/')[0].substring(0,30) || 'Detected'
+    } as any)
+    toast.success(`Salary set to ${fmt(monthly)}/month (${txns.length} credits over ${bankMonths} month${bankMonths>1?'s':''})`)
+    setSalCardOpen(false)
   }
 
-  const reassignCategory = (newMega: MegaCategory) => {
-    const detId = categoryModal.detectionId
-    if (!detId) return
-    const det = detections.find(d=>d.id===detId)
-    if (!det) return
-    const overrides: Record<string, MegaCategory> = { ...manualOverrides }
-    det.transactions.forEach(t => {
-      const key = t.id || `${t.date}_${t.amount}`
-      overrides[key] = newMega
-    })
+  const noneIsSalary = () => {
+    setConfirmedSalaryIds(new Set())
+    setTickedSalary(new Set())
+    toast.success('No salary detected from bank — use Salary tab to add manually')
+    setSalCardOpen(false)
+  }
+
+  const parkSalaryReview = () => {
+    setConfirmedSalaryIds(new Set())
+    toast.success('Salary parked for later — visit Smart Review anytime')
+    setSalCardOpen(false)
+  }
+
+  const netOffTickedRoundtrips = () => {
+    if (tickedRoundtrip.size === 0) { toast.error('Tick at least one pair'); return }
+    setConfirmedDetections(p => ({ ...p, roundtrip: true }))
+    toast.success(`${tickedRoundtrip.size} round-trip pair${tickedRoundtrip.size>1?'s':''} netted off`)
+    setRtCardOpen(false)
+  }
+
+  const sendUntickedRtToMisc = () => {
+    const untickedPairs = roundtripPairs.filter(p => !tickedRoundtrip.has(p.id))
+    if (untickedPairs.length === 0) { toast('No unticked pairs to send'); return }
+    const overrides = { ...manualOverrides }
+    untickedPairs.forEach(p => { overrides[p.credit.id] = 'misc'; overrides[p.debit.id] = 'misc' })
     setManualOverrides(overrides)
-    setCategoryModal({ open:false, detectionId:null })
-    toast.success(`Reassigned to ${MEGA_CATEGORIES[newMega].label}`)
+    toast.success(`${untickedPairs.length} unticked pair${untickedPairs.length>1?'s':''} sent to Miscellaneous`)
   }
 
-  // ─ Period mismatch check ────────────────────────────────────────────────
-  const periodMismatch = useMemo(() => {
-    if (!salary?.month || !bankPeriod?.from) return null
-    const slipMo = salary.month  // expecting "March 2026" or similar
-    return null  // TODO: real check based on slip date format
-  }, [salary, bankPeriod])
+  const routeTickedToOtherIncome = () => {
+    if (tickedInterest.size === 0) { toast.error('Tick at least one'); return }
+    const txns = taggedTxns.filter(t => tickedInterest.has(t.id))
+    const total = txns.reduce((s,t) => s + t.amount, 0)
+    const annual = Math.round(total * (12 / bankMonths))
+    setConfirmedDetections(p => ({ ...p, interest: true }))
+    const newSel = new Set(otherSel); newSel.add('fd'); setOtherSel(newSel)
+    setOtherVals(p => ({ ...p, fd: annual }))
+    toast.success(`${fmt(annual)} routed to Other Income (annual)`)
+    setIntCardOpen(false)
+  }
+
+  const parkInterestReview = () => {
+    toast.success('Interest income parked for later')
+    setIntCardOpen(false)
+  }
+
+  // Reassign single transaction
+  const reassignSingle = (newMega: MegaCategory) => {
+    if (!singleCategoryModal.transaction) return
+    setManualOverrides(prev => ({ ...prev, [singleCategoryModal.transaction.id]: newMega }))
+    setSingleCategoryModal({ open:false, transaction:null })
+    toast.success(`Moved to ${MEGA_CATEGORIES[newMega].label}`)
+  }
+
+  // Reassign bulk
+  const reassignBulk = (newMega: MegaCategory) => {
+    const overrides = { ...manualOverrides }
+    bulkCategoryModal.transactions.forEach(t => { overrides[t.id] = newMega })
+    setManualOverrides(overrides)
+    setBulkCategoryModal({ open:false, transactions:[], label:'' })
+    toast.success(`${bulkCategoryModal.transactions.length} transactions moved to ${MEGA_CATEGORIES[newMega].label}`)
+  }
+
+  // Toggle helpers
+  const toggleSalaryTick = (id:string) => setTickedSalary(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const toggleInterestTick = (id:string) => setTickedInterest(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const toggleRoundtripTick = (id:string) => setTickedRoundtrip(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
+
+  const tickedSalaryAmount = useMemo(() => taggedTxns.filter(t => tickedSalary.has(t.id)).reduce((s,t)=>s+t.amount,0), [taggedTxns, tickedSalary])
+  const tickedInterestAmount = useMemo(() => taggedTxns.filter(t => tickedInterest.has(t.id)).reduce((s,t)=>s+t.amount,0), [taggedTxns, tickedInterest])
+  const tickedRoundtripAmount = useMemo(() => roundtripPairs.filter(p => tickedRoundtrip.has(p.id)).reduce((s,p)=>s+p.amount,0), [roundtripPairs, tickedRoundtrip])
 
   return (
     <div style={{ fontFamily:'"Sora",-apple-system,sans-serif', maxWidth:860 }}>
@@ -577,13 +541,13 @@ export default function ProfilePage() {
               {bankData ? (
                 <>
                   <p style={{ fontSize:14, fontWeight:700, color:C.fg, margin:'0 0 3px' }}>✓ {bankData.bank||'Bank'} statement uploaded</p>
-                  <p style={{ fontSize:11.5, color:C.muted, margin:0 }}>{bankData.transactions?.length||0} transactions · {bankMonths} month{bankMonths>1?'s':''} · {detections.length} items in smart review</p>
+                  <p style={{ fontSize:11.5, color:C.muted, margin:0 }}>{bankData.transactions?.length||0} transactions · {bankMonths} month{bankMonths>1?'s':''} · {bankPeriod?.from} to {bankPeriod?.to}</p>
                 </>
               ) : (
                 <>
                   <p style={{ fontSize:14, fontWeight:700, color:C.text, margin:'0 0 3px' }}>Bank Statement</p>
-                  <p style={{ fontSize:11.5, color:C.muted, margin:0, lineHeight:1.55 }}>Any Indian bank · PDF, Excel, CSV or photo · Password supported</p>
-                  <p style={{ fontSize:10.5, color:C.muted, margin:'4px 0 0' }}>⚡ Auto-categorises Amazon/Swiggy/Groww · detects salary patterns · routes interest to Other Income</p>
+                  <p style={{ fontSize:11.5, color:C.muted, margin:0, lineHeight:1.55 }}>Any Indian bank · 1 month or up to 12 months · password supported</p>
+                  <p style={{ fontSize:10.5, color:C.muted, margin:'4px 0 0' }}>⚡ You'll review every detection before it affects your P&L</p>
                 </>
               )}
             </div>
@@ -629,19 +593,17 @@ export default function ProfilePage() {
 
           {bankData && (
             <button onClick={() => { setMainTab('income'); setIncTab('review') }} style={{ ...S.btn(true), width:'100%', padding:'11px' }}>
-              Next: Review statement →
+              Next: Smart Review →
             </button>
           )}
         </div>
       )}
 
-      {/* INCOME TAB */}
+      {/* INCOME TAB — SMART REVIEW with full transparency */}
       {mainTab==='income' && (
         <div>
           <div style={{ display:'flex', borderBottom:`1px solid ${C.border}`, marginBottom:18 }}>
-            <button onClick={() => setIncTab('review')} style={S.stab(incTab==='review')}>
-              🔍 Smart Review {detections.length > 0 && <span style={{ marginLeft:4, fontSize:10, background:C.fg, color:C.wheat, padding:'1px 6px', borderRadius:10 }}>{detections.filter(d=>confirmedDetections[d.id]===undefined).length}</span>}
-            </button>
+            <button onClick={() => setIncTab('review')} style={S.stab(incTab==='review')}>🔍 Smart Review</button>
             <button onClick={() => setIncTab('salary')} style={S.stab(incTab==='salary')}>📄 Salary</button>
             <button onClick={() => setIncTab('other')} style={S.stab(incTab==='other')}>🏦 Other Income</button>
           </div>
@@ -649,68 +611,174 @@ export default function ProfilePage() {
           {incTab==='review' && (
             <div>
               {!bankData ? (
-                <div style={S.insight}>Upload your bank statement in the Documents tab to get smart insights here.</div>
-              ) : detections.length === 0 ? (
-                <div style={S.insight}>✓ No ambiguous entries found. Your statement looks clean.</div>
+                <div style={S.insight}>Upload your bank statement in the Documents tab to see smart insights here.</div>
               ) : (
                 <>
                   <div style={{ background:'#1E293B', borderRadius:8, padding:'12px 16px', marginBottom:14 }}>
-                    <p style={{ fontSize:10, color:'rgba(230,207,167,0.5)', letterSpacing:'0.08em', margin:'0 0 6px' }}>SMART REVIEW</p>
+                    <p style={{ fontSize:10, color:'rgba(230,207,167,0.5)', letterSpacing:'0.08em', margin:'0 0 6px' }}>SMART REVIEW · {bankPeriod?.from} → {bankPeriod?.to} · {bankMonths} month{bankMonths>1?'s':''}</p>
                     <p style={{ fontSize:13, color:'rgba(255,255,255,0.75)', margin:0, lineHeight:1.6 }}>
-                      ArthVo found {detections.length} items grouped by type. Confirm or change category for each — improves your P&L accuracy.
+                      Every detection shows the transactions feeding it. Tick what you want, untick what's wrong, or park for later.
                     </p>
                   </div>
-                  {detections.map(det => {
-                    const confirmed = confirmedDetections[det.id]
-                    const expanded = expandedDetections[det.id]
-                    const info = MEGA_CATEGORIES[det.mega]
-                    const isSalary = det.type === 'salary'
-                    return (
-                      <div key={det.id} style={{ ...S.card, border:`${isSalary?'2px':'1px'} solid ${confirmed===true?C.fg:isSalary?'#2A7A4A':info.borderColor}` }}>
-                        <div style={{ padding:'10px 14px', background:isSalary?'#EEF2EE':info.bgColor, borderBottom:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
-                          <span style={{ fontSize:13, fontWeight:600, color:isSalary?'#2A7A4A':info.color, display:'flex', alignItems:'center', gap:6 }}>
-                            <span style={{ fontSize:15 }}>{isSalary?'💰':info.icon}</span>{det.title}
-                          </span>
-                          <div style={{ display:'flex', gap:6, alignItems:'center', flexShrink:0 }}>
-                            {confirmed === undefined || confirmed === null ? (
-                              <>
-                                <button onClick={() => confirmDetection(det.id, true)} style={{ padding:'3px 10px', borderRadius:4, fontSize:11, cursor:'pointer', fontFamily:'inherit', background:'#EEF2EE', color:'#2A7A4A', border:'0.5px solid #C8D8C8' }}>{det.confirmLabel}</button>
-                                <button onClick={() => confirmDetection(det.id, false)} style={{ padding:'3px 10px', borderRadius:4, fontSize:11, cursor:'pointer', fontFamily:'inherit', background:'#FBF0F0', color:C.danger, border:`0.5px solid #F0CECE` }}>{det.rejectLabel}</button>
-                              </>
-                            ) : (
-                              <span style={{ fontSize:11, padding:'3px 10px', borderRadius:4, background:confirmed?'#EEF2EE':'#FBF0F0', color:confirmed?'#2A7A4A':C.danger, border:`0.5px solid ${confirmed?'#C8D8C8':'#F0CECE'}` }}>
-                                {confirmed ? '✓ Confirmed' : '✗ Reassigned'}
-                              </span>
-                            )}
-                            <button onClick={() => setExpandedDetections(prev=>({...prev,[det.id]:!expanded}))} style={{ width:22, height:22, borderRadius:4, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:14, color:C.fg, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                              {expanded ? '−' : '+'}
-                            </button>
+
+                  {/* SALARY DETECTION CARD */}
+                  <div style={{ ...S.card, border:`2px solid ${confirmedSalaryIds.size>0 ? '#2A7A4A' : '#EDD898'}` }}>
+                    <div style={{ padding:'11px 14px', background:confirmedSalaryIds.size>0?'#EEF2EE':'#FBF6EE', borderBottom:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                      <span style={{ fontSize:13, fontWeight:600, color:confirmedSalaryIds.size>0?'#2A7A4A':'#8A6A1A', display:'flex', alignItems:'center', gap:6 }}>
+                        💰 {confirmedSalaryIds.size > 0 ? `Salary confirmed: ${fmt(salary?.netSalary || 0)}/mo` : 'Salary candidates — pick which credits are your salary'}
+                      </span>
+                      <button onClick={() => setSalCardOpen(!salCardOpen)} style={{ width:22, height:22, borderRadius:4, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:13, color:C.fg, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:600 }}>{salCardOpen?'−':'+'}</button>
+                    </div>
+                    {salCardOpen && (
+                      <>
+                        {topSalaryCandidate ? (
+                          <div style={{ ...S.row, fontSize:12, background:'#FAFAF8' }}>
+                            <span>Auto-detected: <strong>{topSalaryCandidate.source}</strong> · {topSalaryCandidate.occurrences} credits · variance {Math.round(topSalaryCandidate.variance*100)}%</span>
+                            <span style={{ color:C.fg, fontWeight:600 }}>{fmt(topSalaryCandidate.averageAmount)}/mo avg</span>
                           </div>
-                        </div>
-                        <div style={{ ...S.row, fontSize:12.5 }}>
-                          <span>{det.subtitle}</span>
-                          <span style={{ fontWeight:600, color:isSalary?'#2A7A4A':info.color }}>{fmt(det.amount)}/mo</span>
-                        </div>
-                        {expanded && (
-                          <div>
-                            {det.transactions.slice(0,8).map((t:any, i:number) => (
-                              <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 14px', fontSize:11.5, borderBottom:`1px solid #FAF7F2`, background:'#FAFAF8', gap:12 }}>
-                                <span style={{ color:C.muted, flexShrink:0, minWidth:60 }}>{t.date}</span>
-                                <span style={{ color:C.text, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>{t.brand ? <strong>{t.brand}</strong> : ''}{t.brand?' — ':''}{t.description}</span>
-                                <span style={{ fontWeight:600, color:t.type==='credit'?'#2A7A4A':C.danger, flexShrink:0 }}>{t.type==='credit'?'+':'-'}{fmt(t.amount)}</span>
-                              </div>
-                            ))}
-                            {det.transactions.length > 8 && <div style={{ padding:'6px 14px', fontSize:11, color:C.muted, background:'#FAFAF8', textAlign:'center' as const }}>+{det.transactions.length-8} more</div>}
-                            <div style={{ padding:'8px 14px', background:C.wl, fontSize:11.5, color:C.fg, lineHeight:1.6 }}>{det.note}</div>
+                        ) : (
+                          <div style={{ ...S.row, fontSize:12, color:C.muted, fontStyle:'italic' as const }}>
+                            <span>No clear salary pattern detected. Review credits below to pick yours.</span>
                           </div>
                         )}
+
+                        {/* Salary candidate transactions */}
+                        {salaryCandidates.flatMap(c => c.transactions).map(t => {
+                          const ticked = tickedSalary.has(t.id)
+                          return (
+                            <div key={t.id} style={{ display:'grid', gridTemplateColumns:'24px 75px 1fr 90px 28px', padding:'7px 14px', borderBottom:`0.5px solid #FAF7F2`, fontSize:11.5, gap:8, alignItems:'center', background: ticked ? '#F4F9F3' : '#fff' }}>
+                              <input type="checkbox" checked={ticked} onChange={() => toggleSalaryTick(t.id)} style={{ width:14, height:14, cursor:'pointer', accentColor:C.fg }} />
+                              <span style={{ color:C.muted }}>{t.date}</span>
+                              <span style={{ color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>{t.brand?<strong>{t.brand} · </strong>:''}{t.description}</span>
+                              <span style={{ color:'#2A7A4A', fontWeight:600, textAlign:'right' as const }}>+{fmt(t.amount)}</span>
+                              <button onClick={() => setSingleCategoryModal({ open:true, transaction:t })} title="Reassign" style={{ width:22, height:22, borderRadius:3, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted, display:'flex', alignItems:'center', justifyContent:'center' }}>↻</button>
+                            </div>
+                          )
+                        })}
+
+                        {/* Show all credits toggle */}
+                        {!salShowAllCredits && largeCredits.length > salaryCandidates.flatMap(c=>c.transactions).length && (
+                          <div style={{ padding:'8px 14px', background:'#FAFAF8', borderBottom:`0.5px solid #FAF7F2`, textAlign:'center' as const }}>
+                            <button onClick={() => setSalShowAllCredits(true)} style={{ padding:'5px 14px', background:'#fff', border:`1px solid ${C.border}`, borderRadius:4, fontSize:11.5, color:C.fg, cursor:'pointer', fontFamily:'inherit', fontWeight:500 }}>
+                              + Show all other credits ({largeCredits.length - salaryCandidates.flatMap(c=>c.transactions).length} more, ≥₹5,000)
+                            </button>
+                          </div>
+                        )}
+
+                        {/* All other credits */}
+                        {salShowAllCredits && largeCredits.filter(t => !salaryCandidates.flatMap(c=>c.transactions).find(st => st.id === t.id)).map(t => {
+                          const ticked = tickedSalary.has(t.id)
+                          return (
+                            <div key={t.id} style={{ display:'grid', gridTemplateColumns:'24px 75px 1fr 90px 28px', padding:'7px 14px', borderBottom:`0.5px solid #FAF7F2`, fontSize:11.5, gap:8, alignItems:'center', background: ticked ? '#F4F9F3' : '#fff' }}>
+                              <input type="checkbox" checked={ticked} onChange={() => toggleSalaryTick(t.id)} style={{ width:14, height:14, cursor:'pointer', accentColor:C.fg }} />
+                              <span style={{ color:C.muted }}>{t.date}</span>
+                              <span style={{ color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>{t.brand?<strong>{t.brand} · </strong>:''}{t.description}</span>
+                              <span style={{ color:'#2A7A4A', fontWeight:500, textAlign:'right' as const }}>+{fmt(t.amount)}</span>
+                              <button onClick={() => setSingleCategoryModal({ open:true, transaction:t })} title="Reassign" style={{ width:22, height:22, borderRadius:3, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted, display:'flex', alignItems:'center', justifyContent:'center' }}>↻</button>
+                            </div>
+                          )
+                        })}
+
+                        {/* Bulk action bar */}
+                        <div style={S.bulkBar}>
+                          <span>{tickedSalary.size} ticked = {fmt(tickedSalaryAmount)} total · avg {fmt(Math.round(tickedSalaryAmount/Math.max(1,bankMonths)))}/mo over {bankMonths} month{bankMonths>1?'s':''}</span>
+                          <span style={{ display:'flex', gap:5 }}>
+                            <button onClick={useTickedAsSalary} style={S.bulkBtn}>Use as salary</button>
+                            <button onClick={noneIsSalary} style={S.bulkBtn}>None are salary</button>
+                            <button onClick={parkSalaryReview} style={S.bulkBtn}>Park for later</button>
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* ROUND-TRIP CARD */}
+                  {roundtripPairs.length > 0 && (
+                    <div style={{ ...S.card, border:`1px solid ${confirmedDetections['roundtrip']?C.fg:'#EDD898'}` }}>
+                      <div style={{ padding:'11px 14px', background:'#FBF6EE', borderBottom:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                        <span style={{ fontSize:13, fontWeight:600, color:'#8A6A1A', display:'flex', alignItems:'center', gap:6 }}>
+                          🔄 Round-trip transfers · {roundtripPairs.length} pair{roundtripPairs.length>1?'s':''} · {fmt(roundtripPairs.reduce((s,p)=>s+p.amount,0))} total
+                        </span>
+                        <button onClick={() => setRtCardOpen(!rtCardOpen)} style={{ width:22, height:22, borderRadius:4, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:13, color:C.fg, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:600 }}>{rtCardOpen?'−':'+'}</button>
                       </div>
-                    )
-                  })}
+                      {rtCardOpen && (
+                        <>
+                          <div style={{ ...S.row, fontSize:12, background:'#FAFAF8', color:C.muted }}>
+                            <span>Tick pairs to net off · untick to keep · or send to Misc</span>
+                          </div>
+                          {roundtripPairs.slice(0,15).map(p => {
+                            const ticked = tickedRoundtrip.has(p.id)
+                            return (
+                              <div key={p.id} style={{ borderBottom:`0.5px solid #FAF7F2`, background: ticked ? '#FBF6EE' : '#fff' }}>
+                                <div style={{ display:'grid', gridTemplateColumns:'24px 75px 1fr 90px', padding:'6px 14px', fontSize:11.5, gap:8, alignItems:'center' }}>
+                                  <input type="checkbox" checked={ticked} onChange={() => toggleRoundtripTick(p.id)} style={{ width:14, height:14, cursor:'pointer', accentColor:C.fg, gridRow:'span 2' }} />
+                                  <span style={{ color:C.muted }}>{p.credit.date}</span>
+                                  <span style={{ color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>+ {p.credit.description}</span>
+                                  <span style={{ color:'#2A7A4A', fontWeight:600, textAlign:'right' as const }}>+{fmt(p.credit.amount)}</span>
+                                </div>
+                                <div style={{ display:'grid', gridTemplateColumns:'24px 75px 1fr 90px', padding:'2px 14px 7px', fontSize:11.5, gap:8, alignItems:'center' }}>
+                                  <span></span>
+                                  <span style={{ color:C.muted }}>{p.debit.date}</span>
+                                  <span style={{ color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>− {p.debit.description}</span>
+                                  <span style={{ color:C.danger, fontWeight:600, textAlign:'right' as const }}>−{fmt(p.debit.amount)}</span>
+                                </div>
+                              </div>
+                            )
+                          })}
+                          {roundtripPairs.length > 15 && <div style={{ padding:'7px 14px', fontSize:11, color:C.muted, background:'#FAFAF8' }}>+{roundtripPairs.length-15} more pairs</div>}
+                          <div style={S.bulkBar}>
+                            <span>{tickedRoundtrip.size} pairs ticked = {fmt(tickedRoundtripAmount)} will be netted off</span>
+                            <span style={{ display:'flex', gap:5 }}>
+                              <button onClick={netOffTickedRoundtrips} style={S.bulkBtn}>Net off ticked</button>
+                              <button onClick={sendUntickedRtToMisc} style={S.bulkBtn}>Unticked → Misc</button>
+                            </span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* INTEREST CARD */}
+                  {interestTxns.length > 0 && (
+                    <div style={{ ...S.card, border:`1px solid ${confirmedDetections['interest']?C.fg:'#C8D8C8'}` }}>
+                      <div style={{ padding:'11px 14px', background:'#EEF2EE', borderBottom:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                        <span style={{ fontSize:13, fontWeight:600, color:'#2A7A4A', display:'flex', alignItems:'center', gap:6 }}>
+                          💸 Interest / Dividend income · {fmt(interestTxns.reduce((s,t)=>s+t.amount,0))} total
+                        </span>
+                        <button onClick={() => setIntCardOpen(!intCardOpen)} style={{ width:22, height:22, borderRadius:4, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:13, color:C.fg, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:600 }}>{intCardOpen?'−':'+'}</button>
+                      </div>
+                      {intCardOpen && (
+                        <>
+                          <div style={{ ...S.row, fontSize:12, background:'#FAFAF8', color:C.muted }}>
+                            <span>Tick the actual interest/dividend credits — untick wrong matches</span>
+                          </div>
+                          {interestTxns.map(t => {
+                            const ticked = tickedInterest.has(t.id)
+                            return (
+                              <div key={t.id} style={{ display:'grid', gridTemplateColumns:'24px 75px 1fr 90px 28px', padding:'7px 14px', borderBottom:`0.5px solid #FAF7F2`, fontSize:11.5, gap:8, alignItems:'center', background: ticked ? '#EEF2EE' : '#fff' }}>
+                                <input type="checkbox" checked={ticked} onChange={() => toggleInterestTick(t.id)} style={{ width:14, height:14, cursor:'pointer', accentColor:C.fg }} />
+                                <span style={{ color:C.muted }}>{t.date}</span>
+                                <span style={{ color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>{t.brand?<strong>{t.brand} · </strong>:''}{t.description}</span>
+                                <span style={{ color:'#2A7A4A', fontWeight:500, textAlign:'right' as const }}>+{fmt(t.amount)}</span>
+                                <button onClick={() => setSingleCategoryModal({ open:true, transaction:t })} title="Reassign" style={{ width:22, height:22, borderRadius:3, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted, display:'flex', alignItems:'center', justifyContent:'center' }}>↻</button>
+                              </div>
+                            )
+                          })}
+                          <div style={S.bulkBar}>
+                            <span>{tickedInterest.size} ticked = {fmt(tickedInterestAmount)} → {fmt(Math.round(tickedInterestAmount*(12/bankMonths)))} annual</span>
+                            <span style={{ display:'flex', gap:5 }}>
+                              <button onClick={routeTickedToOtherIncome} style={S.bulkBtn}>Route to Other Income</button>
+                              <button onClick={parkInterestReview} style={S.bulkBtn}>Park for later</button>
+                            </span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
-              <div style={{ display:'flex', gap:8, marginTop:4 }}>
-                <button onClick={() => setIncTab('salary')} style={{ ...S.btn(true), flex:1 }}>Next: Confirm Salary →</button>
+              <div style={{ display:'flex', gap:8, marginTop:12 }}>
+                <button onClick={() => setIncTab('salary')} style={{ ...S.btn(true), flex:1 }}>Next: Salary →</button>
               </div>
             </div>
           )}
@@ -739,7 +807,12 @@ export default function ProfilePage() {
                     ))}
                   </div>
                 </div>
-              ) : (salMode==='slip'||salMode==='offer') && (
+              ) : salMode === 'manual' ? (
+                <div style={{ ...S.card, padding:'16px' }}>
+                  <p style={{ fontSize:13, fontWeight:600, color:C.text, margin:'0 0 12px' }}>Enter your monthly take-home</p>
+                  <AmtInput value={salary?.netSalary||0} onChange={v => v > 0 && setSalary({ netSalary:v, grossSalary:Math.round(v*1.2), employerName:'Your employer' } as any)} />
+                </div>
+              ) : (
                 <div style={S.upload(false)} onClick={() => !loadingDoc&&(salMode==='slip'?slipRef:offerRef).current?.click()}>
                   <span style={{ fontSize:28 }}>{salMode==='slip'?'📄':'📨'}</span>
                   <p style={{ fontSize:13, fontWeight:600, color:C.text, margin:0 }}>{loadingDoc?'Reading…':`Upload ${salMode==='slip'?'Salary Slip':'Offer Letter'}`}</p>
@@ -758,7 +831,7 @@ export default function ProfilePage() {
 
           {incTab==='other' && (
             <div>
-              {aisData&&otherSel.size>0&&<div style={S.insight}>{otherSel.size} sources auto-filled from AIS / bank statement</div>}
+              {(aisData||otherSel.size>0)&&<div style={S.insight}>{otherSel.size} sources auto-filled from {aisData?'AIS':'bank statement'}</div>}
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:16 }}>
                 {OTHER_TYPES.map(type => {
                   const sel = otherSel.has(type.key)
@@ -776,7 +849,7 @@ export default function ProfilePage() {
               </div>
               <div style={{ display:'flex', gap:8 }}>
                 <button onClick={() => setIncTab('salary')} style={{ ...S.btn(false), padding:'10px 16px' }}>← Back</button>
-                <button onClick={() => setMainTab('expenses')} style={{ ...S.btn(true), flex:1 }}>Next: Add Expenses →</button>
+                <button onClick={() => setMainTab('expenses')} style={{ ...S.btn(true), flex:1 }}>Next: Expenses →</button>
               </div>
             </div>
           )}
@@ -865,112 +938,154 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* P&L + CASH FLOW TAB — MONTHLY BREAKDOWN */}
+      {/* P&L + CASH FLOW TAB */}
       {mainTab==='pnl' && (
         <div>
           {!bankData ? (
             <div style={S.insight}>
-              📊 Upload your bank statement in the Documents tab to see your monthly P&L and cash flow.
+              📊 Upload your bank statement in the Documents tab to see P&L and cash flow.
               <div style={{ marginTop:8 }}>
                 <button onClick={() => setMainTab('docs')} style={{ ...S.btn(true), padding:'8px 16px' }}>Upload Statement →</button>
               </div>
             </div>
-          ) : monthlyPnL.length > 0 ? (
+          ) : pnl ? (
             <>
-              {/* Period info */}
               <div style={{ ...S.insight, marginBottom:14 }}>
-                📅 Period: <strong>{bankPeriod?.from || ''} to {bankPeriod?.to || ''}</strong> · {bankMonths} month{bankMonths>1?'s':''} · {taggedTxns.length} transactions
+                📅 Period: <strong>{bankPeriod?.from} to {bankPeriod?.to}</strong> · {bankMonths} month{bankMonths>1?'s':''} · monthly averages applied · {taggedTxns.length} transactions
               </div>
 
-              {/* Monthly summary table */}
               <div style={S.card}>
-                <div style={S.cardHead}>Monthly summary</div>
-                <div style={{ overflowX:'auto' as const }}>
-                  <table style={{ width:'100%', borderCollapse:'collapse' as const, fontSize:12.5 }}>
-                    <thead>
-                      <tr style={{ background:C.wl }}>
-                        <th style={{ padding:'8px 14px', textAlign:'left' as const, fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.05em', textTransform:'uppercase' as const }}>Month</th>
-                        <th style={{ padding:'8px 14px', textAlign:'right' as const, fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.05em', textTransform:'uppercase' as const }}>Income</th>
-                        <th style={{ padding:'8px 14px', textAlign:'right' as const, fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.05em', textTransform:'uppercase' as const }}>Expenses</th>
-                        <th style={{ padding:'8px 14px', textAlign:'right' as const, fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.05em', textTransform:'uppercase' as const }}>Net</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {monthlyPnL.map(m => (
-                        <tr key={m.monthKey} style={{ borderBottom:`1px solid #FAF7F2` }}>
-                          <td style={{ padding:'8px 14px', color:C.text, fontWeight:500 }}>{m.monthLabel}</td>
-                          <td style={{ padding:'8px 14px', textAlign:'right' as const, color:'#2A7A4A', fontWeight:500 }}>+{fmt(m.income)}</td>
-                          <td style={{ padding:'8px 14px', textAlign:'right' as const, color:C.danger, fontWeight:500 }}>−{fmt(m.expenses)}</td>
-                          <td style={{ padding:'8px 14px', textAlign:'right' as const, color:m.net>=0?'#2A7A4A':C.danger, fontWeight:700 }}>
-                            {m.net>=0?'+':''}{fmt(m.net)}
+                <div style={S.cardHead}>Profit & Loss · monthly average</div>
+
+                <div style={{ padding:'8px 14px', background:'#FAFAF8', borderBottom:`1px solid ${C.border}`, fontSize:10, fontWeight:700, color:'#2A7A4A', letterSpacing:'0.06em', textTransform:'uppercase' as const }}>Income</div>
+                {pnl.incomeLines.length === 0 ? (
+                  <div style={{ ...S.row, fontSize:12, color:C.muted, fontStyle:'italic' as const }}>
+                    <span>No income detected — confirm salary in Income tab</span>
+                  </div>
+                ) : pnl.incomeLines.map(line => {
+                  const expanded = pnlExpanded[`inc_${line.mega}`]
+                  return (
+                    <div key={`inc_${line.mega}`}>
+                      <div style={{ ...S.row, fontWeight:500 }}>
+                        <span style={{ display:'flex', alignItems:'center', gap:8 }}>
+                          <button onClick={() => setPnlExpanded(p=>({...p, [`inc_${line.mega}`]:!expanded}))} style={{ width:18, height:18, borderRadius:3, border:`1px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.fg, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontWeight:600 }}>{expanded?'−':'+'}</button>
+                          <span style={{ fontSize:14 }}>{line.icon}</span>
+                          {line.label}
+                        </span>
+                        <span style={{ color:'#2A7A4A', fontWeight:600 }}>+{fmt(line.monthlyAvg)}/mo</span>
+                      </div>
+                      {expanded && (
+                        <div style={{ background:'#FAFAF8' }}>
+                          {line.transactions.slice(0,15).map(t => (
+                            <div key={t.id} style={{ display:'grid', gridTemplateColumns:'70px 1fr 90px 28px', padding:'6px 14px 6px 38px', borderBottom:`1px solid #FAF7F2`, fontSize:11.5, gap:8, alignItems:'center' }}>
+                              <span style={{ color:C.muted }}>{t.date}</span>
+                              <span style={{ color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>{t.brand?<strong>{t.brand} · </strong>:''}{t.description}</span>
+                              <span style={{ color:'#2A7A4A', fontWeight:600, textAlign:'right' as const }}>+{fmt(t.amount)}</span>
+                              <button onClick={() => setSingleCategoryModal({ open:true, transaction:t })} title="Reassign category" style={{ width:22, height:22, borderRadius:3, border:`1px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted, display:'flex', alignItems:'center', justifyContent:'center' }}>↻</button>
+                            </div>
+                          ))}
+                          {line.transactions.length > 15 && (
+                            <div style={{ padding:'6px 14px 6px 38px', fontSize:11, color:C.muted }}>+{line.transactions.length-15} more transactions</div>
+                          )}
+                          <div style={{ padding:'6px 14px 6px 38px', display:'flex', gap:6 }}>
+                            <button onClick={() => setBulkCategoryModal({ open:true, transactions:line.transactions, label:line.label })} style={{ padding:'4px 10px', fontSize:11, background:'#fff', color:C.fg, border:`1px solid ${C.border}`, borderRadius:3, cursor:'pointer', fontFamily:'inherit' }}>Reassign all</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+                <div style={{ display:'flex', justifyContent:'space-between', padding:'9px 14px', background:C.wl, fontWeight:700, fontSize:13 }}>
+                  <span>Total income</span>
+                  <span style={{ color:'#2A7A4A' }}>+{fmt(pnl.monthlyIncome)}/mo</span>
+                </div>
+
+                <div style={{ padding:'8px 14px', background:'#FAFAF8', borderBottom:`1px solid ${C.border}`, fontSize:10, fontWeight:700, color:C.danger, letterSpacing:'0.06em', textTransform:'uppercase' as const, marginTop:1 }}>Expenses</div>
+                {pnl.expenseLines.length === 0 ? (
+                  <div style={{ ...S.row, fontSize:12, color:C.muted, fontStyle:'italic' as const }}>
+                    <span>No expenses detected</span>
+                  </div>
+                ) : pnl.expenseLines.map(line => {
+                  const expanded = pnlExpanded[`exp_${line.mega}`]
+                  return (
+                    <div key={`exp_${line.mega}`}>
+                      <div style={S.row}>
+                        <span style={{ display:'flex', alignItems:'center', gap:8 }}>
+                          <button onClick={() => setPnlExpanded(p=>({...p, [`exp_${line.mega}`]:!expanded}))} style={{ width:18, height:18, borderRadius:3, border:`1px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.fg, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontWeight:600 }}>{expanded?'−':'+'}</button>
+                          <span style={{ fontSize:14 }}>{line.icon}</span>
+                          {line.label}
+                        </span>
+                        <span style={{ color:C.danger, fontWeight:500 }}>−{fmt(line.monthlyAvg)}/mo</span>
+                      </div>
+                      {expanded && (
+                        <div style={{ background:'#FAFAF8' }}>
+                          {line.transactions.slice(0,15).map(t => (
+                            <div key={t.id} style={{ display:'grid', gridTemplateColumns:'70px 1fr 90px 28px', padding:'6px 14px 6px 38px', borderBottom:`1px solid #FAF7F2`, fontSize:11.5, gap:8, alignItems:'center' }}>
+                              <span style={{ color:C.muted }}>{t.date}</span>
+                              <span style={{ color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>{t.brand?<strong>{t.brand} · </strong>:''}{t.description}</span>
+                              <span style={{ color:C.danger, fontWeight:500, textAlign:'right' as const }}>−{fmt(t.amount)}</span>
+                              <button onClick={() => setSingleCategoryModal({ open:true, transaction:t })} title="Reassign category" style={{ width:22, height:22, borderRadius:3, border:`1px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted, display:'flex', alignItems:'center', justifyContent:'center' }}>↻</button>
+                            </div>
+                          ))}
+                          {line.transactions.length > 15 && (
+                            <div style={{ padding:'6px 14px 6px 38px', fontSize:11, color:C.muted }}>+{line.transactions.length-15} more transactions</div>
+                          )}
+                          <div style={{ padding:'6px 14px 6px 38px', display:'flex', gap:6 }}>
+                            <button onClick={() => setBulkCategoryModal({ open:true, transactions:line.transactions, label:line.label })} style={{ padding:'4px 10px', fontSize:11, background:'#fff', color:C.fg, border:`1px solid ${C.border}`, borderRadius:3, cursor:'pointer', fontFamily:'inherit' }}>Reassign all</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+                <div style={{ display:'flex', justifyContent:'space-between', padding:'9px 14px', background:C.wl, fontWeight:700, fontSize:13 }}>
+                  <span>Total expenses</span>
+                  <span style={{ color:C.danger }}>−{fmt(pnl.monthlyExpenses)}/mo</span>
+                </div>
+
+                <div style={{ display:'flex', justifyContent:'space-between', padding:'13px 16px', fontSize:15, fontWeight:700, borderTop:`1.5px solid ${C.border}` }}>
+                  <span>Net surplus / deficit</span>
+                  <span style={{ color:pnl.monthlyNet>=0?'#2A7A4A':C.danger }}>
+                    {pnl.monthlyNet>=0?'+':''}{fmt(pnl.monthlyNet)}/mo
+                  </span>
+                </div>
+              </div>
+
+              {pnl.monthlyPnL.length > 1 && (
+                <div style={S.card}>
+                  <div style={S.cardHead}>Cash flow by month</div>
+                  <div style={{ overflowX:'auto' as const }}>
+                    <table style={{ width:'100%', borderCollapse:'collapse' as const, fontSize:12.5 }}>
+                      <thead>
+                        <tr style={{ background:C.wl }}>
+                          <th style={{ padding:'8px 14px', textAlign:'left' as const, fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.05em', textTransform:'uppercase' as const }}>Month</th>
+                          <th style={{ padding:'8px 14px', textAlign:'right' as const, fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.05em', textTransform:'uppercase' as const }}>Income</th>
+                          <th style={{ padding:'8px 14px', textAlign:'right' as const, fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.05em', textTransform:'uppercase' as const }}>Expenses</th>
+                          <th style={{ padding:'8px 14px', textAlign:'right' as const, fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.05em', textTransform:'uppercase' as const }}>Net</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pnl.monthlyPnL.map(m => (
+                          <tr key={m.monthKey} style={{ borderBottom:`1px solid #FAF7F2` }}>
+                            <td style={{ padding:'8px 14px', color:C.text, fontWeight:500 }}>{m.monthLabel}</td>
+                            <td style={{ padding:'8px 14px', textAlign:'right' as const, color:'#2A7A4A', fontWeight:500 }}>+{fmt(m.income)}</td>
+                            <td style={{ padding:'8px 14px', textAlign:'right' as const, color:C.danger, fontWeight:500 }}>−{fmt(m.expenses)}</td>
+                            <td style={{ padding:'8px 14px', textAlign:'right' as const, color:m.net>=0?'#2A7A4A':C.danger, fontWeight:700 }}>
+                              {m.net>=0?'+':''}{fmt(m.net)}
+                            </td>
+                          </tr>
+                        ))}
+                        <tr style={{ background:C.wl, fontWeight:700 }}>
+                          <td style={{ padding:'10px 14px' }}>Total</td>
+                          <td style={{ padding:'10px 14px', textAlign:'right' as const, color:'#2A7A4A' }}>+{fmt(pnl.totalIncome)}</td>
+                          <td style={{ padding:'10px 14px', textAlign:'right' as const, color:C.danger }}>−{fmt(pnl.totalExpenses)}</td>
+                          <td style={{ padding:'10px 14px', textAlign:'right' as const, color:pnl.netSurplus>=0?'#2A7A4A':C.danger }}>
+                            {pnl.netSurplus>=0?'+':''}{fmt(pnl.netSurplus)}
                           </td>
                         </tr>
-                      ))}
-                      <tr style={{ background:C.wl, fontWeight:700 }}>
-                        <td style={{ padding:'10px 14px' }}>Total</td>
-                        <td style={{ padding:'10px 14px', textAlign:'right' as const, color:'#2A7A4A' }}>+{fmt(monthlyPnL.reduce((s,m)=>s+m.income,0))}</td>
-                        <td style={{ padding:'10px 14px', textAlign:'right' as const, color:C.danger }}>−{fmt(monthlyPnL.reduce((s,m)=>s+m.expenses,0))}</td>
-                        <td style={{ padding:'10px 14px', textAlign:'right' as const, color:monthlyPnL.reduce((s,m)=>s+m.net,0)>=0?'#2A7A4A':C.danger }}>
-                          {monthlyPnL.reduce((s,m)=>s+m.net,0)>=0?'+':''}{fmt(monthlyPnL.reduce((s,m)=>s+m.net,0))}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Category breakdown by month */}
-              <div style={S.card}>
-                <div style={S.cardHead}>Expense breakdown by category — monthly</div>
-                <div style={{ overflowX:'auto' as const }}>
-                  <table style={{ width:'100%', borderCollapse:'collapse' as const, fontSize:12 }}>
-                    <thead>
-                      <tr style={{ background:'#FAFAF8', borderBottom:`1px solid ${C.border}` }}>
-                        <th style={{ padding:'8px 14px', textAlign:'left' as const, fontSize:10, fontWeight:700, color:C.muted, letterSpacing:'0.05em', textTransform:'uppercase' as const }}>Category</th>
-                        {monthlyPnL.map(m => (
-                          <th key={m.monthKey} style={{ padding:'8px 14px', textAlign:'right' as const, fontSize:10, fontWeight:700, color:C.muted, letterSpacing:'0.05em', textTransform:'uppercase' as const }}>{m.monthLabel}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(['food','shopping','investments','transport','entertainment','utilities','healthcare','housing','insurance','transfer','misc'] as MegaCategory[]).map(mega => {
-                        const info = MEGA_CATEGORIES[mega]
-                        const hasAny = monthlyPnL.some(m => (m.byCategory[mega]||0) > 0)
-                        if (!hasAny) return null
-                        return (
-                          <tr key={mega} style={{ borderBottom:`1px solid #FAF7F2` }}>
-                            <td style={{ padding:'7px 14px', color:C.text }}>
-                              <span style={{ fontSize:14, marginRight:6 }}>{info.icon}</span>{info.label}
-                            </td>
-                            {monthlyPnL.map(m => (
-                              <td key={m.monthKey} style={{ padding:'7px 14px', textAlign:'right' as const, color:(m.byCategory[mega]||0) > 0 ? C.text : C.muted }}>
-                                {(m.byCategory[mega]||0) > 0 ? fmt(m.byCategory[mega]) : '—'}
-                              </td>
-                            ))}
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Income breakdown — manual + auto-detected */}
-              {(salary?.netSalary || otherAnnual > 0) && (
-                <div style={S.card}>
-                  <div style={S.cardHead}>Confirmed income (from your inputs)</div>
-                  {salary?.netSalary > 0 && (
-                    <div style={S.row}>
-                      <span style={{ display:'flex', alignItems:'center', gap:6 }}><span style={{ fontSize:14 }}>💰</span>Salary (confirmed)</span>
-                      <span style={{ color:'#2A7A4A', fontWeight:600 }}>+{fmt(salary.netSalary)}/mo</span>
-                    </div>
-                  )}
-                  {otherAnnual > 0 && (
-                    <div style={S.row}>
-                      <span style={{ display:'flex', alignItems:'center', gap:6 }}><span style={{ fontSize:14 }}>💸</span>Other income (annual {fmt(otherAnnual)})</span>
-                      <span style={{ color:'#2A7A4A', fontWeight:600 }}>+{fmt(Math.round(otherAnnual/12))}/mo</span>
-                    </div>
-                  )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </>
@@ -978,24 +1093,52 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* CATEGORY CHANGE MODAL */}
-      {categoryModal.open && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(28,43,34,0.5)', zIndex:99, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }} onClick={() => setCategoryModal({ open:false, detectionId:null })}>
+      {/* SINGLE CATEGORY MODAL */}
+      {singleCategoryModal.open && singleCategoryModal.transaction && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(28,43,34,0.5)', zIndex:99, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }} onClick={() => setSingleCategoryModal({ open:false, transaction:null })}>
           <div onClick={e=>e.stopPropagation()} style={{ background:'#fff', borderRadius:10, padding:20, maxWidth:480, width:'100%', boxShadow:'0 12px 40px rgba(0,0,0,0.18)', maxHeight:'80vh', overflowY:'auto' as const }}>
             <p style={{ fontSize:16, fontWeight:700, color:C.text, margin:'0 0 4px' }}>Change category</p>
-            <p style={{ fontSize:12, color:C.muted, margin:'0 0 14px' }}>Pick the right category for these transactions:</p>
+            <div style={{ background:'#FAFAF8', border:`1px solid ${C.border}`, borderRadius:5, padding:'10px 12px', marginBottom:12 }}>
+              <p style={{ fontSize:11, color:C.muted, margin:'0 0 2px' }}>{singleCategoryModal.transaction.date}</p>
+              <p style={{ fontSize:13, color:C.text, margin:'0 0 4px' }}>{singleCategoryModal.transaction.description}</p>
+              <p style={{ fontSize:14, fontWeight:600, color:singleCategoryModal.transaction.type==='credit'?'#2A7A4A':C.danger, margin:0 }}>
+                {singleCategoryModal.transaction.type==='credit'?'+':'-'}{fmt(singleCategoryModal.transaction.amount)}
+              </p>
+            </div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-              {(Object.keys(MEGA_CATEGORIES) as MegaCategory[]).filter(k => k !== 'cashback').map(key => {
+              {(Object.keys(MEGA_CATEGORIES) as MegaCategory[]).map(key => {
                 const info = MEGA_CATEGORIES[key]
                 return (
-                  <button key={key} onClick={() => reassignCategory(key)} style={{ padding:'10px 12px', background:info.bgColor, border:`1px solid ${info.borderColor}`, borderRadius:5, cursor:'pointer', fontFamily:'inherit', textAlign:'left' as const, display:'flex', alignItems:'center', gap:8 }}>
-                    <span style={{ fontSize:18 }}>{info.icon}</span>
-                    <span style={{ fontSize:12.5, fontWeight:500, color:info.color }}>{info.label}</span>
+                  <button key={key} onClick={() => reassignSingle(key)} style={{ padding:'10px 12px', background:info.bgColor, border:`1px solid ${info.borderColor}`, borderRadius:5, cursor:'pointer', fontFamily:'inherit', textAlign:'left' as const, display:'flex', alignItems:'center', gap:8 }}>
+                    <span style={{ fontSize:16 }}>{info.icon}</span>
+                    <span style={{ fontSize:11.5, fontWeight:500, color:info.color }}>{info.label}</span>
                   </button>
                 )
               })}
             </div>
-            <button onClick={() => setCategoryModal({ open:false, detectionId:null })} style={{ marginTop:14, width:'100%', padding:9, background:'#fff', color:C.muted, border:`1px solid ${C.border}`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit' }}>Cancel</button>
+            <button onClick={() => setSingleCategoryModal({ open:false, transaction:null })} style={{ marginTop:14, width:'100%', padding:9, background:'#fff', color:C.muted, border:`1px solid ${C.border}`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit' }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* BULK CATEGORY MODAL */}
+      {bulkCategoryModal.open && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(28,43,34,0.5)', zIndex:99, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }} onClick={() => setBulkCategoryModal({ open:false, transactions:[], label:'' })}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:'#fff', borderRadius:10, padding:20, maxWidth:520, width:'100%', boxShadow:'0 12px 40px rgba(0,0,0,0.18)', maxHeight:'80vh', overflowY:'auto' as const }}>
+            <p style={{ fontSize:16, fontWeight:700, color:C.text, margin:'0 0 4px' }}>Reassign {bulkCategoryModal.transactions.length} transactions</p>
+            <p style={{ fontSize:12, color:C.muted, margin:'0 0 14px' }}>Currently in <strong>{bulkCategoryModal.label}</strong> · pick the new category:</p>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+              {(Object.keys(MEGA_CATEGORIES) as MegaCategory[]).map(key => {
+                const info = MEGA_CATEGORIES[key]
+                return (
+                  <button key={key} onClick={() => reassignBulk(key)} style={{ padding:'10px 12px', background:info.bgColor, border:`1px solid ${info.borderColor}`, borderRadius:5, cursor:'pointer', fontFamily:'inherit', textAlign:'left' as const, display:'flex', alignItems:'center', gap:8 }}>
+                    <span style={{ fontSize:18 }}>{info.icon}</span>
+                    <span style={{ fontSize:12, fontWeight:500, color:info.color }}>{info.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+            <button onClick={() => setBulkCategoryModal({ open:false, transactions:[], label:'' })} style={{ marginTop:14, width:'100%', padding:9, background:'#fff', color:C.muted, border:`1px solid ${C.border}`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit' }}>Cancel</button>
           </div>
         </div>
       )}
