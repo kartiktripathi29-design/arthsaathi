@@ -164,27 +164,42 @@ export default function ProfilePage() {
       const res = await fetch('/api/parse-bank-statement', { method:'POST', body:form })
       const text = await res.text()
       let json:any
-      try { json = JSON.parse(text) } catch { json = { error: text } }
+      try { json = JSON.parse(text) } catch { json = { error: 'corrupt_file', message: text } }
 
-      // Detect password issues from any signal: 422 status, error code, or message containing password keywords
-      const errMsg = (json.error || json.message || text || '').toLowerCase()
-      const isPasswordIssue = res.status === 422 ||
-                              json.error === 'incorrect_password' ||
-                              errMsg.includes('password') ||
-                              errMsg.includes('encrypted') ||
-                              errMsg.includes('protect') ||
-                              errMsg.includes('locked')
-
-      if (isPasswordIssue) {
+      // Handle all parser error types explicitly
+      if (!res.ok || json.error) {
         toast.dismiss(tid)
-        setPwdModal({ open:true, type:'bank', file, error: password ? 'Incorrect password. Please try again.' : '' })
-        setPwd('')
+        const errCode = json.error
+        const errMsg = json.message || ''
+
+        // Password-related — open modal
+        if (errCode === 'incorrect_password' || errCode === 'requires_password' || res.status === 422) {
+          setPwdModal({ open:true, type:'bank', file, error: password ? 'Incorrect password. Please try again.' : '' })
+          setPwd('')
+          return
+        }
+
+        // AES PDF — guide user to alternative format
+        if (errCode === 'aes_pdf_unsupported') {
+          toast.error('This bank PDF format isn\'t supported yet. Try downloading as Excel from your bank app.', { duration: 6000 })
+          return
+        }
+
+        // Other errors
+        const friendly: Record<string, string> = {
+          unsupported_format: 'File type not recognised. Try PDF, Excel, CSV, or a photo.',
+          corrupt_file: errMsg || 'Could not read this file. Try a different one.',
+          too_large: 'File too large. Try a shorter date range or compress the file.',
+        }
+        toast.error(friendly[errCode] || errMsg || 'Failed to parse statement')
         return
       }
-      if (!res.ok) throw new Error(json.error || 'Failed to read statement')
+
+      // Success
       setBankData(json.data)
       try { localStorage.setItem('av_bank', JSON.stringify(json.data)) } catch {}
-      // Auto-fill expenses
+
+      // Auto-fill expenses from bank summary
       if (json.data.summary) {
         const s = json.data.summary
         const newExp = expenses.map(e => {
@@ -210,17 +225,19 @@ export default function ProfilePage() {
         setExpenses(newExp); setVariable(newVar); setSavings(newSav)
         saveProfile(newExp, newSav, newVar)
       }
-      toast.success(`Statement parsed! ${json.data.transactions?.length || 0} transactions categorised`, { id:tid })
+
+      const fmtKind: Record<string, string> = { 'pdf':'PDF', 'excel-xlsx':'Excel', 'excel-xls':'Excel', 'csv':'CSV', 'image':'Photo' }
+      const kindLabel = fmtKind[json.fileKind] || ''
+      toast.success(`${kindLabel} statement parsed! ${json.data.transactions?.length || 0} transactions categorised`, { id:tid })
     } catch (e:any) {
-      // Last-resort password detection on raw error
+      toast.dismiss(tid)
       const errStr = (e.message || String(e) || '').toLowerCase()
       if (errStr.includes('password') || errStr.includes('encrypted') || errStr.includes('protect')) {
-        toast.dismiss(tid)
         setPwdModal({ open:true, type:'bank', file, error: password ? 'Incorrect password. Please try again.' : '' })
         setPwd('')
         return
       }
-      toast.error(e.message || 'Failed to parse', { id:tid })
+      toast.error(e.message || 'Failed to parse statement')
     } finally { setLoadingDoc(null) }
   }
 
@@ -350,7 +367,7 @@ export default function ProfilePage() {
                   ) : (
                     <>
                       <p style={{ fontSize:14, fontWeight:700, color:C.text, margin:'0 0 3px' }}>Bank Statement</p>
-                      <p style={{ fontSize:11.5, color:C.muted, margin:0, lineHeight:1.55 }}>SBI · HDFC · ICICI · Axis · Kotak — any bank · PDF or Excel · Password supported</p>
+                      <p style={{ fontSize:11.5, color:C.muted, margin:0, lineHeight:1.55 }}>Any Indian bank · PDF, Excel, CSV or photo of statement · Password supported</p>
                       <p style={{ fontSize:10.5, color:C.muted, margin:'4px 0 0' }}>⚡ Auto-fills income, expenses & savings · 30 seconds</p>
                     </>
                   )}
@@ -362,7 +379,7 @@ export default function ProfilePage() {
                     {loadingDoc==='bank' ? 'Reading…' : 'Upload Statement'}
                   </button>
                 )}
-                <input ref={bankRef} type="file" accept=".pdf,.xlsx,.xls" style={{ display:'none' }} onChange={e => e.target.files?.[0] && handleBankFile(e.target.files[0])} />
+                <input ref={bankRef} type="file" accept=".pdf,.xlsx,.xls,.csv,.jpg,.jpeg,.png" style={{ display:'none' }} onChange={e => e.target.files?.[0] && handleBankFile(e.target.files[0])} />
               </div>
 
               {/* Tax docs */}

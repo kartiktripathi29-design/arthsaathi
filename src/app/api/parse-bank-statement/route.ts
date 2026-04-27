@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { parseStatement } from '@/lib/statementParser'
 
 export const maxDuration = 60
 
@@ -44,45 +45,22 @@ Rules:
 - medical: pharmacy, hospital, doctor
 - education: school fees, courses
 - transfer: UPI to individuals, NEFT/IMPS to persons
-- other: everything else`
+- other: everything else
 
-async function parseExcel(buffer: Buffer): Promise<string> {
-  const XLSX = await import('xlsx')
-  const workbook = XLSX.read(buffer, { type: 'buffer' })
-  let allText = ''
-  workbook.SheetNames.forEach(name => {
-    const sheet = workbook.Sheets[name]
-    const csv = XLSX.utils.sheet_to_csv(sheet)
-    allText += `\n=== Sheet: ${name} ===\n${csv}\n`
-  })
-  return allText
-}
+If the data is unclear or you cannot find transactions, return JSON with totalCredits=0, totalDebits=0, transactions=[], and an empty summary.`
 
-async function isEncryptedPdf(buffer: Buffer): Promise<boolean> {
-  // Check 1: raw bytes for /Encrypt marker (most reliable)
-  const text = buffer.toString('latin1', 0, Math.min(buffer.length, 16384))
-  if (text.includes('/Encrypt')) return true
-  return false
-}
-
-async function unlockPdf(buffer: Buffer, password: string): Promise<Buffer> {
-  const { PDFDocument } = await import('pdf-lib')
-  try {
-    const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: false, password } as any)
-    const saved = await pdfDoc.save()
-    return Buffer.from(saved.buffer, saved.byteOffset, saved.byteLength) as Buffer
-  } catch (e: any) {
-    const msg = (e.message || '').toLowerCase()
-    if (msg.includes('encrypted') || msg.includes('password') || msg.includes('protect')) {
-      throw new Error('incorrect_password')
-    }
-    throw e
+// Map ParseError to HTTP responses
+function errorResponse(error: string, message?: string) {
+  const responses: Record<string, { status: number; body: any }> = {
+    incorrect_password: { status: 422, body: { error: 'incorrect_password' } },
+    requires_password: { status: 422, body: { error: 'incorrect_password' } },  // same as incorrect — frontend opens modal
+    aes_pdf_unsupported: { status: 415, body: { error: 'aes_pdf_unsupported', message: message || 'This PDF format isn\'t supported yet. Try Excel format.' } },
+    unsupported_format: { status: 415, body: { error: 'unsupported_format', message: message || 'File type not supported.' } },
+    corrupt_file: { status: 400, body: { error: 'corrupt_file', message: message || 'Could not read the file.' } },
+    too_large: { status: 413, body: { error: 'too_large', message: message || 'File too large.' } },
   }
-}
-
-function isPasswordError(err: any): boolean {
-  const msg = (err?.message || err?.error?.message || String(err) || '').toLowerCase()
-  return msg.includes('encrypted') || msg.includes('password') || msg.includes('protect') || msg.includes('locked') || msg.includes('decrypt')
+  const r = responses[error] || { status: 500, body: { error } }
+  return NextResponse.json(r.body, { status: r.status })
 }
 
 export async function POST(req: NextRequest) {
@@ -92,73 +70,42 @@ export async function POST(req: NextRequest) {
     const password = (form.get('password') as string) || ''
 
     if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
-    if (file.size > 15 * 1024 * 1024) return NextResponse.json({ error: 'File too large (max 15MB)' }, { status: 400 })
+    if (file.size > 15 * 1024 * 1024) return errorResponse('too_large', 'Max 15MB')
 
-    const buffer: Buffer = Buffer.from(await file.arrayBuffer())
-    const fileName = file.name.toLowerCase()
-    const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || file.type.includes('spreadsheet') || file.type.includes('excel')
+    const buffer = Buffer.from(await file.arrayBuffer())
 
-    let messageContent: any[] = []
+    // Parse — handles all formats, encryption, etc.
+    const result = await parseStatement(buffer, file.name, file.type, password)
 
-    if (isExcel) {
-      try {
-        const csvText = await parseExcel(buffer)
-        if (csvText.length > 500_000) return NextResponse.json({ error: 'Excel file too large to process' }, { status: 400 })
-        messageContent = [{ type: 'text', text: `Parse this bank statement Excel data:\n\n${csvText}` }]
-      } catch (e: any) {
-        if (isPasswordError(e)) {
-          return NextResponse.json({ error: 'incorrect_password' }, { status: 422 })
-        }
-        throw e
-      }
-    } else {
-      // PDF flow — proactively check encryption
-      const encrypted = await isEncryptedPdf(buffer)
-      let pdfBuffer: Buffer = buffer
-
-      if (encrypted) {
-        if (!password) {
-          return NextResponse.json({ error: 'incorrect_password' }, { status: 422 })
-        }
-        try {
-          pdfBuffer = await unlockPdf(buffer, password)
-        } catch (e: any) {
-          if (isPasswordError(e) || e.message === 'incorrect_password') {
-            return NextResponse.json({ error: 'incorrect_password' }, { status: 422 })
-          }
-          throw e
-        }
-      }
-
-      const base64 = pdfBuffer.toString('base64')
-      messageContent = [
-        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } } as any,
-        { type: 'text', text: 'Parse this Indian bank statement and return the complete JSON.' }
-      ]
+    if (!result.ok) {
+      return errorResponse(result.error || 'unsupported_format', result.errorMessage)
     }
 
+    // Send to Claude for JSON extraction
     let response
     try {
       response = await client.messages.create({
         model: 'claude-opus-4-5',
         max_tokens: 4000,
         system: SYSTEM,
-        messages: [{ role: 'user', content: messageContent }]
+        messages: [{ role: 'user', content: result.claudeContent! }]
       })
     } catch (apiErr: any) {
-      // Catch any password-related error from Claude
-      if (isPasswordError(apiErr)) {
-        return NextResponse.json({ error: 'incorrect_password' }, { status: 422 })
+      const msg = (apiErr.message || '').toLowerCase()
+      if (msg.includes('password') || msg.includes('encrypted') || msg.includes('protect')) {
+        return errorResponse('incorrect_password')
       }
       throw apiErr
     }
 
     const text = response.content[0].type === 'text' ? response.content[0].text : ''
     const jsonMatch = text.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) throw new Error('Could not extract bank statement data')
+    if (!jsonMatch) {
+      return errorResponse('corrupt_file', 'Could not extract transactions from this statement.')
+    }
     const data = JSON.parse(jsonMatch[0])
 
-    return NextResponse.json({ data })
+    return NextResponse.json({ data, fileKind: result.kind })
   } catch (err: any) {
     console.error('Bank statement parse error:', err)
     return NextResponse.json({ error: err.message || 'Failed to parse statement' }, { status: 500 })
