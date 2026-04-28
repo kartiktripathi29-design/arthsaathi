@@ -1027,7 +1027,7 @@ export default function ProfilePage() {
 
           {incTab==='review' && (
             <div>
-              {!bankAccounts.length > 0 ? (
+              {bankAccounts.length === 0 ? (
                 <div style={S.insight}>Upload your bank statement in the Documents tab to see smart insights here.</div>
               ) : (
                 <>
@@ -1300,7 +1300,7 @@ export default function ProfilePage() {
           {/* APPLY TO EXPENSES TAB */}
           {incTab==='suggestions' && (
             <div>
-              {!bankAccounts.length > 0 ? (
+              {bankAccounts.length === 0 ? (
                 <div style={S.insight}>Upload bank statement first.</div>
               ) : suggestions.length === 0 ? (
                 <div style={S.insight}>No expense suggestions to apply yet. Run Smart Review first.</div>
@@ -1562,7 +1562,7 @@ export default function ProfilePage() {
       {/* P&L + CASH FLOW TAB */}
       {mainTab==='pnl' && (
         <div>
-          {!bankAccounts.length > 0 ? (
+          {bankAccounts.length === 0 ? (
             <div style={S.insight}>
               📊 Upload your bank statement in the Documents tab to see P&L and cash flow.
               <div style={{ marginTop:8 }}>
