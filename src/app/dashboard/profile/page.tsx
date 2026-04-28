@@ -209,8 +209,11 @@ export default function ProfilePage() {
   const [suggestionDecisions, setSuggestionDecisions] = useState<Record<string, 'accepted' | 'rejected' | 'parked'>>({})
   const [suggestionElssAmount, setSuggestionElssAmount] = useState<Record<string, number>>({})  // for splitting investments
   const [suggestionElssRegular, setSuggestionElssRegular] = useState<Record<string, {elss:number; reg:number}>>({})
+  const [suggExpanded, setSuggExpanded] = useState<Record<string, boolean>>({})
+  const [suggUnticked, setSuggUnticked] = useState<Record<string, Set<string>>>({})
+  const [suggShowAll, setSuggShowAll] = useState<Record<string, boolean>>({})
 
-  const [singleCategoryModal, setSingleCategoryModal] = useState<{ open:boolean; transaction:any|null }>({ open:false, transaction:null })
+  const [singleCategoryModal, setSingleCategoryModal] = useState<{ open:boolean; transaction:any|null; from?:'apply-expenses'; fromMega?:MegaCategory }>({ open:false, transaction:null })
   const [bulkCategoryModal, setBulkCategoryModal] = useState<{ open:boolean; transactions:any[]; label:string }>({ open:false, transactions:[], label:'' })
   const [pnlExpanded, setPnlExpanded] = useState<Record<string, boolean>>({})
 
@@ -387,8 +390,34 @@ export default function ProfilePage() {
 
   const interestTxns = useMemo(() => taggedTxns.filter(t => t.mega === 'interest' && t.type === 'credit'), [taggedTxns])
 
-  // Generate suggestions for Expenses tab
-  const suggestions = useMemo(() => generateExpenseSuggestions(taggedTxns, bankMonths, confirmedSalaryIds, parkedIds), [taggedTxns, bankMonths, confirmedSalaryIds, parkedIds])
+  // Generate suggestions for Expenses tab — apply manual overrides so reassigned txns move cards
+  const overriddenTxns = useMemo(() =>
+    taggedTxns.map(t => manualOverrides[t.id] ? { ...t, mega: manualOverrides[t.id] } : t),
+    [taggedTxns, manualOverrides])
+  const suggestions = useMemo(() => generateExpenseSuggestions(overriddenTxns, bankMonths, confirmedSalaryIds, parkedIds), [overriddenTxns, bankMonths, confirmedSalaryIds, parkedIds])
+
+  // Transactions grouped per-suggestion (sugg.id → list of txns), respects overrides + exclusions
+  const suggestionTxns = useMemo(() => {
+    const map: Record<string, any[]> = {}
+    overriddenTxns.forEach(t => {
+      if (t.type !== 'debit') return
+      if (confirmedSalaryIds.has(t.id) || parkedIds.has(t.id)) return
+      const sid = `sugg_${t.mega}`
+      if (!map[sid]) map[sid] = []
+      map[sid].push(t)
+    })
+    Object.values(map).forEach(arr => arr.sort((a,b) => b.amount - a.amount))
+    return map
+  }, [overriddenTxns, confirmedSalaryIds, parkedIds])
+
+  // Live ticked-amount per suggestion (only counts ticked txns)
+  const suggLiveMonthly = (suggId: string, fallback: number): number => {
+    const txns = suggestionTxns[suggId]
+    if (!txns) return fallback
+    const unticked = suggUnticked[suggId] || new Set<string>()
+    const total = txns.reduce((s,t) => unticked.has(t.id) ? s : s + t.amount, 0)
+    return Math.round(total / Math.max(1, bankMonths))
+  }
 
   useEffect(() => {
     if (interestTxns.length > 0 && tickedInterest.size === 0) setTickedInterest(new Set(interestTxns.map(t => t.id)))
@@ -561,12 +590,68 @@ export default function ProfilePage() {
   const reassignSingle = (newMega: MegaCategory) => {
     if (!singleCategoryModal.transaction) return
     const t = singleCategoryModal.transaction
+    const fromCtx = singleCategoryModal.from
+    const fromMega = singleCategoryModal.fromMega
     setManualOverrides(prev => ({ ...prev, [t.id]: newMega }))
     // Save to memory
     const memory = loadMerchantMemory()
     memory[extractMerchantKey(t.description)] = newMega
     saveMerchantMemory(memory)
     setSingleCategoryModal({ open:false, transaction:null })
+
+    // If reassign came from Apply to Expenses, also drop the txn from its source ticked-set
+    // and incrementally adjust applied amounts on accepted source/destination cards.
+    if (fromCtx === 'apply-expenses') {
+      const marginal = Math.round(t.amount / Math.max(1, bankMonths))
+      const destSugg = `sugg_${newMega}`
+      const srcSugg  = fromMega ? `sugg_${fromMega}` : null
+
+      // Remove from source's unticked set (no longer in source) so live total stays clean
+      if (srcSugg) {
+        setSuggUnticked(prev => {
+          if (!prev[srcSugg]) return prev
+          const n = new Set(prev[srcSugg]); n.delete(t.id)
+          return { ...prev, [srcSugg]: n }
+        })
+      }
+
+      // If the destination card was already accepted, top up its target field by the marginal
+      if (suggestionDecisions[destSugg] === 'accepted' && marginal > 0) {
+        const fieldMap: Record<string, { target:'fixed'|'variable'|'savings'|'tax_save'|'cc'; label:string }> = {
+          food:{target:'variable',label:'Dining out / Takeaway'},
+          shopping:{target:'variable',label:'Shopping / Clothing'},
+          transport:{target:'variable',label:'Fuel / Transport'},
+          entertainment:{target:'variable',label:'Entertainment / OTT'},
+          healthcare:{target:'variable',label:'Medicine / Healthcare'},
+          utilities:{target:'fixed',label:'Electricity / Gas'},
+          housing:{target:'fixed',label:'Rent / Home loan EMI'},
+          insurance:{target:'fixed',label:'Life Insurance'},
+          investments_elss:{target:'tax_save',label:'ELSS — tax saving (80C)'},
+          investments_regular:{target:'savings',label:'SIP / Mutual Funds (regular)'},
+          cc_payment:{target:'cc',label:'Credit card bill'},
+        }
+        const fm = fieldMap[newMega]
+        if (fm) {
+          if (fm.target === 'fixed' || fm.target === 'cc') {
+            const targetLabel = fm.target === 'cc' ? 'Credit card bill' : fm.label
+            const newExp = expenses.map(e => e.label === targetLabel ? { ...e, amount: e.amount + marginal } : e)
+            setExpenses(newExp); saveProfile(newExp, savings, variable)
+          } else if (fm.target === 'variable') {
+            const newVar = variable.map(v => v.label === fm.label ? { ...v, amount: v.amount + marginal } : v)
+            setVariable(newVar); saveProfile(expenses, savings, newVar)
+          } else if (fm.target === 'savings') {
+            const newSav = savings.map(s => (s.label.includes('regular') || s.label.startsWith('SIP')) ? { ...s, amount: s.amount + marginal } : s)
+            setSavings(newSav); saveProfile(expenses, newSav, variable)
+          } else if (fm.target === 'tax_save') {
+            const newSav = savings.map(s => s.label.includes('ELSS') ? { ...s, amount: s.amount + marginal } : s)
+            setSavings(newSav); saveProfile(expenses, newSav, variable)
+          }
+          toast.success(`Moved to ${MEGA_CATEGORIES[newMega].label} · ${fmt(marginal)}/mo added to ${fm.label}`)
+          return
+        }
+      }
+    }
+
     toast.success(`Moved to ${MEGA_CATEGORIES[newMega].label} · remembered for next time`)
   }
 
@@ -584,7 +669,8 @@ export default function ProfilePage() {
 
   // Suggestion actions ─────────────────────────────────────────────────
   const acceptSuggestion = (sugg: ExpenseSuggestion) => {
-    const monthly = sugg.monthlyAmount
+    const monthly = suggLiveMonthly(sugg.id, sugg.monthlyAmount)
+    if (monthly <= 0) { toast.error('Tick at least one transaction'); return }
     if (sugg.targetField === 'fixed') {
       const newExp = expenses.map(e => e.label === sugg.targetLabel ? { ...e, amount: e.amount + monthly } : e)
       // If the target label doesn't exist, append
@@ -1070,7 +1156,14 @@ export default function ProfilePage() {
                   {suggestions.map(sugg => {
                     const decision = suggestionDecisions[sugg.id]
                     const isInvestment = sugg.targetField === 'tax_save' || sugg.targetField === 'savings' || sugg.mega.startsWith('investments')
-                    const split = suggestionElssRegular[sugg.id] || { elss:0, reg:sugg.monthlyAmount }
+                    const liveMonthly = suggLiveMonthly(sugg.id, sugg.monthlyAmount)
+                    const split = suggestionElssRegular[sugg.id] || { elss:0, reg:liveMonthly }
+                    const expanded = !!suggExpanded[sugg.id]
+                    const txns = suggestionTxns[sugg.id] || []
+                    const unticked = suggUnticked[sugg.id] || new Set<string>()
+                    const showAll = !!suggShowAll[sugg.id]
+                    const visibleTxns = showAll ? txns : txns.slice(0, 8)
+                    const tickedCount = txns.length - unticked.size
 
                     if (decision === 'accepted') {
                       return (
@@ -1104,6 +1197,7 @@ export default function ProfilePage() {
                         <div style={{ padding:'12px 14px', background:decision==='parked'?'#FBF6EE':'#FAFAF8', borderBottom:`1px solid ${C.border}` }}>
                           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10, marginBottom:6 }}>
                             <span style={{ display:'flex', alignItems:'center', gap:8, flex:1 }}>
+                              <button onClick={() => setSuggExpanded(p => ({ ...p, [sugg.id]: !p[sugg.id] }))} style={{ width:22, height:22, borderRadius:4, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:13, color:C.fg, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:600, flexShrink:0 }}>{expanded?'−':'+'}</button>
                               <span style={{ fontSize:18 }}>{sugg.icon}</span>
                               <div>
                                 <p style={{ fontSize:13, fontWeight:600, color:C.text, margin:0 }}>{sugg.label}</p>
@@ -1111,16 +1205,51 @@ export default function ProfilePage() {
                               </div>
                             </span>
                             <span style={{ textAlign:'right' as const, flexShrink:0 }}>
-                              <p style={{ fontSize:14, fontWeight:700, color:C.fg, margin:0 }}>{fmt(sugg.monthlyAmount)}</p>
+                              <p style={{ fontSize:14, fontWeight:700, color:C.fg, margin:0 }}>{fmt(liveMonthly)}</p>
                               <p style={{ fontSize:10, color:C.muted, margin:0 }}>per month</p>
                             </span>
                           </div>
-                          <p style={{ fontSize:11.5, color:C.muted, margin:'6px 0 0' }}>
-                            Add to: <strong style={{ color:C.fg }}>{sugg.targetLabel}</strong>
-                            {sugg.targetField === 'tax_save' && <span style={{ marginLeft:6, fontSize:10, padding:'1px 6px', borderRadius:3, background:'#EEF2EE', color:'#2A7A4A' }}>flows to 80C</span>}
-                            {sugg.targetField === 'cc' && <span style={{ marginLeft:6, fontSize:10, padding:'1px 6px', borderRadius:3, background:'#F5F5F0', color:C.muted }}>credit card bill</span>}
-                          </p>
+                          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap' as const, gap:8 }}>
+                            <p style={{ fontSize:11.5, color:C.muted, margin:'6px 0 0' }}>
+                              Add to: <strong style={{ color:C.fg }}>{sugg.targetLabel}</strong>
+                              {sugg.targetField === 'tax_save' && <span style={{ marginLeft:6, fontSize:10, padding:'1px 6px', borderRadius:3, background:'#EEF2EE', color:'#2A7A4A' }}>flows to 80C</span>}
+                              {sugg.targetField === 'cc' && <span style={{ marginLeft:6, fontSize:10, padding:'1px 6px', borderRadius:3, background:'#F5F5F0', color:C.muted }}>credit card bill</span>}
+                            </p>
+                            {!expanded && txns.length > 0 && (
+                              <button onClick={() => setSuggExpanded(p => ({ ...p, [sugg.id]: true }))} style={{ fontSize:11, color:C.fg, background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', textDecoration:'underline', padding:0 }}>
+                                Show {txns.length} transaction{txns.length>1?'s':''} →
+                              </button>
+                            )}
+                          </div>
                         </div>
+
+                        {expanded && txns.length > 0 && (
+                          <div style={{ background:'#FAFAF8' }}>
+                            <div style={{ padding:'7px 14px', fontSize:11, color:C.muted, borderBottom:`0.5px solid #FAF7F2` }}>Untick wrong ones · use ↻ to send to a different category</div>
+                            {visibleTxns.map(t => {
+                              const ticked = !unticked.has(t.id)
+                              return (
+                                <div key={t.id} style={{ display:'grid', gridTemplateColumns:'24px 75px 1fr 90px 28px', padding:'7px 14px', borderBottom:`0.5px solid #FAF7F2`, fontSize:11.5, gap:8, alignItems:'center', background: ticked ? '#fff' : '#FBF0F0' }}>
+                                  <input type="checkbox" checked={ticked} onChange={() => setSuggUnticked(p => { const n = new Set(p[sugg.id] || []); n.has(t.id) ? n.delete(t.id) : n.add(t.id); return { ...p, [sugg.id]: n } })} style={{ width:14, height:14, cursor:'pointer', accentColor:C.fg }} />
+                                  <span style={{ color:C.muted }}>{t.date}</span>
+                                  <span style={{ color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>{t.brand?<strong>{t.brand} · </strong>:''}{t.description}</span>
+                                  <span style={{ color:C.danger, fontWeight:500, textAlign:'right' as const }}>−{fmt(t.amount)}</span>
+                                  <button onClick={() => setSingleCategoryModal({ open:true, transaction:t, from:'apply-expenses', fromMega: sugg.mega })} title="Reassign to a different category" style={{ width:22, height:22, borderRadius:3, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted, display:'flex', alignItems:'center', justifyContent:'center' }}>↻</button>
+                                </div>
+                              )
+                            })}
+                            {!showAll && txns.length > visibleTxns.length && (
+                              <div style={{ padding:'7px 14px', textAlign:'center' as const, borderBottom:`0.5px solid #FAF7F2` }}>
+                                <button onClick={() => setSuggShowAll(p => ({ ...p, [sugg.id]: true }))} style={{ padding:'4px 12px', background:'#fff', border:`1px solid ${C.border}`, borderRadius:3, fontSize:11, color:C.fg, cursor:'pointer', fontFamily:'inherit' }}>
+                                  Show {txns.length - visibleTxns.length} more
+                                </button>
+                              </div>
+                            )}
+                            <div style={{ padding:'7px 14px', fontSize:11, color:C.muted, background:C.wl, borderBottom:`0.5px solid ${C.border}` }}>
+                              {tickedCount} of {txns.length} ticked = {fmt(liveMonthly)}/mo
+                            </div>
+                          </div>
+                        )}
 
                         {/* Special: investments need split into ELSS / regular */}
                         {sugg.mega === 'investments_regular' || sugg.mega === 'investments_elss' ? (
@@ -1128,11 +1257,11 @@ export default function ProfilePage() {
                             <p style={{ fontSize:11, color:'#2A5A8A', margin:'0 0 8px' }}>📊 Split into Tax-saving (ELSS → 80C) and Regular SIP:</p>
                             <div style={{ display:'flex', gap:8, marginBottom:8, alignItems:'center', flexWrap:'wrap' as const }}>
                               <span style={{ fontSize:11, color:C.text, minWidth:90 }}>Tax-saving (ELSS):</span>
-                              <AmtInput value={split.elss} onChange={v => setSuggestionElssRegular(p => ({ ...p, [sugg.id]: { elss:v, reg: Math.max(0, sugg.monthlyAmount - v) } }))} small />
+                              <AmtInput value={split.elss} onChange={v => setSuggestionElssRegular(p => ({ ...p, [sugg.id]: { elss:v, reg: Math.max(0, liveMonthly - v) } }))} small />
                               <span style={{ fontSize:11, color:C.text, marginLeft:8, minWidth:80 }}>Regular SIP:</span>
                               <AmtInput value={split.reg} onChange={v => setSuggestionElssRegular(p => ({ ...p, [sugg.id]: { elss: split.elss, reg: v } }))} small />
                             </div>
-                            <p style={{ fontSize:10.5, color:C.muted, margin:0 }}>Total: {fmt(split.elss + split.reg)} (suggested ₹{sugg.monthlyAmount.toLocaleString('en-IN')})</p>
+                            <p style={{ fontSize:10.5, color:C.muted, margin:0 }}>Total: {fmt(split.elss + split.reg)} (suggested ₹{liveMonthly.toLocaleString('en-IN')})</p>
                           </div>
                         ) : null}
 
@@ -1142,8 +1271,8 @@ export default function ProfilePage() {
                               Yes, apply split →
                             </button>
                           ) : (
-                            <button onClick={() => acceptSuggestion(sugg)} style={{ padding:'6px 14px', fontSize:11.5, background:'#EEF2EE', color:'#2A7A4A', border:'1px solid #C8D8C8', borderRadius:4, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>
-                              ✓ Yes, add {fmt(sugg.monthlyAmount)}
+                            <button onClick={() => acceptSuggestion(sugg)} disabled={liveMonthly<=0} style={{ padding:'6px 14px', fontSize:11.5, background: liveMonthly>0 ? '#EEF2EE' : '#F0EBE0', color: liveMonthly>0 ? '#2A7A4A' : C.muted, border:`1px solid ${liveMonthly>0 ? '#C8D8C8' : C.border}`, borderRadius:4, cursor: liveMonthly>0 ? 'pointer' : 'not-allowed', fontFamily:'inherit', fontWeight:600 }}>
+                              ✓ Yes, add {fmt(liveMonthly)}
                             </button>
                           )}
                           <button onClick={() => rejectSuggestion(sugg)} style={{ padding:'6px 12px', fontSize:11.5, background:'#FBF0F0', color:C.danger, border:'1px solid #F0CECE', borderRadius:4, cursor:'pointer', fontFamily:'inherit' }}>
