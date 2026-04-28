@@ -235,6 +235,9 @@ export default function ProfilePage() {
   const taxRef = useRef<HTMLInputElement>(null)
   const slipRef = useRef<HTMLInputElement>(null)
   const offerRef = useRef<HTMLInputElement>(null)
+  const casRef = useRef<HTMLInputElement>(null)
+  const [casData, setCasData] = useState<any>(null)
+  const [casPassword, setCasPassword] = useState('')
   const [otherSel, setOtherSel] = useState<Set<string>>(new Set())
   const [otherVals, setOtherVals] = useState<Record<string,number>>({})
 
@@ -283,6 +286,8 @@ export default function ProfilePage() {
       if (csids) setConfirmedSalaryIds(new Set(JSON.parse(csids)))
       const pids = localStorage.getItem('av_parked_ids')
       if (pids) setParkedIds(new Set(JSON.parse(pids)))
+      const cas = localStorage.getItem('av_cas_holdings')
+      if (cas) setCasData(JSON.parse(cas))
       loadSavedBankAccounts()
     } catch {}
   }, [])
@@ -654,10 +659,80 @@ export default function ProfilePage() {
     finally { setLoadingDoc(null) }
   }
 
+  const handleCasFile = async (file: File) => {
+    if (file.size > 15*1024*1024) { toast.error('File too large (max 15MB)'); return }
+    if (!casPassword) {
+      setPwdModal({ open:true, type:'cas', file, error:'' }); setPwd(''); return
+    }
+    setLoadingDoc('cas'); setPwdModal({ open:false, type:null, file:null, error:'' })
+    const tid = toast.loading('Reading your CAS statement…')
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      form.append('password', casPassword)
+      const res = await fetch('/api/parse-cas', { method:'POST', body:form })
+      const json = await res.json()
+      if (!res.ok || json.error) {
+        toast.dismiss(tid)
+        if (json.error === 'incorrect_password' || res.status === 422) {
+          setPwdModal({ open:true, type:'cas', file, error:'Incorrect password. CAS password is your PAN in CAPS (e.g. ABCDE1234F).' })
+          setPwd(''); return
+        }
+        toast.error(json.message || json.error || 'Failed to parse CAS'); return
+      }
+      setCasData(json.data)
+      try { localStorage.setItem('av_cas_holdings', JSON.stringify(json.data)) } catch {}
+      setCasPassword('')
+      const s = json.data.summary
+      toast.success(`CAS parsed · ${s.equityCount} stocks · ${s.mfCount} MF schemes · Total ${fmt(s.totalValue)}`, { id:tid, duration:6000 })
+    } catch (e:any) {
+      toast.error(e.message || 'Failed to parse CAS', { id:tid })
+    } finally { setLoadingDoc(null) }
+  }
+
+  const clearCas = () => {
+    setCasData(null); setCasPassword('')
+    try { localStorage.removeItem('av_cas_holdings') } catch {}
+    toast.success('CAS data removed')
+  }
+
   const submitPassword = () => {
-    if (!pwdModal.file || !pwdModal.type) return
-    if (pwdModal.type==='bank') handleBankFile(pwdModal.file, pwd)
-    else processAIS(pwdModal.file, pwdModal.type, pwd)
+    if (!pwdModal.type) return
+    if (pwdModal.type==='bank') { if (pwdModal.file) handleBankFile(pwdModal.file, pwd); return }
+    if (pwdModal.type==='cas') {
+      setCasPassword(pwd)
+      if (pwdModal.file) {
+        const file = pwdModal.file
+        setLoadingDoc('cas'); setPwdModal({ open:false, type:null, file:null, error:'' })
+        const tid = toast.loading('Reading your CAS statement…')
+        const form = new FormData()
+        form.append('file', file)
+        form.append('password', pwd)
+        fetch('/api/parse-cas', { method:'POST', body:form })
+          .then(res => res.json())
+          .then(json => {
+            if (json.error) {
+              toast.dismiss(tid)
+              if (json.error === 'incorrect_password') {
+                setPwdModal({ open:true, type:'cas', file, error:'Incorrect password. CAS password is your PAN in CAPS.' })
+                setPwd(''); return
+              }
+              toast.error(json.message || json.error || 'Failed to parse CAS'); return
+            }
+            setCasData(json.data)
+            try { localStorage.setItem('av_cas_holdings', JSON.stringify(json.data)) } catch {}
+            const s = json.data.summary
+            toast.success(`CAS parsed · ${s.equityCount} stocks · ${s.mfCount} MF schemes · Total ${fmt(s.totalValue)}`, { id:tid, duration:6000 })
+          })
+          .catch(e => toast.error(e.message || 'Failed', { id:tid }))
+          .finally(() => setLoadingDoc(null))
+      } else {
+        setPwdModal({ open:false, type:null, file:null, error:'' })
+        casRef.current?.click()
+      }
+      return
+    }
+    if (pwdModal.file) processAIS(pwdModal.file, pwdModal.type, pwd)
   }
 
   // Smart Review actions
@@ -1007,6 +1082,68 @@ export default function ProfilePage() {
               <input ref={taxRef} type="file" accept=".pdf,image/*" style={{ display:'none' }} onChange={e=>e.target.files?.[0]&&handleAISFile(e.target.files[0],'26as')} />
             </div>
           </div>
+
+          <p style={{ fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:8, marginTop:6 }}>Step 4 — Demat holdings (CAS)</p>
+          <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8, padding:16, marginBottom:14, display:'flex', gap:14, alignItems:'center' }}>
+            <div style={{ width:42, height:42, borderRadius:'50%', background:casData?'#EEF2EE':C.wl, border:`2px solid ${casData?C.fg:C.wm}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, flexShrink:0 }}>🏛️</div>
+            <div style={{ flex:1 }}>
+              {casData ? (
+                <>
+                  <p style={{ fontSize:13, fontWeight:700, color:C.fg, margin:'0 0 3px' }}>✓ CAS parsed · {casData.summary?.equityCount || 0} stocks · {casData.summary?.mfCount || 0} MF schemes</p>
+                  <p style={{ fontSize:11.5, color:C.muted, margin:'0 0 2px' }}>Total value: {fmt(casData.summary?.totalValue || 0)}</p>
+                  {casData.period?.from && <p style={{ fontSize:10.5, color:C.muted, margin:0 }}>Period: {casData.period.from} to {casData.period.to}</p>}
+                </>
+              ) : (
+                <>
+                  <p style={{ fontSize:13, fontWeight:600, color:C.text, margin:'0 0 3px' }}>CAS Statement</p>
+                  <p style={{ fontSize:11, color:C.muted, margin:'0 0 2px', lineHeight:1.55 }}>Consolidated Account Statement from CDSL/NSDL</p>
+                  <p style={{ fontSize:10.5, color:C.muted, margin:0 }}>Password: PAN in CAPS (e.g. ABCDE1234F)</p>
+                </>
+              )}
+            </div>
+            {casData ? (
+              <button onClick={clearCas} style={{ padding:'6px 12px', fontSize:11, color:C.danger, background:'#FBF0F0', border:'1px solid #F0CECE', borderRadius:4, cursor:'pointer', fontFamily:'inherit' }}>Remove</button>
+            ) : (
+              <button onClick={() => { setPwdModal({ open:true, type:'cas', file:null, error:'' }); setPwd('') }} style={{ padding:'8px 16px', background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12, fontWeight:600, cursor:loadingDoc==='cas'?'wait':'pointer', fontFamily:'inherit', whiteSpace:'nowrap' as const }}>
+                {loadingDoc==='cas' ? 'Reading…' : 'Upload CAS'}
+              </button>
+            )}
+            <input ref={casRef} type="file" accept=".pdf" style={{ display:'none' }} onChange={e => { if (e.target.files?.[0] && casPassword) handleCasFile(e.target.files[0]); else if (e.target.files?.[0]) setPwdModal({ open:true, type:'cas', file:e.target.files[0], error:'' }) }} />
+          </div>
+
+          {casData && casData.holdings && casData.holdings.length > 0 && (
+            <div style={S.card}>
+              <div style={S.cardHead}>Holdings summary</div>
+              {casData.summary?.equityValue > 0 && (
+                <div style={S.row}>
+                  <span style={{ display:'flex', alignItems:'center', gap:7 }}><span>📊</span>Equities ({casData.summary.equityCount})</span>
+                  <span style={{ fontWeight:600, color:C.fg }}>{fmt(casData.summary.equityValue)}</span>
+                </div>
+              )}
+              {casData.summary?.mfValue > 0 && (
+                <div style={S.row}>
+                  <span style={{ display:'flex', alignItems:'center', gap:7 }}><span>📈</span>Mutual Funds ({casData.summary.mfCount})</span>
+                  <span style={{ fontWeight:600, color:C.fg }}>{fmt(casData.summary.mfValue)}</span>
+                </div>
+              )}
+              {casData.summary?.bondValue > 0 && (
+                <div style={S.row}>
+                  <span style={{ display:'flex', alignItems:'center', gap:7 }}><span>🏦</span>Bonds & G-Secs ({casData.summary.bondCount})</span>
+                  <span style={{ fontWeight:600, color:C.fg }}>{fmt(casData.summary.bondValue)}</span>
+                </div>
+              )}
+              {casData.summary?.otherValue > 0 && (
+                <div style={S.row}>
+                  <span style={{ display:'flex', alignItems:'center', gap:7 }}><span>🛡️</span>Insurance & NPS ({casData.summary.otherCount})</span>
+                  <span style={{ fontWeight:600, color:C.fg }}>{fmt(casData.summary.otherValue)}</span>
+                </div>
+              )}
+              <div style={{ ...S.row, background:C.wl, fontWeight:700, fontSize:13.5, color:C.fg }}>
+                <span>Total Portfolio</span>
+                <span>{fmt(casData.summary?.totalValue || 0)}</span>
+              </div>
+            </div>
+          )}
 
           {bankAccounts.length > 0 && (
             <button onClick={() => { setMainTab('income'); setIncTab('review') }} style={{ ...S.btn(true), width:'100%', padding:'11px' }}>
@@ -1774,7 +1911,7 @@ export default function ProfilePage() {
       {pwdModal.open && (
         <div style={{ position:'fixed', inset:0, background:'rgba(28,43,34,0.5)', zIndex:99, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }} onClick={() => setPwdModal({ open:false, type:null, file:null, error:'' })}>
           <div onClick={e=>e.stopPropagation()} style={{ background:'#fff', borderRadius:10, padding:20, maxWidth:400, width:'100%', boxShadow:'0 12px 40px rgba(0,0,0,0.18)' }}>
-            <p style={{ fontSize:16, fontWeight:700, color:C.text, margin:'0 0 4px' }}>🔐 {pwdModal.type==='bank'?'Bank Statement':'AIS'} Password</p>
+            <p style={{ fontSize:16, fontWeight:700, color:C.text, margin:'0 0 4px' }}>🔐 {pwdModal.type==='bank'?'Bank Statement':pwdModal.type==='cas'?'CAS Statement':'AIS'} Password</p>
             {pwdModal.type==='bank' ? (
               <div style={{ background:C.wl, border:`1px solid ${C.wm}`, borderRadius:5, padding:'10px 12px', marginBottom:14 }}>
                 <p style={{ fontSize:11, color:C.fg, margin:0, lineHeight:1.85 }}>
@@ -1784,6 +1921,13 @@ export default function ProfilePage() {
                   • <strong>Axis</strong>: PAN + DOB<br/>
                   • <strong>Kotak</strong>: First 4 of name + DOB<br/>
                   • <strong>PNB</strong>: Account number
+                </p>
+              </div>
+            ) : pwdModal.type==='cas' ? (
+              <div style={{ background:C.wl, border:`1px solid ${C.wm}`, borderRadius:5, padding:'10px 12px', marginBottom:14 }}>
+                <p style={{ fontSize:11, color:C.fg, margin:0, lineHeight:1.85 }}>
+                  Your CAS password is your <strong>PAN in CAPITALS</strong><br/>
+                  <span style={{ fontFamily:'monospace' }}>e.g. ABCDE1234F</span>
                 </p>
               </div>
             ) : (

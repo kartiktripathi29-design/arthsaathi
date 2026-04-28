@@ -96,6 +96,7 @@ export default function DashboardPage() {
   const [corpusMonthly, setCorpusMonthly] = useState(5000)
   const [corpusYears, setCorpusYears] = useState(10)
   const [corpusReturn, setCorpusReturn] = useState(12)
+  const [casData, setCasData] = useState<any>(null)
 
   useEffect(() => {
     try {
@@ -121,6 +122,19 @@ export default function DashboardPage() {
       }
       const nw = localStorage.getItem('av_net_worth')
       if (nw) setNetWorth(JSON.parse(nw))
+      const cas = localStorage.getItem('av_cas_holdings')
+      if (cas) {
+        const casD = JSON.parse(cas)
+        setCasData(casD)
+        // Auto-fill net worth from CAS if values exist
+        if (casD.summary) {
+          setNetWorth(prev => prev.map(item => {
+            if (item.label === 'Mutual Funds' && casD.summary.mfValue > 0) return { ...item, value: casD.summary.mfValue }
+            if (item.label === 'Stocks' && casD.summary.equityValue > 0) return { ...item, value: casD.summary.equityValue }
+            return item
+          }))
+        }
+      }
     } catch {}
   }, [])
 
@@ -283,7 +297,12 @@ export default function DashboardPage() {
                 </div>
                 {netWorth.map((item, i) => (
                   <div key={i} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'4px 0', borderBottom:i < netWorth.length - 1 ? '1px solid #FAF7F2' : 'none' }}>
-                    <span style={{ fontSize:11, color:C.text }}>{item.label}</span>
+                    <span style={{ fontSize:11, color:C.text, display:'flex', alignItems:'center', gap:4 }}>
+                      {item.label}
+                      {casData && ((item.label === 'Mutual Funds' && casData.summary?.mfValue > 0) || (item.label === 'Stocks' && casData.summary?.equityValue > 0)) && (
+                        <span style={{ fontSize:8, padding:'1px 4px', background:'#EEF2EE', color:'#2A7A4A', borderRadius:2, fontWeight:500 }}>CAS</span>
+                      )}
+                    </span>
                     <div style={{ display:'flex', alignItems:'center', border:`1px solid ${C.border}`, borderRadius:3, overflow:'hidden' }}>
                       <span style={{ padding:'2px 5px', background:C.wl, fontSize:9, color:C.fg, fontWeight:600, borderRight:`1px solid ${C.border}` }}>₹</span>
                       <input type="text" inputMode="numeric" value={item.value > 0 ? String(item.value) : ''}
