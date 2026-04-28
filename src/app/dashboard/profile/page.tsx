@@ -921,18 +921,12 @@ export default function ProfilePage() {
             style={{ background:C.card, border:`1.5px dashed ${C.border}`, borderRadius:8, padding:16, marginBottom:14, display:'flex', gap:14, alignItems:'center', cursor:loadingDoc==='bank'?'wait':'pointer' }}
           >
             <div style={{ width:42, height:42, borderRadius:'50%', background:C.wl, border:`2px solid ${C.wm}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, flexShrink:0 }}>
-              {bankAccounts.length === 0 ? '🏦' : '＋'}
-            </div>
-            <div>
-              <p style={{ fontSize:13, fontWeight:600, color:C.text, margin:'0 0 3px' }}>
-                {loadingDoc==='bank' ? 'Reading…' : bankAccounts.length === 0 ? 'Upload Bank Statement' : 'Add another bank account'}
-              </p>
-              <p style={{ fontSize:11, color:C.muted, margin:0 }}>
-                {bankAccounts.length === 0
+              {bankAccounts.length === 0
                   ? 'Any Indian bank · PDF, Excel, CSV or photo · password supported'
                   : 'Salary account, expense account, spouse\'s account, etc.'}
               </p>
             </div>
+            {!loadingDoc && <div style={{ marginLeft:'auto', padding:'8px 18px', background:C.fg, color:C.wheat, borderRadius:5, fontSize:12, fontWeight:600, flexShrink:0 }}>{bankAccounts.length === 0 ? 'Upload Statement' : '+ Add'}</div>}
           </div>
           <input ref={bankRef} type="file" accept=".pdf,.xlsx,.xls,.csv,.jpg,.jpeg,.png" style={{ display:'none' }} onChange={e => e.target.files?.[0] && handleBankFile(e.target.files[0])} />
 
