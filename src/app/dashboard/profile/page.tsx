@@ -3,24 +3,26 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import { useAppStore } from '@/store/AppStore'
-import { MEGA_CATEGORIES, MegaCategory, tagTransactions, detectSalaryCandidates, SalaryCandidate } from '@/lib/categories'
+import { MEGA_CATEGORIES, MegaCategory, tagTransactions, detectSalaryCandidates, SalaryCandidate, generateExpenseSuggestions, ExpenseSuggestion, loadMerchantMemory, saveMerchantMemory, extractMerchantKey } from '@/lib/categories'
 
 const C = { fg:'#3A4B41', wheat:'#E6CFA7', wl:'#F5ECD8', wm:'#D4B98A', bg:'#FDFAF6', card:'#fff', border:'#E4DDD1', text:'#1C2B22', muted:'#7A8A7E', danger:'#B94040' }
 const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`
 const uid = () => Math.random().toString(36).slice(2,8)
 
-function AmtInput({ value, onChange }: { value:number; onChange:(n:number)=>void }) {
+const BANKS = ['HDFC Bank','ICICI Bank','SBI','Axis Bank','Kotak Mahindra','American Express','RBL Bank','IndusInd Bank','Yes Bank','PNB','BOB','Canara','HSBC','Citibank','Standard Chartered','IDFC FIRST','AU Bank','Other']
+
+function AmtInput({ value, onChange, small=false }: { value:number; onChange:(n:number)=>void; small?:boolean }) {
   const [local, setLocal] = useState(value > 0 ? String(value) : '')
   useEffect(() => { setLocal(value > 0 ? String(value) : '') }, [value])
   return (
     <div style={{ display:'flex', alignItems:'center', border:`1px solid ${C.border}`, borderRadius:4, overflow:'hidden' }}>
-      <span style={{ padding:'6px 8px', background:C.wl, fontSize:11, color:C.fg, fontWeight:600, borderRight:`1px solid ${C.border}` }}>₹</span>
+      <span style={{ padding:'5px 7px', background:C.wl, fontSize:11, color:C.fg, fontWeight:600, borderRight:`1px solid ${C.border}` }}>₹</span>
       <input type="text" inputMode="numeric" value={local}
         onChange={e => setLocal(e.target.value.replace(/[^0-9]/g,''))}
         onBlur={() => onChange(parseFloat(local)||0)}
         onKeyDown={e => e.key==='Enter' && (e.target as HTMLInputElement).blur()}
         placeholder="0"
-        style={{ padding:'6px 9px', border:'none', fontSize:12.5, fontFamily:'inherit', outline:'none', width:90, color:C.text }} />
+        style={{ padding:'5px 8px', border:'none', fontSize:small?12:12.5, fontFamily:'inherit', outline:'none', width:small?70:90, color:C.text }} />
     </div>
   )
 }
@@ -61,6 +63,21 @@ const S = {
   upload: (done=false): React.CSSProperties => ({ border:`1.5px dashed ${done?C.fg:C.border}`, borderRadius:6, padding:14, textAlign:'center' as const, background:done?'#EEF2EE':C.wl, cursor:done?'default':'pointer', display:'flex', flexDirection:'column' as const, alignItems:done?'flex-start':'center', justifyContent:done?'flex-start':'center', gap:6, minHeight:130 }),
   bulkBar: { padding:'9px 14px', background:'#1E293B', color:'rgba(230,207,167,0.9)', fontSize:11.5, display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, flexWrap:'wrap' as const } as React.CSSProperties,
   bulkBtn: { padding:'4px 11px', borderRadius:3, fontSize:11, cursor:'pointer', border:'1px solid rgba(230,207,167,0.3)', background:'transparent', color:C.wheat, fontFamily:'inherit', whiteSpace:'nowrap' as const } as React.CSSProperties,
+}
+
+interface SalaryBreakdown {
+  netSalary: number          // take-home
+  employeePF: number         // → 80C
+  employerPF: number         // wealth tracker
+  bonus: number              // variable
+  otherBenefits: number      // LTA, vouchers, etc.
+  employerName: string
+}
+
+interface CreditCard {
+  id: string
+  bank: string
+  last4: string
 }
 
 interface PnLLine {
@@ -156,32 +173,45 @@ type MainTab = 'docs' | 'income' | 'expenses' | 'pnl'
 export default function ProfilePage() {
   const { salary, setSalary, aisData, setAisData } = useAppStore() as any
   const [mainTab, setMainTab] = useState<MainTab>('docs')
-  const [incTab, setIncTab] = useState<'review'|'salary'|'other'>('review')
+  const [incTab, setIncTab] = useState<'review'|'salary'|'other'|'suggestions'>('review')
   const [salMode, setSalMode] = useState<'slip'|'offer'|'manual'>('slip')
   const [loadingDoc, setLoadingDoc] = useState<string|null>(null)
   const [bankData, setBankData] = useState<any>(null)
   const [taggedTxns, setTaggedTxns] = useState<any[]>([])
   const [bankPeriod, setBankPeriod] = useState<{from:string; to:string}|null>(null)
   const [bankMonths, setBankMonths] = useState(1)
-  const [confirmedDetections, setConfirmedDetections] = useState<Record<string,boolean>>({})
-  const [manualOverrides, setManualOverrides] = useState<Record<string, MegaCategory>>({})
+
+  // Salary breakdown — full editable picture
+  const [salBreakdown, setSalBreakdown] = useState<SalaryBreakdown>({
+    netSalary: 0, employeePF: 0, employerPF: 0, bonus: 0, otherBenefits: 0, employerName: ''
+  })
+
+  // Credit cards
+  const [creditCards, setCreditCards] = useState<CreditCard[]>([])
+  const [newCardBank, setNewCardBank] = useState('')
+  const [newCardLast4, setNewCardLast4] = useState('')
+
   // Smart Review state
   const [salCardOpen, setSalCardOpen] = useState(true)
   const [rtCardOpen, setRtCardOpen] = useState(false)
   const [intCardOpen, setIntCardOpen] = useState(false)
   const [salShowAllCredits, setSalShowAllCredits] = useState(false)
-  // What user has TICKED
+
   const [tickedSalary, setTickedSalary] = useState<Set<string>>(new Set())
-  const [tickedRoundtrip, setTickedRoundtrip] = useState<Set<string>>(new Set())  // pair indexes
+  const [tickedRoundtrip, setTickedRoundtrip] = useState<Set<string>>(new Set())
   const [tickedInterest, setTickedInterest] = useState<Set<string>>(new Set())
-  // What user has APPLIED
+  const [confirmedDetections, setConfirmedDetections] = useState<Record<string,boolean>>({})
+  const [manualOverrides, setManualOverrides] = useState<Record<string, MegaCategory>>({})
   const [confirmedSalaryIds, setConfirmedSalaryIds] = useState<Set<string>>(new Set())
   const [parkedIds, setParkedIds] = useState<Set<string>>(new Set())
-  // Single transaction reassign modal
+
+  // Suggestions state — for filling Expenses after Smart Review
+  const [suggestionDecisions, setSuggestionDecisions] = useState<Record<string, 'accepted' | 'rejected' | 'parked'>>({})
+  const [suggestionElssAmount, setSuggestionElssAmount] = useState<Record<string, number>>({})  // for splitting investments
+  const [suggestionElssRegular, setSuggestionElssRegular] = useState<Record<string, {elss:number; reg:number}>>({})
+
   const [singleCategoryModal, setSingleCategoryModal] = useState<{ open:boolean; transaction:any|null }>({ open:false, transaction:null })
-  // Bulk reassign modal (for P&L drill-down)
   const [bulkCategoryModal, setBulkCategoryModal] = useState<{ open:boolean; transactions:any[]; label:string }>({ open:false, transactions:[], label:'' })
-  // Drill-down expansion in P&L
   const [pnlExpanded, setPnlExpanded] = useState<Record<string, boolean>>({})
 
   const [pwdModal, setPwdModal] = useState<{ open:boolean; type:string|null; file:File|null; error:string }>({ open:false, type:null, file:null, error:'' })
@@ -214,15 +244,23 @@ export default function ProfilePage() {
     { id:uid(), label:'Other variable spend', amount:0, icon:'📦' },
   ])
   const [savings, setSavings] = useState([
-    { id:uid(), label:'SIP / Mutual Funds', amount:0, icon:'📈' },
+    { id:uid(), label:'SIP / Mutual Funds (regular)', amount:0, icon:'📈' },
+    { id:uid(), label:'ELSS — tax saving (80C)', amount:0, icon:'🛡️' },
     { id:uid(), label:'Emergency Fund', amount:0, icon:'🆘' },
     { id:uid(), label:'RD / FD', amount:0, icon:'🏦' },
   ])
 
+  // Load all data from localStorage on mount
   useEffect(() => {
     try {
       const p = localStorage.getItem('av_profile')
       if (p) { const d=JSON.parse(p); if(d.expenses)setExpenses(d.expenses); if(d.savings)setSavings(d.savings); if(d.variable)setVariable(d.variable) }
+      const sb = localStorage.getItem('av_salary_breakdown')
+      if (sb) setSalBreakdown(JSON.parse(sb))
+      const cc = localStorage.getItem('av_credit_cards')
+      if (cc) setCreditCards(JSON.parse(cc))
+      const sd = localStorage.getItem('av_suggestion_decisions')
+      if (sd) setSuggestionDecisions(JSON.parse(sd))
       const b = localStorage.getItem('av_bank')
       if (b) loadBankData(JSON.parse(b))
     } catch {}
@@ -245,18 +283,49 @@ export default function ProfilePage() {
 
   function loadBankData(bd: any) {
     setBankData(bd)
-    const tagged = tagTransactions(bd.transactions||[])
+    const tagged = tagTransactions(bd.transactions||[], creditCards)
     setTaggedTxns(tagged)
     const { months, from, to } = detectMonths(tagged)
     setBankMonths(months)
     setBankPeriod({ from, to })
-    // Pre-tick the top salary candidate's transactions
     const candidates = detectSalaryCandidates(tagged)
     if (candidates.length > 0) {
-      const top = candidates[0]
-      setTickedSalary(new Set(top.transactions.map((t:any) => t.id)))
+      setTickedSalary(new Set(candidates[0].transactions.map((t:any) => t.id)))
     }
   }
+
+  // Sync salary breakdown to AppStore.salary (for downstream consumers)
+  useEffect(() => {
+    if (salBreakdown.netSalary > 0) {
+      const gross = salBreakdown.netSalary + salBreakdown.employeePF + salBreakdown.employerPF + salBreakdown.bonus + salBreakdown.otherBenefits
+      setSalary({
+        netSalary: salBreakdown.netSalary,
+        grossSalary: gross,
+        employerName: salBreakdown.employerName || 'Your employer',
+        employeePF: salBreakdown.employeePF,
+        employerPF: salBreakdown.employerPF,
+      } as any)
+      try { localStorage.setItem('av_salary_breakdown', JSON.stringify(salBreakdown)) } catch {}
+    }
+  }, [salBreakdown])
+
+  // Save credit cards
+  useEffect(() => {
+    try { localStorage.setItem('av_credit_cards', JSON.stringify(creditCards)) } catch {}
+  }, [creditCards])
+
+  // Save suggestion decisions
+  useEffect(() => {
+    try { localStorage.setItem('av_suggestion_decisions', JSON.stringify(suggestionDecisions)) } catch {}
+  }, [suggestionDecisions])
+
+  // Re-tag transactions when credit cards change
+  useEffect(() => {
+    if (bankData) {
+      const retagged = tagTransactions(bankData.transactions||[], creditCards)
+      setTaggedTxns(retagged)
+    }
+  }, [creditCards.length])
 
   const saveProfile = useCallback((exp=expenses, sav=savings, vari=variable) => {
     try { localStorage.setItem('av_profile', JSON.stringify({ expenses:exp, savings:sav, variable:vari })) } catch {}
@@ -278,7 +347,10 @@ export default function ProfilePage() {
     if(sel.size>0){setOtherSel(sel);setOtherVals(vals)}
   }, [aisData])
 
-  const salMonthly = salary?.netSalary || 0
+  const grossMonthly = salBreakdown.netSalary + salBreakdown.employeePF + salBreakdown.employerPF + salBreakdown.bonus + salBreakdown.otherBenefits
+  const annualCTC = grossMonthly * 12
+
+  const salMonthly = salBreakdown.netSalary
   const otherAnnual = Array.from(otherSel).reduce((s,k)=>s+(otherVals[k]||0),0)
   const totalExp = expenses.reduce((s,e)=>s+e.amount,0)
   const totalSav = savings.reduce((s,sv)=>s+sv.amount,0)
@@ -293,12 +365,9 @@ export default function ProfilePage() {
   const pnl = useMemo(() => taggedTxns.length ? computePnL(taggedTxns, bankMonths, confirmedDetections, manualOverrides, confirmedSalaryIds, parkedIds) : null,
     [taggedTxns, bankMonths, confirmedDetections, manualOverrides, confirmedSalaryIds, parkedIds])
 
-  // Auto-detection helpers ─────────────────────────────────────────────
   const allCredits = useMemo(() => taggedTxns.filter(t => t.type === 'credit').sort((a,b) => b.amount - a.amount), [taggedTxns])
   const largeCredits = useMemo(() => allCredits.filter(t => t.amount >= 5000), [allCredits])
-
   const salaryCandidates = useMemo(() => detectSalaryCandidates(taggedTxns), [taggedTxns])
-  const topSalaryCandidate = salaryCandidates[0] || null
 
   const roundtripPairs = useMemo(() => {
     const credits = taggedTxns.filter(t => t.type === 'credit')
@@ -318,20 +387,17 @@ export default function ProfilePage() {
 
   const interestTxns = useMemo(() => taggedTxns.filter(t => t.mega === 'interest' && t.type === 'credit'), [taggedTxns])
 
-  // Pre-tick all interest and roundtrip on load
+  // Generate suggestions for Expenses tab
+  const suggestions = useMemo(() => generateExpenseSuggestions(taggedTxns, bankMonths, confirmedSalaryIds, parkedIds), [taggedTxns, bankMonths, confirmedSalaryIds, parkedIds])
+
   useEffect(() => {
-    if (interestTxns.length > 0 && tickedInterest.size === 0) {
-      setTickedInterest(new Set(interestTxns.map(t => t.id)))
-    }
+    if (interestTxns.length > 0 && tickedInterest.size === 0) setTickedInterest(new Set(interestTxns.map(t => t.id)))
   }, [interestTxns.length])
 
   useEffect(() => {
-    if (roundtripPairs.length > 0 && tickedRoundtrip.size === 0) {
-      setTickedRoundtrip(new Set(roundtripPairs.map(p => p.id)))
-    }
+    if (roundtripPairs.length > 0 && tickedRoundtrip.size === 0) setTickedRoundtrip(new Set(roundtripPairs.map(p => p.id)))
   }, [roundtripPairs.length])
 
-  // Bank statement upload ─────────────────────────────────────────────
   const handleBankFile = async (file:File, password='') => {
     if (file.size > 15*1024*1024) { toast.error('File too large (max 15MB)'); return }
     setLoadingDoc('bank'); setPwdModal({ open:false, type:null, file:null, error:'' })
@@ -399,7 +465,24 @@ export default function ProfilePage() {
       const res = await fetch('/api/parse-salary', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ base64Data:b64, mediaType:file.type }) })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error)
-      setSalary(json.data); toast.success('Salary slip parsed!', { id:tid })
+      // Auto-fill the breakdown from slip data
+      const slip = json.data
+      const empPF = slip.deductions?.find?.((d:any) => /pf|provident/i.test(d.name||''))?.amount || 0
+      const newBreakdown: SalaryBreakdown = {
+        netSalary: slip.netSalary || slip.netPay || 0,
+        employeePF: empPF,
+        employerPF: empPF,  // typically equal — user can edit
+        bonus: 0,
+        otherBenefits: 0,
+        employerName: slip.employerName || 'Your employer',
+      }
+      setSalBreakdown(newBreakdown)
+      // Auto-fill ELSS field with employee PF (it goes to 80C)
+      if (empPF > 0) {
+        const newSav = savings.map(sv => sv.label.includes('ELSS') ? { ...sv, amount: empPF } : sv)
+        setSavings(newSav); saveProfile(expenses, newSav, variable)
+      }
+      toast.success(`Slip parsed! Net ₹${(newBreakdown.netSalary).toLocaleString('en-IN')} + PF ₹${empPF.toLocaleString('en-IN')} → 80C`, { id:tid, duration:5000 })
     } catch (e:any) { toast.error(e.message, { id:tid }) }
     finally { setLoadingDoc(null) }
   }
@@ -411,8 +494,19 @@ export default function ProfilePage() {
       const res = await fetch('/api/parse-offer-letter', { method:'POST', body:form })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error)
-      setSalary({ ...json.data, netSalary:Math.round((json.data.fixedCTC||json.data.totalCTC||0)/12*0.75), grossSalary:Math.round((json.data.fixedCTC||0)/12), employerName:json.data.employerName } as any)
-      toast.success('Offer letter parsed!', { id:tid })
+      const data = json.data
+      const monthlyCTC = (data.fixedCTC || data.totalCTC || 0) / 12
+      const estPF = Math.round(monthlyCTC * 0.12)  // approx 12% basic
+      const estNet = Math.round(monthlyCTC * 0.75)  // rough net after deductions
+      setSalBreakdown({
+        netSalary: estNet,
+        employeePF: estPF,
+        employerPF: estPF,
+        bonus: 0,
+        otherBenefits: 0,
+        employerName: data.employerName || 'Your employer',
+      })
+      toast.success('Offer letter parsed — review breakdown', { id:tid })
     } catch (e:any) { toast.error(e.message, { id:tid }) }
     finally { setLoadingDoc(null) }
   }
@@ -423,51 +517,34 @@ export default function ProfilePage() {
     else processAIS(pwdModal.file, pwdModal.type, pwd)
   }
 
-  // Smart Review actions ─────────────────────────────────────────────
+  // Smart Review actions
   const useTickedAsSalary = () => {
     if (tickedSalary.size === 0) { toast.error('Tick at least one credit'); return }
     const txns = taggedTxns.filter(t => tickedSalary.has(t.id))
     const total = txns.reduce((s,t) => s + t.amount, 0)
     const monthly = Math.round(total / bankMonths)
     setConfirmedSalaryIds(new Set(tickedSalary))
-    setSalary({
-      netSalary: monthly,
-      grossSalary: salary?.grossSalary || Math.round(monthly * 1.2),
-      employerName: txns[0]?.brand || (txns[0]?.description || '').split('/')[0].substring(0,30) || 'Detected'
-    } as any)
-    toast.success(`Salary set to ${fmt(monthly)}/month (${txns.length} credits over ${bankMonths} month${bankMonths>1?'s':''})`)
+    setSalBreakdown(prev => ({ ...prev, netSalary: monthly, employerName: txns[0]?.brand || (txns[0]?.description || '').split('/')[0].substring(0,30) || prev.employerName || 'Detected' }))
+    toast.success(`Net salary set to ${fmt(monthly)}/month`)
     setSalCardOpen(false)
   }
 
-  const noneIsSalary = () => {
-    setConfirmedSalaryIds(new Set())
-    setTickedSalary(new Set())
-    toast.success('No salary detected from bank — use Salary tab to add manually')
-    setSalCardOpen(false)
-  }
-
-  const parkSalaryReview = () => {
-    setConfirmedSalaryIds(new Set())
-    toast.success('Salary parked for later — visit Smart Review anytime')
-    setSalCardOpen(false)
-  }
-
+  const noneIsSalary = () => { setConfirmedSalaryIds(new Set()); setTickedSalary(new Set()); toast('Park salary detection — set manually in Salary tab'); setSalCardOpen(false) }
+  const parkSalaryReview = () => { setConfirmedSalaryIds(new Set()); toast('Salary parked for later'); setSalCardOpen(false) }
   const netOffTickedRoundtrips = () => {
     if (tickedRoundtrip.size === 0) { toast.error('Tick at least one pair'); return }
     setConfirmedDetections(p => ({ ...p, roundtrip: true }))
-    toast.success(`${tickedRoundtrip.size} round-trip pair${tickedRoundtrip.size>1?'s':''} netted off`)
+    toast.success(`${tickedRoundtrip.size} pair${tickedRoundtrip.size>1?'s':''} netted off`)
     setRtCardOpen(false)
   }
-
   const sendUntickedRtToMisc = () => {
     const untickedPairs = roundtripPairs.filter(p => !tickedRoundtrip.has(p.id))
-    if (untickedPairs.length === 0) { toast('No unticked pairs to send'); return }
+    if (untickedPairs.length === 0) { toast('No unticked pairs'); return }
     const overrides = { ...manualOverrides }
     untickedPairs.forEach(p => { overrides[p.credit.id] = 'misc'; overrides[p.debit.id] = 'misc' })
     setManualOverrides(overrides)
-    toast.success(`${untickedPairs.length} unticked pair${untickedPairs.length>1?'s':''} sent to Miscellaneous`)
+    toast.success(`${untickedPairs.length} pairs sent to Miscellaneous`)
   }
-
   const routeTickedToOtherIncome = () => {
     if (tickedInterest.size === 0) { toast.error('Tick at least one'); return }
     const txns = taggedTxns.filter(t => tickedInterest.has(t.id))
@@ -476,33 +553,108 @@ export default function ProfilePage() {
     setConfirmedDetections(p => ({ ...p, interest: true }))
     const newSel = new Set(otherSel); newSel.add('fd'); setOtherSel(newSel)
     setOtherVals(p => ({ ...p, fd: annual }))
-    toast.success(`${fmt(annual)} routed to Other Income (annual)`)
+    toast.success(`${fmt(annual)} → Other Income (annual)`)
     setIntCardOpen(false)
   }
+  const parkInterestReview = () => { toast('Interest parked for later'); setIntCardOpen(false) }
 
-  const parkInterestReview = () => {
-    toast.success('Interest income parked for later')
-    setIntCardOpen(false)
-  }
-
-  // Reassign single transaction
   const reassignSingle = (newMega: MegaCategory) => {
     if (!singleCategoryModal.transaction) return
-    setManualOverrides(prev => ({ ...prev, [singleCategoryModal.transaction.id]: newMega }))
+    const t = singleCategoryModal.transaction
+    setManualOverrides(prev => ({ ...prev, [t.id]: newMega }))
+    // Save to memory
+    const memory = loadMerchantMemory()
+    memory[extractMerchantKey(t.description)] = newMega
+    saveMerchantMemory(memory)
     setSingleCategoryModal({ open:false, transaction:null })
-    toast.success(`Moved to ${MEGA_CATEGORIES[newMega].label}`)
+    toast.success(`Moved to ${MEGA_CATEGORIES[newMega].label} · remembered for next time`)
   }
 
-  // Reassign bulk
   const reassignBulk = (newMega: MegaCategory) => {
     const overrides = { ...manualOverrides }
     bulkCategoryModal.transactions.forEach(t => { overrides[t.id] = newMega })
     setManualOverrides(overrides)
+    // Save all to memory
+    const memory = loadMerchantMemory()
+    bulkCategoryModal.transactions.forEach(t => { memory[extractMerchantKey(t.description)] = newMega })
+    saveMerchantMemory(memory)
     setBulkCategoryModal({ open:false, transactions:[], label:'' })
-    toast.success(`${bulkCategoryModal.transactions.length} transactions moved to ${MEGA_CATEGORIES[newMega].label}`)
+    toast.success(`${bulkCategoryModal.transactions.length} transactions moved · remembered for next time`)
   }
 
-  // Toggle helpers
+  // Suggestion actions ─────────────────────────────────────────────────
+  const acceptSuggestion = (sugg: ExpenseSuggestion) => {
+    const monthly = sugg.monthlyAmount
+    if (sugg.targetField === 'fixed') {
+      const newExp = expenses.map(e => e.label === sugg.targetLabel ? { ...e, amount: e.amount + monthly } : e)
+      // If the target label doesn't exist, append
+      if (!expenses.some(e => e.label === sugg.targetLabel)) newExp.push({ id:uid(), label:sugg.targetLabel, amount:monthly, icon:sugg.icon })
+      setExpenses(newExp); saveProfile(newExp, savings, variable)
+    } else if (sugg.targetField === 'variable') {
+      const newVar = variable.map(v => v.label === sugg.targetLabel ? { ...v, amount: v.amount + monthly } : v)
+      if (!variable.some(v => v.label === sugg.targetLabel)) newVar.push({ id:uid(), label:sugg.targetLabel, amount:monthly, icon:sugg.icon })
+      setVariable(newVar); saveProfile(expenses, savings, newVar)
+    } else if (sugg.targetField === 'savings') {
+      const newSav = savings.map(s => s.label.includes('regular') || s.label.startsWith('SIP') ? { ...s, amount: s.amount + monthly } : s)
+      setSavings(newSav); saveProfile(expenses, newSav, variable)
+    } else if (sugg.targetField === 'tax_save') {
+      const newSav = savings.map(s => s.label.includes('ELSS') ? { ...s, amount: s.amount + monthly } : s)
+      setSavings(newSav); saveProfile(expenses, newSav, variable)
+    } else if (sugg.targetField === 'cc') {
+      const newExp = expenses.map(e => e.label === 'Credit card bill' ? { ...e, amount: e.amount + monthly } : e)
+      setExpenses(newExp); saveProfile(newExp, savings, variable)
+    }
+    setSuggestionDecisions(prev => ({ ...prev, [sugg.id]: 'accepted' }))
+    // Save to memory for all merchants in this group
+    const memory = loadMerchantMemory()
+    sugg.brands.forEach(brand => { memory[brand.toUpperCase()] = sugg.mega })
+    saveMerchantMemory(memory)
+    toast.success(`${fmt(monthly)} added to ${sugg.targetLabel} · remembered`)
+  }
+
+  const rejectSuggestion = (sugg: ExpenseSuggestion) => {
+    setSuggestionDecisions(prev => ({ ...prev, [sugg.id]: 'rejected' }))
+    toast(`Skipped — won't ask again unless you re-upload`)
+  }
+
+  const parkSuggestion = (sugg: ExpenseSuggestion) => {
+    setSuggestionDecisions(prev => ({ ...prev, [sugg.id]: 'parked' }))
+    toast('Parked — will ask next time')
+  }
+
+  // Special: split investments into ELSS + regular
+  const splitInvestment = (sugg: ExpenseSuggestion, elssMonthly: number, regMonthly: number) => {
+    if (elssMonthly > 0) {
+      const newSav = savings.map(s => s.label.includes('ELSS') ? { ...s, amount: s.amount + elssMonthly } : s)
+      if (regMonthly > 0) {
+        const updated = newSav.map(s => (s.label.includes('regular') || s.label === 'SIP / Mutual Funds (regular)') ? { ...s, amount: s.amount + regMonthly } : s)
+        setSavings(updated); saveProfile(expenses, updated, variable)
+      } else {
+        setSavings(newSav); saveProfile(expenses, newSav, variable)
+      }
+    } else if (regMonthly > 0) {
+      const newSav = savings.map(s => (s.label.includes('regular') || s.label === 'SIP / Mutual Funds (regular)') ? { ...s, amount: s.amount + regMonthly } : s)
+      setSavings(newSav); saveProfile(expenses, newSav, variable)
+    }
+    setSuggestionDecisions(prev => ({ ...prev, [sugg.id]: 'accepted' }))
+    toast.success(`Split: ELSS ${fmt(elssMonthly)} · Regular ${fmt(regMonthly)}`)
+  }
+
+  // Credit card actions
+  const addCreditCard = () => {
+    if (!newCardBank || !newCardLast4 || newCardLast4.length !== 4) {
+      toast.error('Pick a bank and enter exactly 4 digits')
+      return
+    }
+    setCreditCards(prev => [...prev, { id: uid(), bank: newCardBank, last4: newCardLast4 }])
+    setNewCardBank(''); setNewCardLast4('')
+    toast.success(`${newCardBank} card ****${newCardLast4} added`)
+  }
+
+  const removeCreditCard = (id: string) => {
+    setCreditCards(prev => prev.filter(c => c.id !== id))
+  }
+
   const toggleSalaryTick = (id:string) => setTickedSalary(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
   const toggleInterestTick = (id:string) => setTickedInterest(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
   const toggleRoundtripTick = (id:string) => setTickedRoundtrip(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -510,6 +662,8 @@ export default function ProfilePage() {
   const tickedSalaryAmount = useMemo(() => taggedTxns.filter(t => tickedSalary.has(t.id)).reduce((s,t)=>s+t.amount,0), [taggedTxns, tickedSalary])
   const tickedInterestAmount = useMemo(() => taggedTxns.filter(t => tickedInterest.has(t.id)).reduce((s,t)=>s+t.amount,0), [taggedTxns, tickedInterest])
   const tickedRoundtripAmount = useMemo(() => roundtripPairs.filter(p => tickedRoundtrip.has(p.id)).reduce((s,p)=>s+p.amount,0), [roundtripPairs, tickedRoundtrip])
+
+  const pendingSuggestionCount = suggestions.filter(s => !suggestionDecisions[s.id] || suggestionDecisions[s.id] === 'parked').length
 
   return (
     <div style={{ fontFamily:'"Sora",-apple-system,sans-serif', maxWidth:860 }}>
@@ -534,7 +688,7 @@ export default function ProfilePage() {
       {/* DOCUMENTS TAB */}
       {mainTab==='docs' && (
         <div>
-          <p style={{ fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:8 }}>Step 1 — Bank statement (recommended)</p>
+          <p style={{ fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:8 }}>Step 1 — Bank statement</p>
           <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8, padding:16, marginBottom:14, display:'flex', gap:14, alignItems:'center' }}>
             <div style={{ width:54, height:54, borderRadius:'50%', background:bankData?'#EEF2EE':C.wl, border:`2px solid ${bankData?C.fg:C.wm}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:24, flexShrink:0 }}>🏦</div>
             <div style={{ flex:1 }}>
@@ -546,8 +700,8 @@ export default function ProfilePage() {
               ) : (
                 <>
                   <p style={{ fontSize:14, fontWeight:700, color:C.text, margin:'0 0 3px' }}>Bank Statement</p>
-                  <p style={{ fontSize:11.5, color:C.muted, margin:0, lineHeight:1.55 }}>Any Indian bank · 1 month or up to 12 months · password supported</p>
-                  <p style={{ fontSize:10.5, color:C.muted, margin:'4px 0 0' }}>⚡ You'll review every detection before it affects your P&L</p>
+                  <p style={{ fontSize:11.5, color:C.muted, margin:0, lineHeight:1.55 }}>Any Indian bank · 1 month or up to 12 months</p>
+                  <p style={{ fontSize:10.5, color:C.muted, margin:'4px 0 0' }}>⚡ ArthVo asks before adding anything to your expenses</p>
                 </>
               )}
             </div>
@@ -561,7 +715,38 @@ export default function ProfilePage() {
             <input ref={bankRef} type="file" accept=".pdf,.xlsx,.xls,.csv,.jpg,.jpeg,.png" style={{ display:'none' }} onChange={e => e.target.files?.[0] && handleBankFile(e.target.files[0])} />
           </div>
 
-          <p style={{ fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:8 }}>Step 2 — Tax documents (optional)</p>
+          <p style={{ fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:8 }}>Step 2 — Credit cards (helps track payments)</p>
+          <div style={S.card}>
+            <div style={S.cardHead}>Your credit cards</div>
+            {creditCards.length === 0 ? (
+              <div style={{ ...S.row, fontSize:12, color:C.muted, fontStyle:'italic' as const }}>
+                <span>No cards added · adding one helps identify which UPI debits are credit card bill payments</span>
+              </div>
+            ) : (
+              creditCards.map(card => (
+                <div key={card.id} style={{ ...S.row, gap:8 }}>
+                  <span style={{ display:'flex', alignItems:'center', gap:8 }}>
+                    <span style={{ fontSize:18 }}>💳</span>
+                    <span><strong>{card.bank}</strong> · ending <strong style={{ fontFamily:'monospace', color:C.fg }}>{card.last4}</strong></span>
+                  </span>
+                  <button onClick={() => removeCreditCard(card.id)} style={{ fontSize:11, color:C.danger, background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', textDecoration:'underline' }}>Remove</button>
+                </div>
+              ))
+            )}
+            <div style={{ padding:'10px 14px', background:'#FAFAF8', display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' as const }}>
+              <select value={newCardBank} onChange={e=>setNewCardBank(e.target.value)} style={{ padding:'6px 10px', border:`1px solid ${C.border}`, borderRadius:4, fontSize:12, fontFamily:'inherit', flex:1, minWidth:140 }}>
+                <option value="">Pick bank...</option>
+                {BANKS.map(b => <option key={b} value={b}>{b}</option>)}
+              </select>
+              <input type="text" inputMode="numeric" maxLength={4} placeholder="Last 4 digits"
+                value={newCardLast4}
+                onChange={e => setNewCardLast4(e.target.value.replace(/[^0-9]/g,''))}
+                style={{ padding:'6px 10px', border:`1px solid ${C.border}`, borderRadius:4, fontSize:12, fontFamily:'monospace', width:110, outline:'none' }} />
+              <button onClick={addCreditCard} disabled={!newCardBank || newCardLast4.length !== 4} style={{ padding:'6px 14px', background:newCardBank&&newCardLast4.length===4 ? C.fg : '#ccc', color:C.wheat, border:'none', borderRadius:4, fontSize:11.5, fontWeight:600, cursor:newCardBank&&newCardLast4.length===4?'pointer':'not-allowed', fontFamily:'inherit' }}>+ Add card</button>
+            </div>
+          </div>
+
+          <p style={{ fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:8, marginTop:6 }}>Step 3 — Tax documents (optional)</p>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
             <div style={S.upload(!!aisData)} onClick={() => !aisData&&!loadingDoc&&aisRef.current?.click()}>
               {aisData ? (
@@ -599,13 +784,18 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* INCOME TAB — SMART REVIEW with full transparency */}
+      {/* INCOME TAB */}
       {mainTab==='income' && (
         <div>
-          <div style={{ display:'flex', borderBottom:`1px solid ${C.border}`, marginBottom:18 }}>
+          <div style={{ display:'flex', borderBottom:`1px solid ${C.border}`, marginBottom:18, gap:0, overflowX:'auto' as const }}>
             <button onClick={() => setIncTab('review')} style={S.stab(incTab==='review')}>🔍 Smart Review</button>
             <button onClick={() => setIncTab('salary')} style={S.stab(incTab==='salary')}>📄 Salary</button>
             <button onClick={() => setIncTab('other')} style={S.stab(incTab==='other')}>🏦 Other Income</button>
+            {bankData && (
+              <button onClick={() => setIncTab('suggestions')} style={S.stab(incTab==='suggestions')}>
+                💡 Apply to Expenses {pendingSuggestionCount > 0 && <span style={{ marginLeft:4, fontSize:10, background:C.fg, color:C.wheat, padding:'1px 6px', borderRadius:10 }}>{pendingSuggestionCount}</span>}
+              </button>
+            )}
           </div>
 
           {incTab==='review' && (
@@ -617,32 +807,25 @@ export default function ProfilePage() {
                   <div style={{ background:'#1E293B', borderRadius:8, padding:'12px 16px', marginBottom:14 }}>
                     <p style={{ fontSize:10, color:'rgba(230,207,167,0.5)', letterSpacing:'0.08em', margin:'0 0 6px' }}>SMART REVIEW · {bankPeriod?.from} → {bankPeriod?.to} · {bankMonths} month{bankMonths>1?'s':''}</p>
                     <p style={{ fontSize:13, color:'rgba(255,255,255,0.75)', margin:0, lineHeight:1.6 }}>
-                      Every detection shows the transactions feeding it. Tick what you want, untick what's wrong, or park for later.
+                      Confirm what's salary, what's a round-trip, and what's interest. Then go to "Apply to Expenses" tab to fill the rest.
                     </p>
                   </div>
 
-                  {/* SALARY DETECTION CARD */}
+                  {/* SALARY DETECTION */}
                   <div style={{ ...S.card, border:`2px solid ${confirmedSalaryIds.size>0 ? '#2A7A4A' : '#EDD898'}` }}>
                     <div style={{ padding:'11px 14px', background:confirmedSalaryIds.size>0?'#EEF2EE':'#FBF6EE', borderBottom:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                       <span style={{ fontSize:13, fontWeight:600, color:confirmedSalaryIds.size>0?'#2A7A4A':'#8A6A1A', display:'flex', alignItems:'center', gap:6 }}>
-                        💰 {confirmedSalaryIds.size > 0 ? `Salary confirmed: ${fmt(salary?.netSalary || 0)}/mo` : 'Salary candidates — pick which credits are your salary'}
+                        💰 {confirmedSalaryIds.size > 0 ? `Salary confirmed: ${fmt(salBreakdown.netSalary)}/mo` : 'Salary candidates — pick which credits are your salary'}
                       </span>
                       <button onClick={() => setSalCardOpen(!salCardOpen)} style={{ width:22, height:22, borderRadius:4, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:13, color:C.fg, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:600 }}>{salCardOpen?'−':'+'}</button>
                     </div>
                     {salCardOpen && (
                       <>
-                        {topSalaryCandidate ? (
-                          <div style={{ ...S.row, fontSize:12, background:'#FAFAF8' }}>
-                            <span>Auto-detected: <strong>{topSalaryCandidate.source}</strong> · {topSalaryCandidate.occurrences} credits · variance {Math.round(topSalaryCandidate.variance*100)}%</span>
-                            <span style={{ color:C.fg, fontWeight:600 }}>{fmt(topSalaryCandidate.averageAmount)}/mo avg</span>
-                          </div>
-                        ) : (
+                        {salaryCandidates.length === 0 && (
                           <div style={{ ...S.row, fontSize:12, color:C.muted, fontStyle:'italic' as const }}>
-                            <span>No clear salary pattern detected. Review credits below to pick yours.</span>
+                            <span>No clear pattern detected. Browse all credits below to pick yours.</span>
                           </div>
                         )}
-
-                        {/* Salary candidate transactions */}
                         {salaryCandidates.flatMap(c => c.transactions).map(t => {
                           const ticked = tickedSalary.has(t.id)
                           return (
@@ -655,8 +838,6 @@ export default function ProfilePage() {
                             </div>
                           )
                         })}
-
-                        {/* Show all credits toggle */}
                         {!salShowAllCredits && largeCredits.length > salaryCandidates.flatMap(c=>c.transactions).length && (
                           <div style={{ padding:'8px 14px', background:'#FAFAF8', borderBottom:`0.5px solid #FAF7F2`, textAlign:'center' as const }}>
                             <button onClick={() => setSalShowAllCredits(true)} style={{ padding:'5px 14px', background:'#fff', border:`1px solid ${C.border}`, borderRadius:4, fontSize:11.5, color:C.fg, cursor:'pointer', fontFamily:'inherit', fontWeight:500 }}>
@@ -664,8 +845,6 @@ export default function ProfilePage() {
                             </button>
                           </div>
                         )}
-
-                        {/* All other credits */}
                         {salShowAllCredits && largeCredits.filter(t => !salaryCandidates.flatMap(c=>c.transactions).find(st => st.id === t.id)).map(t => {
                           const ticked = tickedSalary.has(t.id)
                           return (
@@ -678,34 +857,30 @@ export default function ProfilePage() {
                             </div>
                           )
                         })}
-
-                        {/* Bulk action bar */}
                         <div style={S.bulkBar}>
-                          <span>{tickedSalary.size} ticked = {fmt(tickedSalaryAmount)} total · avg {fmt(Math.round(tickedSalaryAmount/Math.max(1,bankMonths)))}/mo over {bankMonths} month{bankMonths>1?'s':''}</span>
+                          <span>{tickedSalary.size} ticked = {fmt(tickedSalaryAmount)} · avg {fmt(Math.round(tickedSalaryAmount/Math.max(1,bankMonths)))}/mo</span>
                           <span style={{ display:'flex', gap:5 }}>
                             <button onClick={useTickedAsSalary} style={S.bulkBtn}>Use as salary</button>
                             <button onClick={noneIsSalary} style={S.bulkBtn}>None are salary</button>
-                            <button onClick={parkSalaryReview} style={S.bulkBtn}>Park for later</button>
+                            <button onClick={parkSalaryReview} style={S.bulkBtn}>Park</button>
                           </span>
                         </div>
                       </>
                     )}
                   </div>
 
-                  {/* ROUND-TRIP CARD */}
+                  {/* ROUND-TRIP */}
                   {roundtripPairs.length > 0 && (
                     <div style={{ ...S.card, border:`1px solid ${confirmedDetections['roundtrip']?C.fg:'#EDD898'}` }}>
                       <div style={{ padding:'11px 14px', background:'#FBF6EE', borderBottom:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                         <span style={{ fontSize:13, fontWeight:600, color:'#8A6A1A', display:'flex', alignItems:'center', gap:6 }}>
-                          🔄 Round-trip transfers · {roundtripPairs.length} pair{roundtripPairs.length>1?'s':''} · {fmt(roundtripPairs.reduce((s,p)=>s+p.amount,0))} total
+                          🔄 Round-trip transfers · {roundtripPairs.length} pair{roundtripPairs.length>1?'s':''} · {fmt(roundtripPairs.reduce((s,p)=>s+p.amount,0))}
                         </span>
                         <button onClick={() => setRtCardOpen(!rtCardOpen)} style={{ width:22, height:22, borderRadius:4, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:13, color:C.fg, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:600 }}>{rtCardOpen?'−':'+'}</button>
                       </div>
                       {rtCardOpen && (
                         <>
-                          <div style={{ ...S.row, fontSize:12, background:'#FAFAF8', color:C.muted }}>
-                            <span>Tick pairs to net off · untick to keep · or send to Misc</span>
-                          </div>
+                          <div style={{ ...S.row, fontSize:12, background:'#FAFAF8', color:C.muted }}><span>Tick pairs to net off · untick to keep · or send unticked to Misc</span></div>
                           {roundtripPairs.slice(0,15).map(p => {
                             const ticked = tickedRoundtrip.has(p.id)
                             return (
@@ -727,7 +902,7 @@ export default function ProfilePage() {
                           })}
                           {roundtripPairs.length > 15 && <div style={{ padding:'7px 14px', fontSize:11, color:C.muted, background:'#FAFAF8' }}>+{roundtripPairs.length-15} more pairs</div>}
                           <div style={S.bulkBar}>
-                            <span>{tickedRoundtrip.size} pairs ticked = {fmt(tickedRoundtripAmount)} will be netted off</span>
+                            <span>{tickedRoundtrip.size} pairs ticked = {fmt(tickedRoundtripAmount)} netted</span>
                             <span style={{ display:'flex', gap:5 }}>
                               <button onClick={netOffTickedRoundtrips} style={S.bulkBtn}>Net off ticked</button>
                               <button onClick={sendUntickedRtToMisc} style={S.bulkBtn}>Unticked → Misc</button>
@@ -738,20 +913,18 @@ export default function ProfilePage() {
                     </div>
                   )}
 
-                  {/* INTEREST CARD */}
+                  {/* INTEREST */}
                   {interestTxns.length > 0 && (
                     <div style={{ ...S.card, border:`1px solid ${confirmedDetections['interest']?C.fg:'#C8D8C8'}` }}>
                       <div style={{ padding:'11px 14px', background:'#EEF2EE', borderBottom:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                         <span style={{ fontSize:13, fontWeight:600, color:'#2A7A4A', display:'flex', alignItems:'center', gap:6 }}>
-                          💸 Interest / Dividend income · {fmt(interestTxns.reduce((s,t)=>s+t.amount,0))} total
+                          💸 Interest / Dividend income · {fmt(interestTxns.reduce((s,t)=>s+t.amount,0))}
                         </span>
                         <button onClick={() => setIntCardOpen(!intCardOpen)} style={{ width:22, height:22, borderRadius:4, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:13, color:C.fg, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:600 }}>{intCardOpen?'−':'+'}</button>
                       </div>
                       {intCardOpen && (
                         <>
-                          <div style={{ ...S.row, fontSize:12, background:'#FAFAF8', color:C.muted }}>
-                            <span>Tick the actual interest/dividend credits — untick wrong matches</span>
-                          </div>
+                          <div style={{ ...S.row, fontSize:12, background:'#FAFAF8', color:C.muted }}><span>Tick the actual interest/dividend credits — untick wrong matches</span></div>
                           {interestTxns.map(t => {
                             const ticked = tickedInterest.has(t.id)
                             return (
@@ -768,7 +941,7 @@ export default function ProfilePage() {
                             <span>{tickedInterest.size} ticked = {fmt(tickedInterestAmount)} → {fmt(Math.round(tickedInterestAmount*(12/bankMonths)))} annual</span>
                             <span style={{ display:'flex', gap:5 }}>
                               <button onClick={routeTickedToOtherIncome} style={S.bulkBtn}>Route to Other Income</button>
-                              <button onClick={parkInterestReview} style={S.bulkBtn}>Park for later</button>
+                              <button onClick={parkInterestReview} style={S.bulkBtn}>Park</button>
                             </span>
                           </div>
                         </>
@@ -783,6 +956,7 @@ export default function ProfilePage() {
             </div>
           )}
 
+          {/* SALARY TAB — full breakdown */}
           {incTab==='salary' && (
             <div>
               <div style={{ display:'flex', gap:2, background:'#F0EBE0', borderRadius:5, padding:3, marginBottom:16, width:'fit-content' }}>
@@ -792,27 +966,9 @@ export default function ProfilePage() {
                   </button>
                 ))}
               </div>
-              {salary ? (
-                <div style={{ background:C.fg, borderRadius:6, padding:'14px 16px', marginBottom:12 }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:10 }}>
-                    <div><p style={{ fontSize:9, color:'rgba(230,207,167,0.45)', letterSpacing:'0.08em', margin:'0 0 2px' }}>SALARY</p><p style={{ fontSize:14, fontWeight:600, color:'#fff', margin:0 }}>{(salary as any).employerName||'Your employer'}</p></div>
-                    <button onClick={() => setSalary(null)} style={{ fontSize:11, padding:'4px 10px', background:'rgba(230,207,167,0.1)', border:'1px solid rgba(230,207,167,0.2)', borderRadius:4, color:'rgba(230,207,167,0.7)', cursor:'pointer', fontFamily:'inherit' }}>↺ Change</button>
-                  </div>
-                  <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:7 }}>
-                    {[{lbl:'TAKE-HOME/MO',val:fmt(salary.netSalary||0),col:C.wheat},{lbl:'GROSS/MO',val:fmt(salary.grossSalary||0),col:'#fff'},{lbl:'ANNUAL',val:fmt((salary.grossSalary||0)*12),col:C.wheat}].map(s => (
-                      <div key={s.lbl} style={{ background:'rgba(230,207,167,0.08)', border:'1px solid rgba(230,207,167,0.12)', borderRadius:4, padding:'8px 10px' }}>
-                        <p style={{ fontSize:9, color:'rgba(230,207,167,0.45)', margin:'0 0 2px', letterSpacing:'0.06em' }}>{s.lbl}</p>
-                        <p style={{ fontSize:15, fontWeight:700, color:s.col, margin:0 }}>{s.val}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : salMode === 'manual' ? (
-                <div style={{ ...S.card, padding:'16px' }}>
-                  <p style={{ fontSize:13, fontWeight:600, color:C.text, margin:'0 0 12px' }}>Enter your monthly take-home</p>
-                  <AmtInput value={salary?.netSalary||0} onChange={v => v > 0 && setSalary({ netSalary:v, grossSalary:Math.round(v*1.2), employerName:'Your employer' } as any)} />
-                </div>
-              ) : (
+
+              {/* Slip / offer upload (only if not manual mode) */}
+              {!salBreakdown.netSalary && salMode !== 'manual' && (
                 <div style={S.upload(false)} onClick={() => !loadingDoc&&(salMode==='slip'?slipRef:offerRef).current?.click()}>
                   <span style={{ fontSize:28 }}>{salMode==='slip'?'📄':'📨'}</span>
                   <p style={{ fontSize:13, fontWeight:600, color:C.text, margin:0 }}>{loadingDoc?'Reading…':`Upload ${salMode==='slip'?'Salary Slip':'Offer Letter'}`}</p>
@@ -822,6 +978,45 @@ export default function ProfilePage() {
                   <input ref={offerRef} type="file" accept=".pdf,image/*" style={{ display:'none' }} onChange={e=>e.target.files?.[0]&&handleOffer(e.target.files[0])} />
                 </div>
               )}
+
+              {/* Editable salary breakdown */}
+              <div style={S.card}>
+                <div style={S.cardHead}>Monthly income breakdown {salBreakdown.employerName && `· ${salBreakdown.employerName}`}</div>
+                {[
+                  { key:'netSalary' as const, icon:'💵', label:'Take-home (net)', sub:'What hits your bank', tag:null },
+                  { key:'employeePF' as const, icon:'🏛️', label:'Employee PF', sub:'Deducted from salary', tag:{ text:'→ 80C ✓', bg:'#EEF2EE', color:'#2A7A4A' } },
+                  { key:'employerPF' as const, icon:'🏢', label:'Employer PF', sub:'Direct to PF account, not via salary', tag:{ text:'wealth tracker', bg:'#F5F5F0', color:C.muted } },
+                  { key:'bonus' as const, icon:'🎁', label:'Bonus this period', sub:'Variable component', tag:null },
+                  { key:'otherBenefits' as const, icon:'🍽️', label:'Other benefits', sub:'LTA, vouchers, RSU vesting', tag:null },
+                ].map(field => (
+                  <div key={field.key} style={S.row}>
+                    <div style={{ flex:1 }}>
+                      <span style={{ display:'flex', alignItems:'center', gap:7, marginBottom:2 }}>
+                        <span style={{ fontSize:14 }}>{field.icon}</span>
+                        <span>{field.label}</span>
+                        {field.tag && <span style={{ fontSize:9.5, padding:'1px 6px', borderRadius:3, fontWeight:500, background:field.tag.bg, color:field.tag.color }}>{field.tag.text}</span>}
+                      </span>
+                      <span style={{ fontSize:10.5, color:C.muted, marginLeft:21 }}>{field.sub}</span>
+                    </div>
+                    <AmtInput value={salBreakdown[field.key]} onChange={v => setSalBreakdown(prev => ({ ...prev, [field.key]: v }))} />
+                  </div>
+                ))}
+                <div style={{ ...S.row, background:C.wl, fontWeight:700, fontSize:13.5, color:C.fg }}>
+                  <span>Gross monthly</span>
+                  <span>{fmt(grossMonthly)}</span>
+                </div>
+                <div style={{ ...S.row, background:C.wl, fontWeight:700, fontSize:13.5, color:C.fg }}>
+                  <span>× 12 = Annual gross / CTC</span>
+                  <span>{fmt(annualCTC)}</span>
+                </div>
+                {salBreakdown.employeePF > 0 && (
+                  <div style={{ padding:'10px 14px', background:'#EEF2EE', borderTop:`1px solid #C8D8C8`, fontSize:11.5, color:'#2A7A4A', display:'flex', alignItems:'center', gap:6 }}>
+                    <span>🛡️</span>
+                    <span><strong>{fmt(salBreakdown.employeePF * 12)}</strong> auto-flowing to 80C from Employee PF · saves up to ₹{Math.round(salBreakdown.employeePF * 12 * 0.30).toLocaleString('en-IN')} in taxes (30% bracket)</span>
+                  </div>
+                )}
+              </div>
+
               <div style={{ display:'flex', gap:8, marginTop:12 }}>
                 <button onClick={() => setIncTab('review')} style={{ ...S.btn(false), padding:'10px 16px' }}>← Back</button>
                 <button onClick={() => setIncTab('other')} style={{ ...S.btn(true), flex:1 }}>Next: Other Income →</button>
@@ -849,7 +1044,124 @@ export default function ProfilePage() {
               </div>
               <div style={{ display:'flex', gap:8 }}>
                 <button onClick={() => setIncTab('salary')} style={{ ...S.btn(false), padding:'10px 16px' }}>← Back</button>
-                <button onClick={() => setMainTab('expenses')} style={{ ...S.btn(true), flex:1 }}>Next: Expenses →</button>
+                <button onClick={() => bankData ? setIncTab('suggestions') : setMainTab('expenses')} style={{ ...S.btn(true), flex:1 }}>
+                  {bankData ? 'Next: Apply to Expenses →' : 'Next: Expenses →'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* APPLY TO EXPENSES TAB */}
+          {incTab==='suggestions' && (
+            <div>
+              {!bankData ? (
+                <div style={S.insight}>Upload bank statement first.</div>
+              ) : suggestions.length === 0 ? (
+                <div style={S.insight}>No expense suggestions to apply yet. Run Smart Review first.</div>
+              ) : (
+                <>
+                  <div style={{ background:'#1E293B', borderRadius:8, padding:'12px 16px', marginBottom:14 }}>
+                    <p style={{ fontSize:10, color:'rgba(230,207,167,0.5)', letterSpacing:'0.08em', margin:'0 0 6px' }}>APPLY TO EXPENSES</p>
+                    <p style={{ fontSize:13, color:'rgba(255,255,255,0.75)', margin:0, lineHeight:1.6 }}>
+                      ArthVo asks before adding anything. Yes once = remembered next time. Skip = won't ask. Park = ask next session.
+                    </p>
+                  </div>
+
+                  {suggestions.map(sugg => {
+                    const decision = suggestionDecisions[sugg.id]
+                    const isInvestment = sugg.targetField === 'tax_save' || sugg.targetField === 'savings' || sugg.mega.startsWith('investments')
+                    const split = suggestionElssRegular[sugg.id] || { elss:0, reg:sugg.monthlyAmount }
+
+                    if (decision === 'accepted') {
+                      return (
+                        <div key={sugg.id} style={{ ...S.card, opacity:0.6 }}>
+                          <div style={{ ...S.row, fontSize:12.5 }}>
+                            <span style={{ display:'flex', alignItems:'center', gap:8 }}>
+                              <span style={{ fontSize:16 }}>{sugg.icon}</span>
+                              <span>{sugg.label} → {sugg.targetLabel}</span>
+                            </span>
+                            <span style={{ fontSize:11, color:'#2A7A4A' }}>✓ Added {fmt(sugg.monthlyAmount)}/mo</span>
+                          </div>
+                        </div>
+                      )
+                    }
+                    if (decision === 'rejected') {
+                      return (
+                        <div key={sugg.id} style={{ ...S.card, opacity:0.5 }}>
+                          <div style={{ ...S.row, fontSize:12.5 }}>
+                            <span style={{ display:'flex', alignItems:'center', gap:8 }}>
+                              <span style={{ fontSize:16 }}>{sugg.icon}</span>
+                              <span>{sugg.label}</span>
+                            </span>
+                            <span style={{ fontSize:11, color:C.danger }}>✗ Skipped</span>
+                          </div>
+                        </div>
+                      )
+                    }
+
+                    return (
+                      <div key={sugg.id} style={{ ...S.card, border:`1px solid ${decision==='parked'?'#EDD898':C.border}` }}>
+                        <div style={{ padding:'12px 14px', background:decision==='parked'?'#FBF6EE':'#FAFAF8', borderBottom:`1px solid ${C.border}` }}>
+                          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10, marginBottom:6 }}>
+                            <span style={{ display:'flex', alignItems:'center', gap:8, flex:1 }}>
+                              <span style={{ fontSize:18 }}>{sugg.icon}</span>
+                              <div>
+                                <p style={{ fontSize:13, fontWeight:600, color:C.text, margin:0 }}>{sugg.label}</p>
+                                <p style={{ fontSize:11, color:C.muted, margin:0 }}>{sugg.brands.length > 0 ? sugg.brands.slice(0,4).join(' · ') : `${sugg.count} transactions`}</p>
+                              </div>
+                            </span>
+                            <span style={{ textAlign:'right' as const, flexShrink:0 }}>
+                              <p style={{ fontSize:14, fontWeight:700, color:C.fg, margin:0 }}>{fmt(sugg.monthlyAmount)}</p>
+                              <p style={{ fontSize:10, color:C.muted, margin:0 }}>per month</p>
+                            </span>
+                          </div>
+                          <p style={{ fontSize:11.5, color:C.muted, margin:'6px 0 0' }}>
+                            Add to: <strong style={{ color:C.fg }}>{sugg.targetLabel}</strong>
+                            {sugg.targetField === 'tax_save' && <span style={{ marginLeft:6, fontSize:10, padding:'1px 6px', borderRadius:3, background:'#EEF2EE', color:'#2A7A4A' }}>flows to 80C</span>}
+                            {sugg.targetField === 'cc' && <span style={{ marginLeft:6, fontSize:10, padding:'1px 6px', borderRadius:3, background:'#F5F5F0', color:C.muted }}>credit card bill</span>}
+                          </p>
+                        </div>
+
+                        {/* Special: investments need split into ELSS / regular */}
+                        {sugg.mega === 'investments_regular' || sugg.mega === 'investments_elss' ? (
+                          <div style={{ padding:'10px 14px', background:'#EEF4FD', borderBottom:`1px solid ${C.border}` }}>
+                            <p style={{ fontSize:11, color:'#2A5A8A', margin:'0 0 8px' }}>📊 Split into Tax-saving (ELSS → 80C) and Regular SIP:</p>
+                            <div style={{ display:'flex', gap:8, marginBottom:8, alignItems:'center', flexWrap:'wrap' as const }}>
+                              <span style={{ fontSize:11, color:C.text, minWidth:90 }}>Tax-saving (ELSS):</span>
+                              <AmtInput value={split.elss} onChange={v => setSuggestionElssRegular(p => ({ ...p, [sugg.id]: { elss:v, reg: Math.max(0, sugg.monthlyAmount - v) } }))} small />
+                              <span style={{ fontSize:11, color:C.text, marginLeft:8, minWidth:80 }}>Regular SIP:</span>
+                              <AmtInput value={split.reg} onChange={v => setSuggestionElssRegular(p => ({ ...p, [sugg.id]: { elss: split.elss, reg: v } }))} small />
+                            </div>
+                            <p style={{ fontSize:10.5, color:C.muted, margin:0 }}>Total: {fmt(split.elss + split.reg)} (suggested ₹{sugg.monthlyAmount.toLocaleString('en-IN')})</p>
+                          </div>
+                        ) : null}
+
+                        <div style={{ padding:'9px 14px', display:'flex', gap:6, justifyContent:'flex-end', flexWrap:'wrap' as const, background:C.card }}>
+                          {(sugg.mega === 'investments_regular' || sugg.mega === 'investments_elss') ? (
+                            <button onClick={() => splitInvestment(sugg, split.elss, split.reg)} style={{ padding:'6px 14px', fontSize:11.5, background:C.fg, color:C.wheat, border:'none', borderRadius:4, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>
+                              Yes, apply split →
+                            </button>
+                          ) : (
+                            <button onClick={() => acceptSuggestion(sugg)} style={{ padding:'6px 14px', fontSize:11.5, background:'#EEF2EE', color:'#2A7A4A', border:'1px solid #C8D8C8', borderRadius:4, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>
+                              ✓ Yes, add {fmt(sugg.monthlyAmount)}
+                            </button>
+                          )}
+                          <button onClick={() => rejectSuggestion(sugg)} style={{ padding:'6px 12px', fontSize:11.5, background:'#FBF0F0', color:C.danger, border:'1px solid #F0CECE', borderRadius:4, cursor:'pointer', fontFamily:'inherit' }}>
+                            ✗ No
+                          </button>
+                          <button onClick={() => parkSuggestion(sugg)} style={{ padding:'6px 12px', fontSize:11.5, background:'#FBF6EE', color:'#8A6A1A', border:'1px solid #EDD898', borderRadius:4, cursor:'pointer', fontFamily:'inherit' }}>
+                            🅿 Park
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </>
+              )}
+
+              <div style={{ display:'flex', gap:8, marginTop:12 }}>
+                <button onClick={() => setIncTab('other')} style={{ ...S.btn(false), padding:'10px 16px' }}>← Back</button>
+                <button onClick={() => setMainTab('expenses')} style={{ ...S.btn(true), flex:1 }}>Done · Go to Expenses tab →</button>
               </div>
             </div>
           )}
@@ -882,6 +1194,14 @@ export default function ProfilePage() {
               </div>
             </div>
           )}
+
+          {bankData && pendingSuggestionCount > 0 && (
+            <div style={{ ...S.insight, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <span>💡 {pendingSuggestionCount} expense suggestion{pendingSuggestionCount>1?'s':''} pending review from your bank statement</span>
+              <button onClick={() => { setMainTab('income'); setIncTab('suggestions') }} style={{ padding:'5px 12px', fontSize:11, background:C.fg, color:C.wheat, border:'none', borderRadius:4, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>Review →</button>
+            </div>
+          )}
+
           <div style={{ display:'grid', gridTemplateColumns:'1fr 220px', gap:20 }}>
             <div>
               <div style={S.card}>
@@ -903,13 +1223,19 @@ export default function ProfilePage() {
                 ))}
               </div>
               <div style={S.card}>
-                <div style={S.cardHead}>Monthly Savings <button onClick={addSav} style={{ fontSize:11, color:C.fg, background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', fontWeight:500, textTransform:'none' as const, letterSpacing:0 }}>+ Add</button></div>
-                {savings.map((sv,i)=>(
-                  <div key={sv.id} className="av-row" style={{ ...S.row, borderBottom:i<savings.length-1?`1px solid #FAF7F2`:'none' }}>
-                    <span style={{ display:'flex', alignItems:'center', gap:7 }}><span>{sv.icon}</span>{sv.label}</span>
-                    <AmtInput value={sv.amount} onChange={v=>updSav(sv.id,v)} />
-                  </div>
-                ))}
+                <div style={S.cardHead}>Monthly Savings & Investments <button onClick={addSav} style={{ fontSize:11, color:C.fg, background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', fontWeight:500, textTransform:'none' as const, letterSpacing:0 }}>+ Add</button></div>
+                {savings.map((sv,i)=>{
+                  const is80c = sv.label.includes('ELSS') || sv.label.includes('80C')
+                  return (
+                    <div key={sv.id} className="av-row" style={{ ...S.row, borderBottom:i<savings.length-1?`1px solid #FAF7F2`:'none' }}>
+                      <span style={{ display:'flex', alignItems:'center', gap:7 }}>
+                        <span>{sv.icon}</span>{sv.label}
+                        {is80c && <span style={{ fontSize:9.5, padding:'1px 6px', borderRadius:3, background:'#EEF2EE', color:'#2A7A4A', fontWeight:500 }}>→ 80C</span>}
+                      </span>
+                      <AmtInput value={sv.amount} onChange={v=>updSav(sv.id,v)} />
+                    </div>
+                  )
+                })}
               </div>
             </div>
             <div>
@@ -932,7 +1258,7 @@ export default function ProfilePage() {
             </div>
           </div>
           <Link href="/dashboard/tax" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'13px 18px', background:C.fg, borderRadius:6, textDecoration:'none', marginTop:4 }}>
-            <div><p style={{ fontSize:13, fontWeight:600, color:C.wheat, margin:'0 0 2px' }}>Go to Tax Optimiser →</p><p style={{ fontSize:11, color:'rgba(230,207,167,0.5)', margin:0 }}>Profile complete</p></div>
+            <div><p style={{ fontSize:13, fontWeight:600, color:C.wheat, margin:'0 0 2px' }}>Go to Tax Optimiser →</p><p style={{ fontSize:11, color:'rgba(230,207,167,0.5)', margin:0 }}>Profile complete · 80C amount: {fmt(savings.filter(s=>s.label.includes('ELSS')||s.label.includes('80C')).reduce((s,sv)=>s+sv.amount,0)*12)}/year</p></div>
             <span style={{ color:C.wheat, fontSize:18 }}>→</span>
           </Link>
         </div>
@@ -1105,6 +1431,7 @@ export default function ProfilePage() {
                 {singleCategoryModal.transaction.type==='credit'?'+':'-'}{fmt(singleCategoryModal.transaction.amount)}
               </p>
             </div>
+            <p style={{ fontSize:11, color:C.muted, margin:'0 0 8px' }}>This choice is remembered for future bank uploads:</p>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
               {(Object.keys(MEGA_CATEGORIES) as MegaCategory[]).map(key => {
                 const info = MEGA_CATEGORIES[key]
@@ -1126,7 +1453,7 @@ export default function ProfilePage() {
         <div style={{ position:'fixed', inset:0, background:'rgba(28,43,34,0.5)', zIndex:99, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }} onClick={() => setBulkCategoryModal({ open:false, transactions:[], label:'' })}>
           <div onClick={e=>e.stopPropagation()} style={{ background:'#fff', borderRadius:10, padding:20, maxWidth:520, width:'100%', boxShadow:'0 12px 40px rgba(0,0,0,0.18)', maxHeight:'80vh', overflowY:'auto' as const }}>
             <p style={{ fontSize:16, fontWeight:700, color:C.text, margin:'0 0 4px' }}>Reassign {bulkCategoryModal.transactions.length} transactions</p>
-            <p style={{ fontSize:12, color:C.muted, margin:'0 0 14px' }}>Currently in <strong>{bulkCategoryModal.label}</strong> · pick the new category:</p>
+            <p style={{ fontSize:12, color:C.muted, margin:'0 0 14px' }}>Currently in <strong>{bulkCategoryModal.label}</strong> · pick the new category. Choice remembered for future uploads.</p>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
               {(Object.keys(MEGA_CATEGORIES) as MegaCategory[]).map(key => {
                 const info = MEGA_CATEGORIES[key]
