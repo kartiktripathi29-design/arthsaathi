@@ -545,7 +545,6 @@ export default function ProfilePage() {
       rebuildMergedTransactions(updated)
       setUploadingAccountId(null)
       toast.success(`${bd.bank || 'Bank'} · ${bd.transactions?.length||0} transactions across ${period.months} month${period.months>1?'s':''}`, { id:tid, duration:5000 })
-      setMainTab('income'); setIncTab('review')
     } catch (e:any) {
       const errStr=(e.message||'').toLowerCase()
       if (errStr.includes('password')||errStr.includes('encrypted')) { setPwdModal({ open:true, type:'bank', file, error:'' }); setPwd(''); toast.dismiss(tid); return }
