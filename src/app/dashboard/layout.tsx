@@ -7,7 +7,7 @@ import { useAppStore } from '@/store/AppStore'
 const C = { fg:'#3A4B41', wheat:'#E6CFA7', wl:'#F5ECD8', wm:'#D4B98A' }
 
 const FREE_NAV = [
-  { href:'/dashboard', icon:'📊', label:'Dashboard' },
+  { href:'/dashboard/profile', icon:'📊', label:'Dashboard' },
   { href:'/dashboard/profile', icon:'👤', label:'My Profile' },
   { href:'/dashboard/tax', icon:'🧮', label:'Tax Optimiser' },
 ]
