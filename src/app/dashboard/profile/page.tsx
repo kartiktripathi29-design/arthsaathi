@@ -918,7 +918,7 @@ export default function ProfilePage() {
           {/* Add another account button */}
           <div
             onClick={() => { setUploadingAccountId(null); bankRef.current?.click() }}
-            style={{ background:C.card, border:`1.5px dashed ${C.border}`, borderRadius:8, padding:16, marginBottom:14, display:'flex', gap:14, alignItems:'center', cursor:loadingDoc==='bank'?'wait':'pointer' }}
+            style={{ background:C.card, border:`1.5px dashed ${C.border}`, borderRadius:8, padding:16, marginBottom:10, display:'flex', gap:14, alignItems:'center', cursor:loadingDoc==='bank'?'wait':'pointer' }}
           >
             <div style={{ width:42, height:42, borderRadius:'50%', background:C.wl, border:`2px solid ${C.wm}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, flexShrink:0 }}>
               {bankAccounts.length === 0 ? '🏦' : '＋'}
@@ -935,6 +935,11 @@ export default function ProfilePage() {
             </div>
             {!loadingDoc && <div style={{ marginLeft:'auto', padding:'8px 18px', background:C.fg, color:C.wheat, borderRadius:5, fontSize:12, fontWeight:600, flexShrink:0 }}>{bankAccounts.length === 0 ? 'Upload Statement' : '+ Add'}</div>}
           </div>
+          {bankAccounts.length === 0 && (
+            <p style={{ fontSize:11.5, color:C.fg, margin:'0 0 14px', cursor:'pointer', display:'flex', alignItems:'center', gap:5 }} onClick={() => { setUploadingAccountId(null); bankRef.current?.click() }}>
+              <span style={{ fontSize:14 }}>＋</span> <span style={{ textDecoration:'underline' }}>Add more accounts</span> <span style={{ color:C.muted, fontWeight:400 }}>(salary, expenses, spouse, joint, etc.)</span>
+            </p>
+          )}
           <input ref={bankRef} type="file" accept=".pdf,.xlsx,.xls,.csv,.jpg,.jpeg,.png" style={{ display:'none' }} onChange={e => e.target.files?.[0] && handleBankFile(e.target.files[0])} />
 
           {bankAccounts.length > 0 && bankPeriod && (
