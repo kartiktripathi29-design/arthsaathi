@@ -80,6 +80,16 @@ interface CreditCard {
   last4: string
 }
 
+interface BankAccount {
+  id: string
+  bank: string
+  last4: string
+  label: string
+  data: any  // raw parsed data from API
+  txnCount: number
+  period: { from: string; to: string; months: number }
+}
+
 interface PnLLine {
   mega: MegaCategory
   label: string
@@ -176,10 +186,11 @@ export default function ProfilePage() {
   const [incTab, setIncTab] = useState<'review'|'salary'|'other'|'suggestions'>('review')
   const [salMode, setSalMode] = useState<'slip'|'offer'|'manual'>('slip')
   const [loadingDoc, setLoadingDoc] = useState<string|null>(null)
-  const [bankData, setBankData] = useState<any>(null)
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
   const [taggedTxns, setTaggedTxns] = useState<any[]>([])
   const [bankPeriod, setBankPeriod] = useState<{from:string; to:string}|null>(null)
   const [bankMonths, setBankMonths] = useState(1)
+  const [uploadingAccountId, setUploadingAccountId] = useState<string|null>(null)  // which account slot is being uploaded
 
   // Salary breakdown — full editable picture
   const [salBreakdown, setSalBreakdown] = useState<SalaryBreakdown>({
@@ -272,8 +283,7 @@ export default function ProfilePage() {
       if (csids) setConfirmedSalaryIds(new Set(JSON.parse(csids)))
       const pids = localStorage.getItem('av_parked_ids')
       if (pids) setParkedIds(new Set(JSON.parse(pids)))
-      const b = localStorage.getItem('av_bank')
-      if (b) loadBankData(JSON.parse(b))
+      loadSavedBankAccounts()
     } catch {}
   }, [])
 
@@ -292,17 +302,61 @@ export default function ProfilePage() {
     return { months: Math.max(1, keys.size), from:minDate, to:maxDate }
   }
 
-  function loadBankData(bd: any) {
-    setBankData(bd)
-    const tagged = tagTransactions(bd.transactions||[], creditCards)
+  // Merge all bank accounts into one tagged transaction pool
+  function rebuildMergedTransactions(accounts: BankAccount[]) {
+    if (accounts.length === 0) {
+      setTaggedTxns([]); setBankPeriod(null); setBankMonths(1)
+      return
+    }
+    // Pool all transactions, tagging each with its source account
+    const allTxns: any[] = []
+    accounts.forEach(acc => {
+      const txns = acc.data?.transactions || []
+      txns.forEach((t: any) => {
+        allTxns.push({ ...t, sourceAccount: { id: acc.id, bank: acc.bank, last4: acc.last4, label: acc.label } })
+      })
+    })
+    const tagged = tagTransactions(allTxns, creditCards)
     setTaggedTxns(tagged)
     const { months, from, to } = detectMonths(tagged)
     setBankMonths(months)
     setBankPeriod({ from, to })
     const candidates = detectSalaryCandidates(tagged)
-    if (candidates.length > 0) {
+    if (candidates.length > 0 && tickedSalary.size === 0) {
       setTickedSalary(new Set(candidates[0].transactions.map((t:any) => t.id)))
     }
+  }
+
+  // Load accounts from localStorage on mount (with migration from old av_bank)
+  function loadSavedBankAccounts() {
+    try {
+      // Migration: if old av_bank exists, convert to av_banks
+      const oldBank = localStorage.getItem('av_bank')
+      const newBanks = localStorage.getItem('av_banks')
+      if (oldBank && !newBanks) {
+        const bd = JSON.parse(oldBank)
+        const migrated: BankAccount = {
+          id: uid(),
+          bank: bd.bank || 'Bank',
+          last4: bd.accountNumber?.slice(-4) || '',
+          label: '',
+          data: bd,
+          txnCount: bd.transactions?.length || 0,
+          period: detectMonths(bd.transactions || []),
+        }
+        const accounts = [migrated]
+        setBankAccounts(accounts)
+        localStorage.setItem('av_banks', JSON.stringify(accounts))
+        localStorage.removeItem('av_bank')
+        rebuildMergedTransactions(accounts)
+        return
+      }
+      if (newBanks) {
+        const accounts = JSON.parse(newBanks) as BankAccount[]
+        setBankAccounts(accounts)
+        rebuildMergedTransactions(accounts)
+      }
+    } catch {}
   }
 
   // Sync salary breakdown to AppStore.salary (for downstream consumers)
@@ -346,9 +400,8 @@ export default function ProfilePage() {
 
   // Re-tag transactions when credit cards change
   useEffect(() => {
-    if (bankData) {
-      const retagged = tagTransactions(bankData.transactions||[], creditCards)
-      setTaggedTxns(retagged)
+    if (bankAccounts.length > 0) {
+      rebuildMergedTransactions(bankAccounts)
     }
   }, [creditCards.length])
 
@@ -471,10 +524,27 @@ export default function ProfilePage() {
         if (errCode==='aes_pdf_unsupported') { toast.error('This PDF is AES-encrypted. Try downloading as Excel from your bank app.', { duration:6000 }); return }
         toast.error(json.message || json.error || 'Failed to parse statement'); return
       }
-      try { localStorage.setItem('av_bank', JSON.stringify(json.data)) } catch {}
-      loadBankData(json.data)
-      const m = detectMonths(json.data.transactions||[]).months
-      toast.success(`Statement read · ${json.data.transactions?.length||0} transactions across ${m} month${m>1?'s':''}`, { id:tid, duration:5000 })
+      const bd = json.data
+      const period = detectMonths(bd.transactions || [])
+      const accId = uploadingAccountId || uid()
+      const newAccount: BankAccount = {
+        id: accId,
+        bank: bd.bank || 'Bank',
+        last4: bd.accountNumber?.slice(-4) || '',
+        label: '',
+        data: bd,
+        txnCount: bd.transactions?.length || 0,
+        period,
+      }
+      // If re-uploading an existing account, replace it; otherwise add
+      const updated = uploadingAccountId
+        ? bankAccounts.map(a => a.id === uploadingAccountId ? newAccount : a)
+        : [...bankAccounts, newAccount]
+      setBankAccounts(updated)
+      try { localStorage.setItem('av_banks', JSON.stringify(updated)) } catch {}
+      rebuildMergedTransactions(updated)
+      setUploadingAccountId(null)
+      toast.success(`${bd.bank || 'Bank'} · ${bd.transactions?.length||0} transactions across ${period.months} month${period.months>1?'s':''}`, { id:tid, duration:5000 })
       setMainTab('income'); setIncTab('review')
     } catch (e:any) {
       const errStr=(e.message||'').toLowerCase()
@@ -483,19 +553,34 @@ export default function ProfilePage() {
     } finally { setLoadingDoc(null) }
   }
 
-  const clearBank = () => {
-    setBankData(null); setTaggedTxns([]); setConfirmedDetections({}); setBankPeriod(null); setBankMonths(1); setManualOverrides({})
-    setTickedSalary(new Set()); setTickedRoundtrip(new Set()); setTickedInterest(new Set())
-    setConfirmedSalaryIds(new Set()); setParkedIds(new Set())
-    setSuggestionDecisions({}); setSuggUnticked({}); setSuggExpanded({}); setSuggShowAll({})
-    try {
-      localStorage.removeItem('av_bank')
-      localStorage.removeItem('av_confirmed_detections')
-      localStorage.removeItem('av_manual_overrides')
-      localStorage.removeItem('av_confirmed_salary_ids')
-      localStorage.removeItem('av_parked_ids')
-      localStorage.removeItem('av_suggestion_decisions')
-    } catch {}
+  const removeAccount = (accId: string) => {
+    const updated = bankAccounts.filter(a => a.id !== accId)
+    setBankAccounts(updated)
+    try { localStorage.setItem('av_banks', JSON.stringify(updated)) } catch {}
+    if (updated.length === 0) {
+      setTaggedTxns([]); setBankPeriod(null); setBankMonths(1)
+      setConfirmedDetections({}); setManualOverrides({})
+      setTickedSalary(new Set()); setTickedRoundtrip(new Set()); setTickedInterest(new Set())
+      setConfirmedSalaryIds(new Set()); setParkedIds(new Set())
+      setSuggestionDecisions({}); setSuggUnticked({}); setSuggExpanded({}); setSuggShowAll({})
+      try {
+        localStorage.removeItem('av_banks')
+        localStorage.removeItem('av_confirmed_detections')
+        localStorage.removeItem('av_manual_overrides')
+        localStorage.removeItem('av_confirmed_salary_ids')
+        localStorage.removeItem('av_parked_ids')
+        localStorage.removeItem('av_suggestion_decisions')
+      } catch {}
+    } else {
+      rebuildMergedTransactions(updated)
+    }
+    toast.success('Account removed')
+  }
+
+  const updateAccountLabel = (accId: string, label: string) => {
+    const updated = bankAccounts.map(a => a.id === accId ? { ...a, label } : a)
+    setBankAccounts(updated)
+    try { localStorage.setItem('av_banks', JSON.stringify(updated)) } catch {}
   }
 
   const handleAISFile = (file:File, type:'ais'|'26as') => {
@@ -804,32 +889,58 @@ export default function ProfilePage() {
       {/* DOCUMENTS TAB */}
       {mainTab==='docs' && (
         <div>
-          <p style={{ fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:8 }}>Step 1 — Bank statement</p>
-          <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8, padding:16, marginBottom:14, display:'flex', gap:14, alignItems:'center' }}>
-            <div style={{ width:54, height:54, borderRadius:'50%', background:bankData?'#EEF2EE':C.wl, border:`2px solid ${bankData?C.fg:C.wm}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:24, flexShrink:0 }}>🏦</div>
-            <div style={{ flex:1 }}>
-              {bankData ? (
-                <>
-                  <p style={{ fontSize:14, fontWeight:700, color:C.fg, margin:'0 0 3px' }}>✓ {bankData.bank||'Bank'} statement uploaded</p>
-                  <p style={{ fontSize:11.5, color:C.muted, margin:0 }}>{bankData.transactions?.length||0} transactions · {bankMonths} month{bankMonths>1?'s':''} · {bankPeriod?.from} to {bankPeriod?.to}</p>
-                </>
-              ) : (
-                <>
-                  <p style={{ fontSize:14, fontWeight:700, color:C.text, margin:'0 0 3px' }}>Bank Statement</p>
-                  <p style={{ fontSize:11.5, color:C.muted, margin:0, lineHeight:1.55 }}>Any Indian bank · 1 month or up to 12 months</p>
-                  <p style={{ fontSize:10.5, color:C.muted, margin:'4px 0 0' }}>⚡ ArthVo asks before adding anything to your expenses</p>
-                </>
-              )}
+          <p style={{ fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:8 }}>Step 1 — Bank statements</p>
+
+          {/* Existing bank accounts list */}
+          {bankAccounts.map((acc, idx) => (
+            <div key={acc.id} style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8, padding:14, marginBottom:10, display:'flex', gap:12, alignItems:'center' }}>
+              <div style={{ width:42, height:42, borderRadius:'50%', background:'#EEF2EE', border:`2px solid ${C.fg}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0 }}>🏦</div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:3 }}>
+                  <p style={{ fontSize:13, fontWeight:700, color:C.fg, margin:0 }}>✓ {acc.bank}{acc.last4 ? ` · ****${acc.last4}` : ''}</p>
+                </div>
+                <input
+                  type="text"
+                  value={acc.label}
+                  onChange={e => updateAccountLabel(acc.id, e.target.value)}
+                  placeholder="e.g. Rohit's salary"
+                  style={{ padding:'3px 0', border:'none', borderBottom:`1px dashed ${C.border}`, fontSize:11.5, color:acc.label ? C.text : C.muted, fontFamily:'inherit', outline:'none', width:'100%', background:'transparent', fontStyle:acc.label?'normal':'italic' }}
+                />
+                <p style={{ fontSize:10.5, color:C.muted, margin:'4px 0 0' }}>{acc.txnCount} txns · {acc.period.months} month{acc.period.months>1?'s':''} · {acc.period.from} to {acc.period.to}</p>
+              </div>
+              <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+                <button onClick={() => { setUploadingAccountId(acc.id); bankRef.current?.click() }} style={{ padding:'5px 10px', fontSize:10.5, color:C.fg, background:C.wl, border:`1px solid ${C.wm}`, borderRadius:4, cursor:'pointer', fontFamily:'inherit' }}>Re-upload</button>
+                <button onClick={() => removeAccount(acc.id)} style={{ padding:'5px 10px', fontSize:10.5, color:C.danger, background:'#FBF0F0', border:`1px solid #F0CECE`, borderRadius:4, cursor:'pointer', fontFamily:'inherit' }}>Remove</button>
+              </div>
             </div>
-            {bankData ? (
-              <button onClick={clearBank} style={{ padding:'6px 12px', fontSize:11, color:C.danger, background:'#FBF0F0', border:`1px solid #F0CECE`, borderRadius:4, cursor:'pointer', fontFamily:'inherit' }}>Remove</button>
-            ) : (
-              <button onClick={() => bankRef.current?.click()} disabled={loadingDoc==='bank'} style={{ padding:'8px 16px', background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12, fontWeight:600, cursor:loadingDoc==='bank'?'wait':'pointer', fontFamily:'inherit', whiteSpace:'nowrap' as const }}>
-                {loadingDoc==='bank' ? 'Reading…' : 'Upload Statement'}
-              </button>
-            )}
-            <input ref={bankRef} type="file" accept=".pdf,.xlsx,.xls,.csv,.jpg,.jpeg,.png" style={{ display:'none' }} onChange={e => e.target.files?.[0] && handleBankFile(e.target.files[0])} />
+          ))}
+
+          {/* Add another account button */}
+          <div
+            onClick={() => { setUploadingAccountId(null); bankRef.current?.click() }}
+            style={{ background:C.card, border:`1.5px dashed ${C.border}`, borderRadius:8, padding:16, marginBottom:14, display:'flex', gap:14, alignItems:'center', cursor:loadingDoc==='bank'?'wait':'pointer' }}
+          >
+            <div style={{ width:42, height:42, borderRadius:'50%', background:C.wl, border:`2px solid ${C.wm}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, flexShrink:0 }}>
+              {bankAccounts.length === 0 ? '🏦' : '＋'}
+            </div>
+            <div>
+              <p style={{ fontSize:13, fontWeight:600, color:C.text, margin:'0 0 3px' }}>
+                {loadingDoc==='bank' ? 'Reading…' : bankAccounts.length === 0 ? 'Upload Bank Statement' : 'Add another bank account'}
+              </p>
+              <p style={{ fontSize:11, color:C.muted, margin:0 }}>
+                {bankAccounts.length === 0
+                  ? 'Any Indian bank · PDF, Excel, CSV or photo · password supported'
+                  : 'Salary account, expense account, spouse\'s account, etc.'}
+              </p>
+            </div>
           </div>
+          <input ref={bankRef} type="file" accept=".pdf,.xlsx,.xls,.csv,.jpg,.jpeg,.png" style={{ display:'none' }} onChange={e => e.target.files?.[0] && handleBankFile(e.target.files[0])} />
+
+          {bankAccounts.length > 0 && bankPeriod && (
+            <div style={{ ...S.insight, marginBottom:14 }}>
+              📅 Merged period: {bankPeriod.from} to {bankPeriod.to} · {bankMonths} month{bankMonths>1?'s':''} · {taggedTxns.length} total transactions across {bankAccounts.length} account{bankAccounts.length>1?'s':''}
+            </div>
+          )}
 
           <p style={{ fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:8 }}>Step 2 — Credit cards (helps track payments)</p>
           <div style={S.card}>
@@ -892,7 +1003,7 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {bankData && (
+          {bankAccounts.length > 0 && (
             <button onClick={() => { setMainTab('income'); setIncTab('review') }} style={{ ...S.btn(true), width:'100%', padding:'11px' }}>
               Next: Smart Review →
             </button>
@@ -907,7 +1018,7 @@ export default function ProfilePage() {
             <button onClick={() => setIncTab('review')} style={S.stab(incTab==='review')}>🔍 Smart Review</button>
             <button onClick={() => setIncTab('salary')} style={S.stab(incTab==='salary')}>📄 Salary</button>
             <button onClick={() => setIncTab('other')} style={S.stab(incTab==='other')}>🏦 Other Income</button>
-            {bankData && (
+            {bankAccounts.length > 0 && (
               <button onClick={() => setIncTab('suggestions')} style={S.stab(incTab==='suggestions')}>
                 💡 Apply to Expenses {pendingSuggestionCount > 0 && <span style={{ marginLeft:4, fontSize:10, background:C.fg, color:C.wheat, padding:'1px 6px', borderRadius:10 }}>{pendingSuggestionCount}</span>}
               </button>
@@ -916,7 +1027,7 @@ export default function ProfilePage() {
 
           {incTab==='review' && (
             <div>
-              {!bankData ? (
+              {!bankAccounts.length > 0 ? (
                 <div style={S.insight}>Upload your bank statement in the Documents tab to see smart insights here.</div>
               ) : (
                 <>
@@ -1179,8 +1290,8 @@ export default function ProfilePage() {
               </div>
               <div style={{ display:'flex', gap:8 }}>
                 <button onClick={() => setIncTab('salary')} style={{ ...S.btn(false), padding:'10px 16px' }}>← Back</button>
-                <button onClick={() => bankData ? setIncTab('suggestions') : setMainTab('expenses')} style={{ ...S.btn(true), flex:1 }}>
-                  {bankData ? 'Next: Apply to Expenses →' : 'Next: Expenses →'}
+                <button onClick={() => bankAccounts.length > 0 ? setIncTab('suggestions') : setMainTab('expenses')} style={{ ...S.btn(true), flex:1 }}>
+                  {bankAccounts.length > 0 ? 'Next: Apply to Expenses →' : 'Next: Expenses →'}
                 </button>
               </div>
             </div>
@@ -1189,7 +1300,7 @@ export default function ProfilePage() {
           {/* APPLY TO EXPENSES TAB */}
           {incTab==='suggestions' && (
             <div>
-              {!bankData ? (
+              {!bankAccounts.length > 0 ? (
                 <div style={S.insight}>Upload bank statement first.</div>
               ) : suggestions.length === 0 ? (
                 <div style={S.insight}>No expense suggestions to apply yet. Run Smart Review first.</div>
@@ -1379,7 +1490,7 @@ export default function ProfilePage() {
             </div>
           )}
 
-          {bankData && pendingSuggestionCount > 0 && (
+          {bankAccounts.length > 0 && pendingSuggestionCount > 0 && (
             <div style={{ ...S.insight, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
               <span>💡 {pendingSuggestionCount} expense suggestion{pendingSuggestionCount>1?'s':''} pending review from your bank statement</span>
               <button onClick={() => { setMainTab('income'); setIncTab('suggestions') }} style={{ padding:'5px 12px', fontSize:11, background:C.fg, color:C.wheat, border:'none', borderRadius:4, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>Review →</button>
@@ -1451,7 +1562,7 @@ export default function ProfilePage() {
       {/* P&L + CASH FLOW TAB */}
       {mainTab==='pnl' && (
         <div>
-          {!bankData ? (
+          {!bankAccounts.length > 0 ? (
             <div style={S.insight}>
               📊 Upload your bank statement in the Documents tab to see P&L and cash flow.
               <div style={{ marginTop:8 }}>
