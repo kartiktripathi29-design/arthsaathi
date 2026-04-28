@@ -92,7 +92,9 @@ export function detectFileKind(buffer: Buffer, fileName = '', mimeType = ''): Fi
 
 // ─── 2. PDF ENCRYPTION DETECTION ────────────────────────────────────────────
 export function detectPdfEncryption(buffer: Buffer): { encrypted: boolean; algo?: string } {
-  const text = buffer.toString('latin1', 0, Math.min(buffer.length, 32768))
+  // Scan up to 256KB — some HDFC PDFs have the /Encrypt dict far from the start
+  const scanSize = Math.min(buffer.length, 262144)
+  const text = buffer.toString('latin1', 0, scanSize)
 
   if (!text.includes('/Encrypt')) return { encrypted: false }
 
@@ -126,7 +128,16 @@ async function unlockPdf(buffer: Buffer, password: string): Promise<Buffer> {
     return Buffer.from(saved.buffer, saved.byteOffset, saved.byteLength) as Buffer
   } catch (e: any) {
     const msg = (e.message || '').toLowerCase()
+    // pdf-lib fails on AES PDFs with various messages — detect and report properly
+    if (msg.includes('aes') || msg.includes('unsupported encryption') || msg.includes('unknown crypto')) {
+      throw new Error('aes_pdf_unsupported')
+    }
     if (msg.includes('encrypted') || msg.includes('password') || msg.includes('protect') || msg.includes('decrypt')) {
+      // Double-check: re-scan the buffer for AES markers in case detectPdfEncryption missed it
+      const recheck = detectPdfEncryption(buffer)
+      if (recheck.algo === 'AES') {
+        throw new Error('aes_pdf_unsupported')
+      }
       throw new Error('incorrect_password')
     }
     throw e
@@ -247,7 +258,7 @@ export async function parseStatement(
         encrypted: true,
         encryptionAlgo: 'AES',
         error: 'aes_pdf_unsupported',
-        errorMessage: 'This bank uses AES-encrypted PDFs which we don\'t fully support yet. Try uploading an Excel version, or print to a fresh PDF first.'
+        errorMessage: 'This PDF uses AES encryption which we don\'t support yet. Workaround: open it in Acrobat/Chrome with your password, then Save As a new PDF (unprotected) and upload that. Or download the Excel version from your bank app.'
       }
     }
 
@@ -265,6 +276,9 @@ export async function parseStatement(
         ]
       }
     } catch (e: any) {
+      if (e.message === 'aes_pdf_unsupported') {
+        return { ok: false, kind: 'pdf', encrypted: true, encryptionAlgo: 'AES', error: 'aes_pdf_unsupported', errorMessage: 'This PDF uses AES encryption which we don\'t support yet. Workaround: open it in Acrobat/Chrome with your password, then Save As a new PDF (unprotected) and upload that. Or download the Excel version from your bank app.' }
+      }
       if (e.message === 'incorrect_password') {
         return { ok: false, kind: 'pdf', encrypted: true, error: 'incorrect_password' }
       }
