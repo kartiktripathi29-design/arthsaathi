@@ -264,6 +264,14 @@ export default function ProfilePage() {
       if (cc) setCreditCards(JSON.parse(cc))
       const sd = localStorage.getItem('av_suggestion_decisions')
       if (sd) setSuggestionDecisions(JSON.parse(sd))
+      const cd = localStorage.getItem('av_confirmed_detections')
+      if (cd) setConfirmedDetections(JSON.parse(cd))
+      const mo = localStorage.getItem('av_manual_overrides')
+      if (mo) setManualOverrides(JSON.parse(mo))
+      const csids = localStorage.getItem('av_confirmed_salary_ids')
+      if (csids) setConfirmedSalaryIds(new Set(JSON.parse(csids)))
+      const pids = localStorage.getItem('av_parked_ids')
+      if (pids) setParkedIds(new Set(JSON.parse(pids)))
       const b = localStorage.getItem('av_bank')
       if (b) loadBankData(JSON.parse(b))
     } catch {}
@@ -321,6 +329,20 @@ export default function ProfilePage() {
   useEffect(() => {
     try { localStorage.setItem('av_suggestion_decisions', JSON.stringify(suggestionDecisions)) } catch {}
   }, [suggestionDecisions])
+
+  // Save Smart Review state so it persists across navigation and reload
+  useEffect(() => {
+    try { localStorage.setItem('av_confirmed_detections', JSON.stringify(confirmedDetections)) } catch {}
+  }, [confirmedDetections])
+  useEffect(() => {
+    try { localStorage.setItem('av_manual_overrides', JSON.stringify(manualOverrides)) } catch {}
+  }, [manualOverrides])
+  useEffect(() => {
+    try { localStorage.setItem('av_confirmed_salary_ids', JSON.stringify(Array.from(confirmedSalaryIds))) } catch {}
+  }, [confirmedSalaryIds])
+  useEffect(() => {
+    try { localStorage.setItem('av_parked_ids', JSON.stringify(Array.from(parkedIds))) } catch {}
+  }, [parkedIds])
 
   // Re-tag transactions when credit cards change
   useEffect(() => {
@@ -465,7 +487,15 @@ export default function ProfilePage() {
     setBankData(null); setTaggedTxns([]); setConfirmedDetections({}); setBankPeriod(null); setBankMonths(1); setManualOverrides({})
     setTickedSalary(new Set()); setTickedRoundtrip(new Set()); setTickedInterest(new Set())
     setConfirmedSalaryIds(new Set()); setParkedIds(new Set())
-    try { localStorage.removeItem('av_bank') } catch {}
+    setSuggestionDecisions({}); setSuggUnticked({}); setSuggExpanded({}); setSuggShowAll({})
+    try {
+      localStorage.removeItem('av_bank')
+      localStorage.removeItem('av_confirmed_detections')
+      localStorage.removeItem('av_manual_overrides')
+      localStorage.removeItem('av_confirmed_salary_ids')
+      localStorage.removeItem('av_parked_ids')
+      localStorage.removeItem('av_suggestion_decisions')
+    } catch {}
   }
 
   const handleAISFile = (file:File, type:'ais'|'26as') => {
@@ -1042,7 +1072,7 @@ export default function ProfilePage() {
             </div>
           )}
 
-          {/* SALARY TAB — full breakdown */}
+          {/* SALARY TAB — full breakdown always editable */}
           {incTab==='salary' && (
             <div>
               <div style={{ display:'flex', gap:2, background:'#F0EBE0', borderRadius:5, padding:3, marginBottom:16, width:'fit-content' }}>
@@ -1053,21 +1083,40 @@ export default function ProfilePage() {
                 ))}
               </div>
 
-              {/* Slip / offer upload (only if not manual mode) */}
-              {!salBreakdown.netSalary && salMode !== 'manual' && (
-                <div style={S.upload(false)} onClick={() => !loadingDoc&&(salMode==='slip'?slipRef:offerRef).current?.click()}>
-                  <span style={{ fontSize:28 }}>{salMode==='slip'?'📄':'📨'}</span>
-                  <p style={{ fontSize:13, fontWeight:600, color:C.text, margin:0 }}>{loadingDoc?'Reading…':`Upload ${salMode==='slip'?'Salary Slip':'Offer Letter'}`}</p>
-                  <p style={{ fontSize:11, color:C.muted, margin:0 }}>PDF, JPG, PNG · Max 10MB</p>
-                  {!loadingDoc && <div style={{ marginTop:8, padding:'8px 24px', background:C.fg, color:C.wheat, borderRadius:5, fontSize:12.5, fontWeight:600 }}>Browse Files</div>}
-                  <input ref={slipRef} type="file" accept=".pdf,image/*" style={{ display:'none' }} onChange={e=>e.target.files?.[0]&&handleSlip(e.target.files[0])} />
-                  <input ref={offerRef} type="file" accept=".pdf,image/*" style={{ display:'none' }} onChange={e=>e.target.files?.[0]&&handleOffer(e.target.files[0])} />
-                </div>
+              {/* Upload area — always available, collapses to a small re-upload button if data exists */}
+              {salMode !== 'manual' && (
+                salBreakdown.netSalary > 0 ? (
+                  <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:10 }}>
+                    <button onClick={() => (salMode==='slip'?slipRef:offerRef).current?.click()} style={{ padding:'5px 12px', fontSize:11, color:C.fg, background:C.wl, border:`1px solid ${C.wm}`, borderRadius:4, cursor:'pointer', fontFamily:'inherit', fontWeight:500 }}>
+                      ↻ Re-upload {salMode==='slip'?'salary slip':'offer letter'}
+                    </button>
+                  </div>
+                ) : (
+                  <div style={S.upload(false)} onClick={() => !loadingDoc&&(salMode==='slip'?slipRef:offerRef).current?.click()}>
+                    <span style={{ fontSize:28 }}>{salMode==='slip'?'📄':'📨'}</span>
+                    <p style={{ fontSize:13, fontWeight:600, color:C.text, margin:0 }}>{loadingDoc?'Reading…':`Upload ${salMode==='slip'?'Salary Slip':'Offer Letter'}`}</p>
+                    <p style={{ fontSize:11, color:C.muted, margin:0 }}>PDF, JPG, PNG · Max 10MB</p>
+                    {!loadingDoc && <div style={{ marginTop:8, padding:'8px 24px', background:C.fg, color:C.wheat, borderRadius:5, fontSize:12.5, fontWeight:600 }}>Browse Files</div>}
+                  </div>
+                )
               )}
+              <input ref={slipRef} type="file" accept=".pdf,image/*" style={{ display:'none' }} onChange={e=>e.target.files?.[0]&&handleSlip(e.target.files[0])} />
+              <input ref={offerRef} type="file" accept=".pdf,image/*" style={{ display:'none' }} onChange={e=>e.target.files?.[0]&&handleOffer(e.target.files[0])} />
 
-              {/* Editable salary breakdown */}
+              {/* 5-row editable salary breakdown — ALWAYS shows, always editable */}
               <div style={S.card}>
-                <div style={S.cardHead}>Monthly income breakdown {salBreakdown.employerName && `· ${salBreakdown.employerName}`}</div>
+                <div style={{ ...S.cardHead, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                  <span>Monthly income breakdown {salBreakdown.employerName && `· ${salBreakdown.employerName}`}</span>
+                  {salBreakdown.employerName && (
+                    <button onClick={() => setSalBreakdown(prev => ({ ...prev, employerName: '' }))} style={{ fontSize:10, color:C.fg, background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', textDecoration:'underline', textTransform:'none' as const, letterSpacing:'normal' }}>edit name</button>
+                  )}
+                </div>
+                {!salBreakdown.employerName && (
+                  <div style={{ padding:'8px 14px', borderBottom:`1px solid ${C.border}`, display:'flex', alignItems:'center', gap:8 }}>
+                    <span style={{ fontSize:11, color:C.muted }}>Employer:</span>
+                    <input type="text" placeholder="Company name" value={salBreakdown.employerName} onChange={e => setSalBreakdown(prev => ({ ...prev, employerName: e.target.value }))} style={{ flex:1, padding:'5px 8px', border:`1px solid ${C.border}`, borderRadius:4, fontSize:12, fontFamily:'inherit', outline:'none' }} />
+                  </div>
+                )}
                 {[
                   { key:'netSalary' as const, icon:'💵', label:'Take-home (net)', sub:'What hits your bank', tag:null },
                   { key:'employeePF' as const, icon:'🏛️', label:'Employee PF', sub:'Deducted from salary', tag:{ text:'→ 80C ✓', bg:'#EEF2EE', color:'#2A7A4A' } },
@@ -1167,26 +1216,32 @@ export default function ProfilePage() {
 
                     if (decision === 'accepted') {
                       return (
-                        <div key={sugg.id} style={{ ...S.card, opacity:0.6 }}>
-                          <div style={{ ...S.row, fontSize:12.5 }}>
+                        <div key={sugg.id} style={{ ...S.card, border:`1px solid #C8D8C8` }}>
+                          <div style={{ ...S.row, fontSize:12.5, justifyContent:'space-between' }}>
                             <span style={{ display:'flex', alignItems:'center', gap:8 }}>
                               <span style={{ fontSize:16 }}>{sugg.icon}</span>
                               <span>{sugg.label} → {sugg.targetLabel}</span>
                             </span>
-                            <span style={{ fontSize:11, color:'#2A7A4A' }}>✓ Added {fmt(sugg.monthlyAmount)}/mo</span>
+                            <span style={{ display:'flex', alignItems:'center', gap:8 }}>
+                              <span style={{ fontSize:11, color:'#2A7A4A' }}>✓ Added {fmt(sugg.monthlyAmount)}/mo</span>
+                              <button onClick={() => setSuggestionDecisions(prev => { const n = {...prev}; delete n[sugg.id]; return n })} style={{ padding:'3px 10px', fontSize:10.5, color:C.fg, background:C.wl, border:`1px solid ${C.wm}`, borderRadius:3, cursor:'pointer', fontFamily:'inherit' }}>Undo / Edit</button>
+                            </span>
                           </div>
                         </div>
                       )
                     }
                     if (decision === 'rejected') {
                       return (
-                        <div key={sugg.id} style={{ ...S.card, opacity:0.5 }}>
-                          <div style={{ ...S.row, fontSize:12.5 }}>
+                        <div key={sugg.id} style={{ ...S.card, border:`1px solid #F0CECE` }}>
+                          <div style={{ ...S.row, fontSize:12.5, justifyContent:'space-between' }}>
                             <span style={{ display:'flex', alignItems:'center', gap:8 }}>
                               <span style={{ fontSize:16 }}>{sugg.icon}</span>
                               <span>{sugg.label}</span>
                             </span>
-                            <span style={{ fontSize:11, color:C.danger }}>✗ Skipped</span>
+                            <span style={{ display:'flex', alignItems:'center', gap:8 }}>
+                              <span style={{ fontSize:11, color:C.danger }}>✗ Skipped</span>
+                              <button onClick={() => setSuggestionDecisions(prev => { const n = {...prev}; delete n[sugg.id]; return n })} style={{ padding:'3px 10px', fontSize:10.5, color:C.fg, background:C.wl, border:`1px solid ${C.wm}`, borderRadius:3, cursor:'pointer', fontFamily:'inherit' }}>Undo / Review</button>
+                            </span>
                           </div>
                         </div>
                       )
