@@ -248,14 +248,6 @@ export default function ProfilePage() {
     const candidates = detectSalaryCandidates(tagged)
     if (candidates.length > 0) {
       setSalaryCandidate(candidates[0])
-      // Open reconciliation modal
-      setSalaryReconcile({
-        open: true,
-        candidates,
-        slipAmount: salary?.netSalary || null
-      })
-      setSalaryChoice('bank')
-      setChosenCandidateIdx(0)
     }
   }
 
@@ -361,11 +353,6 @@ export default function ProfilePage() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error)
       setSalary(json.data); toast.success('Salary parsed!', { id:tid })
-      // If bank already uploaded — open reconcile modal
-      if (taggedTxns.length > 0 && salaryCandidate) {
-        setSalaryReconcile({ open:true, candidates:[salaryCandidate], slipAmount:json.data.netSalary||null })
-        setSalaryChoice(salaryCandidate.averageAmount === json.data.netSalary ? 'bank' : 'bank')
-      }
     } catch (e:any) { toast.error(e.message, { id:tid }) }
     finally { setLoadingDoc(null) }
   }
@@ -946,82 +933,11 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* SALARY RECONCILIATION MODAL */}
-      {salaryReconcile.open && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(28,43,34,0.6)', zIndex:99, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }} onClick={() => setSalaryReconcile({...salaryReconcile, open:false})}>
-          <div onClick={e=>e.stopPropagation()} style={{ background:'#fff', borderRadius:10, padding:22, maxWidth:520, width:'100%', boxShadow:'0 12px 40px rgba(0,0,0,0.18)', maxHeight:'85vh', overflowY:'auto' as const }}>
-            <p style={{ fontSize:18, fontWeight:700, color:C.text, margin:'0 0 4px' }}>💰 Confirm your current salary</p>
-            <p style={{ fontSize:12, color:C.muted, margin:'0 0 16px' }}>
-              {salaryReconcile.slipAmount && salaryReconcile.candidates[0] && Math.abs(salaryReconcile.slipAmount - salaryReconcile.candidates[0].averageAmount) > 1000
-                ? '⚠️ Bank statement and salary slip don\'t match. Pick the one that reflects your CURRENT take-home.'
-                : 'Pick which amount represents your current monthly take-home.'}
-            </p>
-
-            {/* Bank candidates */}
-            {salaryReconcile.candidates.length > 0 && (
-              <div style={{ border:`2px solid ${salaryChoice==='bank'?C.fg:C.border}`, borderRadius:6, padding:'12px 14px', marginBottom:10, cursor:'pointer', background:salaryChoice==='bank'?'#EEF2EE':'#fff' }} onClick={() => setSalaryChoice('bank')}>
-                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
-                  <div style={{ width:16, height:16, borderRadius:'50%', border:`2px solid ${salaryChoice==='bank'?C.fg:C.border}`, background:salaryChoice==='bank'?C.fg:'#fff', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                    {salaryChoice==='bank' && <span style={{ width:6, height:6, borderRadius:'50%', background:'#fff', display:'block' }} />}
-                  </div>
-                  <span style={{ fontSize:13, fontWeight:600, color:C.text }}>Bank statement (recommended)</span>
-                  <span style={{ fontSize:10, padding:'2px 7px', background:'#EEF2EE', color:'#2A7A4A', borderRadius:3, border:'1px solid #C8D8C8', marginLeft:'auto' }}>most recent</span>
-                </div>
-                {salaryReconcile.candidates.length > 1 ? (
-                  <div style={{ paddingLeft:26 }}>
-                    {salaryReconcile.candidates.map((c, i) => (
-                      <label key={i} style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 0', cursor:'pointer', fontSize:12 }}>
-                        <input type="radio" checked={chosenCandidateIdx===i} onChange={() => { setChosenCandidateIdx(i); setSalaryChoice('bank') }} />
-                        <span style={{ flex:1 }}>{c.source} · {c.occurrences} credit{c.occurrences>1?'s':''} · variance {Math.round(c.variance*100)}%</span>
-                        <span style={{ fontWeight:600, color:C.fg }}>{fmt(c.averageAmount)}/mo</span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <div style={{ paddingLeft:26 }}>
-                    <p style={{ fontSize:12, color:C.muted, margin:'0 0 4px' }}>From {salaryReconcile.candidates[0].source}</p>
-                    <p style={{ fontSize:18, fontWeight:700, color:C.fg, margin:0 }}>{fmt(salaryReconcile.candidates[0].averageAmount)}/mo</p>
-                    <p style={{ fontSize:11, color:C.muted, margin:'4px 0 0' }}>{salaryReconcile.candidates[0].occurrences} credit{salaryReconcile.candidates[0].occurrences>1?'s':''} · {salaryReconcile.candidates[0].confidence} confidence</p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Slip amount */}
-            {salaryReconcile.slipAmount && (
-              <div style={{ border:`2px solid ${salaryChoice==='slip'?C.fg:C.border}`, borderRadius:6, padding:'12px 14px', marginBottom:10, cursor:'pointer', background:salaryChoice==='slip'?'#EEF2EE':'#fff' }} onClick={() => setSalaryChoice('slip')}>
-                <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                  <div style={{ width:16, height:16, borderRadius:'50%', border:`2px solid ${salaryChoice==='slip'?C.fg:C.border}`, background:salaryChoice==='slip'?C.fg:'#fff', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                    {salaryChoice==='slip' && <span style={{ width:6, height:6, borderRadius:'50%', background:'#fff' }} />}
-                  </div>
-                  <span style={{ fontSize:13, fontWeight:600, color:C.text }}>Salary slip</span>
-                  <span style={{ fontSize:18, fontWeight:700, color:C.fg, marginLeft:'auto' }}>{fmt(salaryReconcile.slipAmount)}/mo</span>
-                </div>
-                <p style={{ fontSize:11, color:C.muted, margin:'4px 0 0 26px' }}>From your uploaded slip — may be from a previous month</p>
-              </div>
-            )}
-
-            {/* Manual */}
-            <div style={{ border:`2px solid ${salaryChoice==='manual'?C.fg:C.border}`, borderRadius:6, padding:'12px 14px', marginBottom:14, cursor:'pointer', background:salaryChoice==='manual'?'#EEF2EE':'#fff' }} onClick={() => setSalaryChoice('manual')}>
-              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
-                <div style={{ width:16, height:16, borderRadius:'50%', border:`2px solid ${salaryChoice==='manual'?C.fg:C.border}`, background:salaryChoice==='manual'?C.fg:'#fff', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                  {salaryChoice==='manual' && <span style={{ width:6, height:6, borderRadius:'50%', background:'#fff' }} />}
-                </div>
-                <span style={{ fontSize:13, fontWeight:600, color:C.text }}>Enter manually</span>
-              </div>
-              {salaryChoice==='manual' && (
-                <div style={{ paddingLeft:26 }}>
-                  <input type="text" inputMode="numeric" value={manualSalaryAmt} onChange={e=>setManualSalaryAmt(e.target.value.replace(/[^0-9]/g,''))} placeholder="Monthly take-home in ₹"
-                    style={{ width:'100%', padding:'10px 12px', border:`1px solid ${C.border}`, borderRadius:5, fontSize:14, outline:'none', fontFamily:'inherit', boxSizing:'border-box' as const }} />
-                </div>
-              )}
-            </div>
-
-            <div style={{ display:'flex', gap:8 }}>
-              <button onClick={() => setSalaryReconcile({...salaryReconcile, open:false})} style={{ flex:1, padding:10, background:'#fff', color:C.muted, border:`1px solid ${C.border}`, borderRadius:5, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>Skip for now</button>
-              <button onClick={confirmSalary} style={{ flex:2, padding:10, background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Confirm salary →</button>
-            </div>
-          </div>
+      {/* SALARY MISMATCH NOTE — quiet banner, no modal */}
+      {salary && salaryCandidate && Math.abs((salary.netSalary||0) - salaryCandidate.averageAmount) > 1000 && (
+        <div style={{ position:'fixed', bottom:20, left:'50%', transform:'translateX(-50%)', background:C.wl, border:`1px solid ${C.wm}`, borderRadius:8, padding:'10px 16px', fontSize:12, color:C.fg, boxShadow:'0 4px 20px rgba(0,0,0,0.1)', zIndex:50, maxWidth:500, display:'flex', alignItems:'center', gap:10 }}>
+          <span>⚠️ Salary slip shows {fmt(salary.netSalary||0)}/mo but bank credits average {fmt(salaryCandidate.averageAmount)}/mo. You can update in the Salary tab.</span>
+          <button onClick={() => setSalaryCandidate(null)} style={{ padding:'3px 8px', fontSize:10, background:'#fff', border:`1px solid ${C.border}`, borderRadius:3, cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' as const }}>Dismiss</button>
         </div>
       )}
 
