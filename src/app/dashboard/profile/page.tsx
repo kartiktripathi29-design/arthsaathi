@@ -400,7 +400,7 @@ export default function ProfilePage() {
 
   // Re-tag transactions when credit cards change
   useEffect(() => {
-    if (bankAccounts.length > 0) {
+    if (bankAccounts.length === 0) {
       rebuildMergedTransactions(bankAccounts)
     }
   }, [creditCards.length])
