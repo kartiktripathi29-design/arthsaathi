@@ -79,11 +79,13 @@ export default function DematHoldings({ existingHoldings, onSuccess }: DematHold
         },
       });
 
+      console.log('[CASparser] Widget response:', JSON.stringify(data, null, 2));
+
       // Step 3: Save to backend
       const saveRes = await fetch('/api/parse-cas/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data.holdings),
+        body: JSON.stringify(data),
       });
       const saveJson = await saveRes.json();
       if (!saveRes.ok) throw new Error(saveJson.error || 'Save failed');
