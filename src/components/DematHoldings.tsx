@@ -3,16 +3,9 @@
 // components/DematHoldings.tsx
 // Replaces the "Upload CAS" block in My Profile > Step 4.
 // Primary path: CASparser Portfolio Connect widget (OTP fetch + PDF fallback built-in)
-// Fallback path: manual PDF upload (shown as secondary option)
+// Uses CDN version of the SDK to avoid build-time package dependency issues.
 
-import { useState } from 'react';
-import dynamic from 'next/dynamic';
-
-// Dynamically import to avoid SSR issues with the SDK
-const PortfolioConnect = dynamic(
-  () => import('@cas-parser/connect').then((m) => m.PortfolioConnect),
-  { ssr: false }
-);
+import { useState, useEffect } from 'react';
 
 interface HoldingsSummary {
   investor: string;
@@ -23,63 +16,90 @@ interface HoldingsSummary {
 
 interface DematHoldingsProps {
   existingHoldings?: HoldingsSummary | null;
-  onSuccess?: (holdings: object) => void; // callback to page.tsx to update casData state
+  onSuccess?: (holdings: object) => void;
+}
+
+declare global {
+  interface Window {
+    PortfolioConnect?: {
+      open: (opts: object) => Promise<{ data: { holdings: object } }>;
+    };
+  }
 }
 
 export default function DematHoldings({ existingHoldings, onSuccess }: DematHoldingsProps) {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [holdings, setHoldings] = useState<HoldingsSummary | null>(existingHoldings ?? null);
   const [errorMsg, setErrorMsg] = useState('');
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [showWidget, setShowWidget] = useState(false);
+  const [sdkReady, setSdkReady] = useState(false);
 
-  // Step 1: Get a short-lived token from our backend
+  // Load the Portfolio Connect SDK from CDN
+  useEffect(() => {
+    if (document.getElementById('casparser-sdk')) { setSdkReady(true); return; }
+    const script = document.createElement('script');
+    script.id = 'casparser-sdk';
+    script.src = 'https://cdn.jsdelivr.net/npm/@cas-parser/connect/dist/portfolio-connect.standalone.min.js';
+    script.onload = () => setSdkReady(true);
+    script.onerror = () => setErrorMsg('Failed to load portfolio widget. Please try again.');
+    document.body.appendChild(script);
+  }, []);
+
   const handleConnect = async () => {
     setStatus('loading');
     setErrorMsg('');
+
+    // Step 1: Get short-lived token from our backend
+    let accessToken: string;
     try {
-      const res = await fetch('/api/cas/token', { method: 'POST' });
+      const res = await fetch('/api/parse-cas/token', { method: 'POST' });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Token fetch failed');
-      setAccessToken(json.access_token);
-      setShowWidget(true);
-      setStatus('idle');
+      accessToken = json.access_token;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Could not connect. Please try again.';
       setErrorMsg(message);
       setStatus('error');
+      return;
     }
-  };
 
-  // Step 2: Widget success — save data to our backend
-  const handleSuccess = async (data: { holdings: object }) => {
-    setShowWidget(false);
-    setStatus('loading');
+    // Step 2: Open the Portfolio Connect widget
+    if (!window.PortfolioConnect) {
+      setErrorMsg('Portfolio widget not loaded. Please refresh and try again.');
+      setStatus('error');
+      return;
+    }
+
     try {
-      const res = await fetch('/api/cas/save', {
+      const { data } = await window.PortfolioConnect.open({
+        accessToken,
+        config: {
+          enableCdslFetch: true,
+          enableGenerator: true,
+          enableInbox: true,
+        },
+      });
+
+      // Step 3: Save to backend
+      const saveRes = await fetch('/api/parse-cas/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data.holdings),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Save failed');
-      setHoldings(json.summary);
-      onSuccess?.(data.holdings); // update parent page.tsx state + localStorage
-      setStatus('success');
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to save holdings.';
-      setErrorMsg(message);
-      setStatus('error');
-    }
-  };
+      const saveJson = await saveRes.json();
+      if (!saveRes.ok) throw new Error(saveJson.error || 'Save failed');
 
-  const handleError = (err: { message: string }) => {
-    setShowWidget(false);
-    if (err.message !== 'Widget closed by user') {
-      setErrorMsg(err.message || 'Something went wrong. Please try again.');
-      setStatus('error');
-    } else {
-      setStatus('idle');
+      setHoldings(saveJson.summary);
+      onSuccess?.(saveJson.data || data.holdings);
+      setStatus('success');
+
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '';
+      if (message === 'Widget closed by user') {
+        setStatus('idle');
+      } else {
+        setErrorMsg(message || 'Something went wrong. Please try again.');
+        setStatus('error');
+      }
     }
   };
 
@@ -94,122 +114,53 @@ export default function DematHoldings({ existingHoldings, onSuccess }: DematHold
     : null;
 
   return (
-    <div className="border rounded-xl p-5 bg-white shadow-sm">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-1">
-        <div className="w-10 h-10 rounded-full bg-[#f5f0e8] flex items-center justify-center text-lg">
-          🏦
-        </div>
-        <div>
-          <p className="font-semibold text-gray-800 text-sm">Demat &amp; Mutual Fund Holdings</p>
-          <p className="text-xs text-gray-500">
-            CDSL · NSDL · CAMS · KFintech &mdash; all in one fetch
-          </p>
-        </div>
+    <div style={{ background:'#fff', border:'1px solid #E4DDD1', borderRadius:8, padding:16, marginBottom:14, display:'flex', gap:14, alignItems:'center' }}>
+      {/* Icon */}
+      <div style={{ width:42, height:42, borderRadius:'50%', background: holdings ? '#EEF2EE' : '#F5ECD8', border:`2px solid ${holdings ? '#3A4B41' : '#D4B98A'}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, flexShrink:0 }}>
+        🏛️
       </div>
 
-      {/* Already connected state */}
-      {holdings && status !== 'loading' && (
-        <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-green-700 font-medium">✓ Holdings connected</p>
-              <p className="text-sm font-semibold text-gray-800 mt-0.5">{formattedValue}</p>
-              <p className="text-xs text-gray-400 mt-0.5">Last synced: {formattedDate}</p>
-            </div>
-            <button
-              onClick={handleConnect}
-              className="text-xs text-[#2d5a27] underline underline-offset-2 hover:opacity-70"
-            >
-              Refresh
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Content */}
+      <div style={{ flex:1 }}>
+        {holdings ? (
+          <>
+            <p style={{ fontSize:13, fontWeight:700, color:'#3A4B41', margin:'0 0 3px' }}>✓ Holdings connected</p>
+            <p style={{ fontSize:11.5, color:'#7A8A7E', margin:'0 0 2px' }}>Total value: {formattedValue}</p>
+            <p style={{ fontSize:10.5, color:'#7A8A7E', margin:0 }}>Last synced: {formattedDate} · auto-refreshes monthly</p>
+          </>
+        ) : (
+          <>
+            <p style={{ fontSize:13, fontWeight:600, color:'#1C2B22', margin:'0 0 3px' }}>Fetch Demat &amp; MF Holdings</p>
+            <p style={{ fontSize:11, color:'#7A8A7E', margin:'0 0 2px', lineHeight:1.55 }}>CDSL · NSDL · CAMS · KFintech — all in one fetch</p>
+            <p style={{ fontSize:10.5, color:'#7A8A7E', margin:0 }}>💡 OTP sent to your CDSL-registered email</p>
+          </>
+        )}
 
-      {/* Error state */}
-      {status === 'error' && (
-        <div className="mt-3 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-600">
-          {errorMsg}
-        </div>
-      )}
-
-      {/* CTA — show when not yet connected */}
-      {!holdings && (
-        <div className="mt-4 flex flex-col gap-2">
-          {/* Primary CTA */}
-          <button
-            onClick={handleConnect}
-            disabled={status === 'loading'}
-            className="w-full bg-[#2d5a27] hover:bg-[#234820] text-white text-sm font-medium py-2.5 rounded-lg transition-colors disabled:opacity-60"
-          >
-            {status === 'loading' ? 'Connecting…' : 'Fetch My Holdings'}
-          </button>
-
-          <p className="text-center text-xs text-gray-400">
-            OTP sent to your CDSL-registered email · takes ~2 min
+        {errorMsg && (
+          <p style={{ fontSize:11, color:'#B94040', margin:'4px 0 0', background:'#FBF0F0', padding:'4px 8px', borderRadius:4 }}>
+            {errorMsg}
           </p>
+        )}
+      </div>
 
-          {/* Helper note for common confusion */}
-          <p className="text-center text-xs text-gray-400">
-            💡 Check the email you used when opening your demat account
-          </p>
-        </div>
-      )}
-
-      {/* Show refresh CTA when connected */}
-      {holdings && status === 'idle' && (
-        <p className="text-xs text-gray-400 mt-2 text-center">
-          Auto-refreshes monthly · <span className="text-[#2d5a27] cursor-pointer" onClick={handleConnect}>Fetch now</span>
-        </p>
-      )}
-
-      {/* Portfolio Connect Widget */}
-      {showWidget && accessToken && (
-        <PortfolioConnect
-          accessToken={accessToken}
-          config={{
-            enableCdslFetch: true,   // CDSL OTP fetch (primary)
-            enableGenerator: true,   // MF email fetch
-            enableInbox: true,       // Gmail inbox import
-          }}
-          onSuccess={handleSuccess}
-          onError={handleError}
+      {/* Action button */}
+      {holdings ? (
+        <button
+          onClick={handleConnect}
+          disabled={status === 'loading' || !sdkReady}
+          style={{ padding:'6px 12px', fontSize:11, color:'#3A4B41', background:'#F5ECD8', border:'1px solid #D4B98A', borderRadius:4, cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' as const }}
         >
-          {({ open }: { open: () => void }) => {
-            // Auto-open the widget as soon as it mounts
-            setTimeout(open, 100);
-            return null;
-          }}
-        </PortfolioConnect>
+          {status === 'loading' ? 'Connecting…' : 'Refresh'}
+        </button>
+      ) : (
+        <button
+          onClick={handleConnect}
+          disabled={status === 'loading' || !sdkReady}
+          style={{ padding:'8px 16px', background:'#3A4B41', color:'#E6CFA7', border:'none', borderRadius:5, fontSize:12, fontWeight:600, cursor: (status === 'loading' || !sdkReady) ? 'wait' : 'pointer', fontFamily:'inherit', whiteSpace:'nowrap' as const }}
+        >
+          {status === 'loading' ? 'Connecting…' : !sdkReady ? 'Loading…' : 'Fetch My Holdings'}
+        </button>
       )}
-
-      {/* Fallback: manual PDF upload */}
-      <div className="mt-4 border-t pt-3">
-        <p className="text-xs text-gray-400 text-center">
-          OTP not working?{' '}
-          <label
-            htmlFor="cas-pdf-upload"
-            className="text-[#2d5a27] cursor-pointer underline underline-offset-2 hover:opacity-70"
-          >
-            Upload CAS PDF manually
-          </label>
-        </p>
-        <input
-          id="cas-pdf-upload"
-          type="file"
-          accept=".pdf"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) {
-              // TODO: wire to your existing CAS PDF upload handler
-              console.log('Manual PDF selected:', file.name);
-              alert(`PDF "${file.name}" selected. Wire this to your existing upload handler.`);
-            }
-          }}
-        />
-      </div>
     </div>
   );
 }

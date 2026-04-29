@@ -1,18 +1,10 @@
-// app/api/cas/token/route.ts
+// app/api/parse-cas/token/route.ts
 // Generates a short-lived CASparser access token for the frontend.
 // The API key NEVER leaves the server.
 
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth'; // or your auth method
-import { authOptions } from '@/lib/auth';     // adjust to your auth setup
 
 export async function POST() {
-  // 1. Ensure user is logged in
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   const apiKey = process.env.CASPARSER_API_KEY;
   if (!apiKey) {
     console.error('CASPARSER_API_KEY is not set in environment variables');
