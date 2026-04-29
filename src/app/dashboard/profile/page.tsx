@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
+import DematHoldings from '@/components/DematHoldings'
 import { useAppStore } from '@/store/AppStore'
 import { MEGA_CATEGORIES, MegaCategory, tagTransactions, detectSalaryCandidates, SalaryCandidate, generateExpenseSuggestions, ExpenseSuggestion, loadMerchantMemory, saveMerchantMemory, extractMerchantKey } from '@/lib/categories'
 
@@ -1084,66 +1085,18 @@ export default function ProfilePage() {
           </div>
 
           <p style={{ fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:8, marginTop:6 }}>Step 4 — Demat holdings (CAS)</p>
-          <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8, padding:16, marginBottom:14, display:'flex', gap:14, alignItems:'center' }}>
-            <div style={{ width:42, height:42, borderRadius:'50%', background:casData?'#EEF2EE':C.wl, border:`2px solid ${casData?C.fg:C.wm}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, flexShrink:0 }}>🏛️</div>
-            <div style={{ flex:1 }}>
-              {casData ? (
-                <>
-                  <p style={{ fontSize:13, fontWeight:700, color:C.fg, margin:'0 0 3px' }}>✓ CAS parsed · {casData.summary?.equityCount || 0} stocks · {casData.summary?.mfCount || 0} MF schemes</p>
-                  <p style={{ fontSize:11.5, color:C.muted, margin:'0 0 2px' }}>Total value: {fmt(casData.summary?.totalValue || 0)}</p>
-                  {casData.period?.from && <p style={{ fontSize:10.5, color:C.muted, margin:0 }}>Period: {casData.period.from} to {casData.period.to}</p>}
-                </>
-              ) : (
-                <>
-                  <p style={{ fontSize:13, fontWeight:600, color:C.text, margin:'0 0 3px' }}>CAS Statement</p>
-                  <p style={{ fontSize:11, color:C.muted, margin:'0 0 2px', lineHeight:1.55 }}>Consolidated Account Statement from CDSL/NSDL</p>
-                  <p style={{ fontSize:10.5, color:C.muted, margin:0 }}>Password: PAN in CAPS (e.g. ABCDE1234F)</p>
-                </>
-              )}
-            </div>
-            {casData ? (
-              <button onClick={clearCas} style={{ padding:'6px 12px', fontSize:11, color:C.danger, background:'#FBF0F0', border:'1px solid #F0CECE', borderRadius:4, cursor:'pointer', fontFamily:'inherit' }}>Remove</button>
-            ) : (
-              <button onClick={() => { setPwdModal({ open:true, type:'cas', file:null, error:'' }); setPwd('') }} style={{ padding:'8px 16px', background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12, fontWeight:600, cursor:loadingDoc==='cas'?'wait':'pointer', fontFamily:'inherit', whiteSpace:'nowrap' as const }}>
-                {loadingDoc==='cas' ? 'Reading…' : 'Upload CAS'}
-              </button>
-            )}
-            <input ref={casRef} type="file" accept=".pdf" style={{ display:'none' }} onChange={e => { if (e.target.files?.[0] && casPassword) handleCasFile(e.target.files[0]); else if (e.target.files?.[0]) setPwdModal({ open:true, type:'cas', file:e.target.files[0], error:'' }) }} />
-          </div>
-
-          {casData && casData.holdings && casData.holdings.length > 0 && (
-            <div style={S.card}>
-              <div style={S.cardHead}>Holdings summary</div>
-              {casData.summary?.equityValue > 0 && (
-                <div style={S.row}>
-                  <span style={{ display:'flex', alignItems:'center', gap:7 }}><span>📊</span>Equities ({casData.summary.equityCount})</span>
-                  <span style={{ fontWeight:600, color:C.fg }}>{fmt(casData.summary.equityValue)}</span>
-                </div>
-              )}
-              {casData.summary?.mfValue > 0 && (
-                <div style={S.row}>
-                  <span style={{ display:'flex', alignItems:'center', gap:7 }}><span>📈</span>Mutual Funds ({casData.summary.mfCount})</span>
-                  <span style={{ fontWeight:600, color:C.fg }}>{fmt(casData.summary.mfValue)}</span>
-                </div>
-              )}
-              {casData.summary?.bondValue > 0 && (
-                <div style={S.row}>
-                  <span style={{ display:'flex', alignItems:'center', gap:7 }}><span>🏦</span>Bonds & G-Secs ({casData.summary.bondCount})</span>
-                  <span style={{ fontWeight:600, color:C.fg }}>{fmt(casData.summary.bondValue)}</span>
-                </div>
-              )}
-              {casData.summary?.otherValue > 0 && (
-                <div style={S.row}>
-                  <span style={{ display:'flex', alignItems:'center', gap:7 }}><span>🛡️</span>Insurance & NPS ({casData.summary.otherCount})</span>
-                  <span style={{ fontWeight:600, color:C.fg }}>{fmt(casData.summary.otherValue)}</span>
-                </div>
-              )}
-              <div style={{ ...S.row, background:C.wl, fontWeight:700, fontSize:13.5, color:C.fg }}>
-                <span>Total Portfolio</span>
-                <span>{fmt(casData.summary?.totalValue || 0)}</span>
-              </div>
-            </div>
-          )}
+          <DematHoldings
+            existingHoldings={casData ? {
+              investor: casData.investor?.name || '',
+              pan: casData.investor?.pan || '',
+              total_value: casData.summary?.totalValue || 0,
+              fetched_at: casData.fetchedAt || new Date().toISOString(),
+            } : null}
+            onSuccess={(holdings) => {
+              setCasData(holdings)
+              try { localStorage.setItem('av_cas_holdings', JSON.stringify(holdings)) } catch {}
+            }}
+          />
 
           {bankAccounts.length > 0 && (
             <button onClick={() => { setMainTab('income'); setIncTab('review') }} style={{ ...S.btn(true), width:'100%', padding:'11px' }}>
