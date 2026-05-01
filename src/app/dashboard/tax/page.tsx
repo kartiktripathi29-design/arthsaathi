@@ -1,11 +1,18 @@
 'use client'
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useAppStore } from '@/store/AppStore'
 import Link from 'next/link'
 
 const C = { fg:'#3A4B41', wheat:'#E6CFA7', wl:'#F5ECD8', wm:'#D4B98A', bg:'#FDFAF6', card:'#fff', border:'#E4DDD1', text:'#1C2B22', muted:'#7A8A7E', danger:'#B94040' }
 const fmt = (n:number) => `₹${Math.round(n).toLocaleString('en-IN')}`
 const clamp = (v:number, max:number) => Math.min(v, max)
+
+function projectCorpus(monthlyAmount: number, years: number, returnPct: number): number {
+  const r = returnPct / 100 / 12
+  const n = years * 12
+  if (r === 0 || monthlyAmount === 0) return monthlyAmount * n
+  return Math.round(monthlyAmount * ((Math.pow(1 + r, n) - 1) / r) * (1 + r))
+}
 
 // ─── Tooltip ──────────────────────────────────────────────────────────────────
 function Info({ text }: { text: string }) {
@@ -91,7 +98,7 @@ function NavButtons({ onBack, onReset, onProceed, proceedLabel='Proceed →' }: 
 }
 
 // ─── Step indicator ───────────────────────────────────────────────────────────
-const STEPS = ['Income','HRA','80C','80D','Other','Results']
+const STEPS = ['Smart','Income','HRA','80C','80D','Other','Results']
 function StepBar({ current }: { current:number }) {
   return (
     <div style={{ display:'flex', alignItems:'center', gap:0, marginBottom:22, overflowX:'auto', paddingBottom:2 }}>
@@ -183,7 +190,7 @@ function calcTax(income: number, deductions: Deductions, monthlyNet: number) {
 // ─── Initial deductions state ─────────────────────────────────────────────────
 const defaultDed: Deductions = { rentPaid:0, hraReceived:0, isMetro:true, ppf:0, elss:0, lic:0, homeLoanPrincipal:0, tuition:0, nsc:0, epf:0, selfFamily:0, parents:0, parentsSenior:false, selfSenior:false, nps:0, savingsInterest:0, donations100:0, donations50:0, homeLoanInterest:0, eduLoanInterest:0 }
 
-const STEP_LABELS = ['Income','HRA','80C','80D','Other','Results']
+const STEP_LABELS = ['Smart','Income','HRA','80C','80D','Other','Results']
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function TaxPage() {
@@ -235,6 +242,74 @@ export default function TaxPage() {
   }
 
   const tax = annual ? calcTax(annual, ded, salary?.netSalary||0) : null
+
+  // ─── Smart Deductions: auto-detect from profile data ──────────────────────
+  const [autoDetected, setAutoDetected] = useState<{key:string; label:string; section:string; amount:number; source:string; icon:string}[]>([])
+
+  useEffect(() => {
+    try {
+      const detected: {key:string; label:string; section:string; amount:number; source:string; icon:string}[] = []
+      const sb = localStorage.getItem('av_salary_breakdown')
+      if (sb) {
+        const breakdown = JSON.parse(sb)
+        if (breakdown.employeePF > 0) {
+          const a = breakdown.employeePF * 12
+          detected.push({ key:'epf', label:'Employee PF', section:'80C', amount:a, source:'salary slip', icon:'🏛️' })
+          setDed(prev => ({ ...prev, epf: prev.epf || a }))
+        }
+      }
+      const profile = localStorage.getItem('av_profile')
+      if (profile) {
+        const p = JSON.parse(profile)
+        const sip = (p.savings||[]).find((s:any) => s.label?.toLowerCase().includes('sip') || s.label?.toLowerCase().includes('elss') || s.label?.toLowerCase().includes('mutual'))
+        if (sip?.amount) {
+          const a = sip.amount * 12
+          detected.push({ key:'elss', label:'ELSS / SIP', section:'80C', amount:a, source:'expenses profile', icon:'📈' })
+          setDed(prev => ({ ...prev, elss: prev.elss || a }))
+        }
+        const health = (p.expenses||[]).find((e:any) => e.label?.toLowerCase().includes('health') || e.label?.toLowerCase().includes('insurance') || e.label?.toLowerCase().includes('mediclaim'))
+        if (health?.amount) {
+          const a = Math.min(health.amount * 12, 25000)
+          detected.push({ key:'selfFamily', label:'Health Insurance', section:'80D', amount:a, source:'expenses profile', icon:'💊' })
+          setDed(prev => ({ ...prev, selfFamily: prev.selfFamily || a }))
+        }
+        const lic = (p.expenses||[]).find((e:any) => e.label?.toLowerCase().includes('lic') || e.label?.toLowerCase().includes('life insurance'))
+        if (lic?.amount) {
+          const a = lic.amount * 12
+          detected.push({ key:'lic', label:'LIC Premium', section:'80C', amount:a, source:'expenses profile', icon:'🛡️' })
+          setDed(prev => ({ ...prev, lic: prev.lic || a }))
+        }
+      }
+      const banks = localStorage.getItem('av_banks')
+      if (banks) {
+        const accs = JSON.parse(banks)
+        let totalInterest = 0
+        accs.forEach((acc:any) => {
+          (acc.data?.transactions||[]).forEach((t:any) => {
+            const desc = (t.description||t.narration||'').toUpperCase()
+            if ((desc.includes('INT.PD') || desc.includes('INTEREST') || desc.includes('INT PD')) && t.type === 'credit') totalInterest += t.amount || 0
+          })
+        })
+        if (totalInterest > 0) {
+          detected.push({ key:'savingsInterest', label:'Savings Interest', section:'80TTA', amount:Math.min(totalInterest, 10000), source:'bank statement', icon:'🏦' })
+          setDed(prev => ({ ...prev, savingsInterest: prev.savingsInterest || Math.min(totalInterest, 10000) }))
+        }
+      }
+      setAutoDetected(detected)
+    } catch {}
+  }, [])
+
+  const corpusItems = useMemo(() => {
+    const items: {label:string; annualAmount:number; corpus10yr:number}[] = []
+    if (ded.epf > 0) items.push({ label:'Employee PF', annualAmount:ded.epf, corpus10yr:projectCorpus(Math.round(ded.epf/12), 10, 8.15) })
+    if (ded.elss > 0) items.push({ label:'ELSS SIP', annualAmount:ded.elss, corpus10yr:projectCorpus(Math.round(ded.elss/12), 10, 12) })
+    if (ded.ppf > 0) items.push({ label:'PPF', annualAmount:ded.ppf, corpus10yr:projectCorpus(Math.round(ded.ppf/12), 10, 7.1) })
+    if (ded.nps > 0) items.push({ label:'NPS', annualAmount:ded.nps, corpus10yr:projectCorpus(Math.round(ded.nps/12), 10, 10) })
+    if (ded.nsc > 0) items.push({ label:'NSC/FD', annualAmount:ded.nsc, corpus10yr:projectCorpus(Math.round(ded.nsc/12), 10, 7.7) })
+    return items
+  }, [ded.epf, ded.elss, ded.ppf, ded.nps, ded.nsc])
+  const totalCorpusAnnual = corpusItems.reduce((s,i) => s + i.annualAmount, 0)
+  const totalCorpus10yr = corpusItems.reduce((s,i) => s + i.corpus10yr, 0)
 
   const sCard = { background:C.card, border:`1px solid ${C.border}`, borderRadius:6, overflow:'hidden', marginBottom:12 } as React.CSSProperties
   const sCH   = { padding:'9px 14px', background:C.wl, borderBottom:`1px solid ${C.border}`, fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.07em', textTransform:'uppercase' as const, display:'flex', justifyContent:'space-between', alignItems:'center' }
@@ -288,7 +363,7 @@ export default function TaxPage() {
             )}
             <button onClick={() => goStep(savedStep > 0 ? savedStep : 0)}
               style={{ padding:'7px 16px', background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
-              {savedStep > 0 ? `Resume from ${STEP_LABELS[savedStep]} →` : 'Start calculating →'}
+              {savedStep > 0 ? `Resume from ${STEP_LABELS[savedStep]} →` : 'Start →'}
             </button>
           </div>
         </div>
@@ -307,8 +382,103 @@ export default function TaxPage() {
 
       <StepBar current={step} />
 
-      {/* ── STEP 0: Income ── */}
+      {/* ── STEP 0: Smart Deductions ── */}
       {step === 0 && (
+        <div>
+          <div style={sCard}>
+            <div style={sCH}>💡 Smart Deductions — auto-detected from your profile</div>
+            <div style={{ padding:'12px 14px', background:'#FAFAF8', borderBottom:`1px solid ${C.border}`, fontSize:12, color:C.muted, lineHeight:1.65 }}>
+              We scanned your salary slip, bank statement, and expenses to find deductions you're already making. Every rupee here is building your corpus — whether or not it saves tax.
+            </div>
+            {autoDetected.length > 0 ? autoDetected.map((item, i) => (
+              <div key={item.key} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 14px', borderBottom:i < autoDetected.length - 1 ? '1px solid #FAF7F2' : `1px solid ${C.border}` }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  <span style={{ fontSize:16 }}>{item.icon}</span>
+                  <div>
+                    <span style={{ fontSize:12.5, color:C.text, fontWeight:500 }}>{item.label}</span>
+                    <span style={{ fontSize:10, color:C.muted, marginLeft:6 }}>({item.section})</span>
+                    <p style={{ fontSize:10, color:C.muted, margin:'2px 0 0' }}>from {item.source}</p>
+                  </div>
+                </div>
+                <div style={{ textAlign:'right' as const }}>
+                  <span style={{ fontSize:13, fontWeight:600, color:'#2A7A4A' }}>{fmt(item.amount)}/yr</span>
+                  <span style={{ fontSize:10, color:'#2A7A4A', background:'#EEF2EE', padding:'1px 5px', borderRadius:3, marginLeft:6 }}>✓ detected</span>
+                </div>
+              </div>
+            )) : (
+              <div style={{ padding:'16px 14px', textAlign:'center', color:C.muted, fontSize:12 }}>
+                No deductions auto-detected. Upload a salary slip and bank statement in My Profile for auto-detection, or add manually in the next steps.
+              </div>
+            )}
+            {(() => {
+              const notDetected: {label:string; icon:string}[] = []
+              if (!autoDetected.find(d => d.key === 'epf')) notDetected.push({ label:'Employee PF (80C)', icon:'🏛️' })
+              if (!autoDetected.find(d => d.key === 'elss')) notDetected.push({ label:'ELSS / SIP (80C)', icon:'📈' })
+              if (!autoDetected.find(d => d.key === 'selfFamily')) notDetected.push({ label:'Health Insurance (80D)', icon:'💊' })
+              if (ded.nps === 0) notDetected.push({ label:'NPS (80CCD1B)', icon:'🏢' })
+              if (ded.homeLoanInterest === 0) notDetected.push({ label:'Home Loan Interest (24B)', icon:'🏠' })
+              if (ded.rentPaid === 0) notDetected.push({ label:'HRA (Rent)', icon:'🏘️' })
+              if (notDetected.length === 0) return null
+              return (
+                <div style={{ padding:'10px 14px', background:'#FAFAF8', borderBottom:`1px solid ${C.border}` }}>
+                  <p style={{ fontSize:10, fontWeight:700, color:C.muted, margin:'0 0 6px', letterSpacing:'0.05em', textTransform:'uppercase' as const }}>Not detected — add manually in next steps</p>
+                  <div style={{ display:'flex', flexWrap:'wrap' as const, gap:6 }}>
+                    {notDetected.map(item => (
+                      <span key={item.label} style={{ fontSize:10.5, padding:'3px 8px', background:C.wl, border:`1px solid ${C.wm}`, borderRadius:3, color:C.muted }}>{item.icon} {item.label}</span>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
+          </div>
+          {totalCorpusAnnual > 0 && (
+            <div style={sCard}>
+              <div style={sCH}>📊 Wealth being built from your deductions</div>
+              <div style={{ padding:'12px 14px', background:'#FAFAF8', borderBottom:`1px solid ${C.border}`, fontSize:12, color:C.muted, lineHeight:1.65 }}>
+                Tax benefit is one thing. But these are also investments that compound. Here's what they become in 10 years.
+              </div>
+              {corpusItems.map((item, i) => (
+                <div key={item.label} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'9px 14px', borderBottom:i < corpusItems.length - 1 ? '1px solid #FAF7F2' : `1px solid ${C.border}` }}>
+                  <div>
+                    <span style={{ fontSize:12.5, color:C.text }}>{item.label}</span>
+                    <p style={{ fontSize:10, color:C.muted, margin:'2px 0 0' }}>{fmt(item.annualAmount)}/yr invested</p>
+                  </div>
+                  <div style={{ textAlign:'right' as const }}>
+                    <span style={{ fontSize:13, fontWeight:700, color:C.fg }}>{fmt(item.corpus10yr)}</span>
+                    <p style={{ fontSize:10, color:'#2A7A4A', margin:'1px 0 0' }}>in 10 years</p>
+                  </div>
+                </div>
+              ))}
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'11px 14px', background:C.wl, fontWeight:700, fontSize:13.5, color:C.fg }}>
+                <span>Total corpus in 10 years</span>
+                <span>{fmt(totalCorpus10yr)}</span>
+              </div>
+              <div style={{ padding:'10px 14px', fontSize:11.5, color:C.muted, lineHeight:1.6 }}>
+                {fmt(totalCorpusAnnual)}/yr going into long-term wealth. Even if your tax is ₹0 under New Regime, this money is compounding. Keep going.
+              </div>
+            </div>
+          )}
+          <div style={{ background:C.wl, border:`1px solid ${C.wm}`, borderRadius:6, padding:'14px 16px', marginBottom:14 }}>
+            <p style={{ fontSize:12, fontWeight:700, color:C.fg, margin:'0 0 6px' }}>📋 Quick Regime Check</p>
+            {annual <= 1200000 ? (
+              <p style={{ fontSize:12, color:C.text, margin:0, lineHeight:1.65 }}>
+                Your gross income is {fmt(annual)}/yr — under ₹12L. <strong>New Regime gives you zero tax.</strong> But your deductions ({fmt(totalCorpusAnnual)}/yr in PF, ELSS, etc.) are still building wealth regardless of regime.
+              </p>
+            ) : (
+              <p style={{ fontSize:12, color:C.text, margin:0, lineHeight:1.65 }}>
+                Your gross income is {fmt(annual)}/yr — above ₹12L. The right regime depends on your total deductions.{tax && tax.recommended === 'old' ? ` Based on detected deductions, Old Regime could save you ${fmt(tax.savings)}.` : " New Regime is likely better, but let's verify."}
+              </p>
+            )}
+          </div>
+          <div style={{ display:'flex', gap:8 }}>
+            <button onClick={() => goStep(6)} style={{ flex:1, padding:'10px', background:C.card, color:C.fg, border:`1px solid ${C.border}`, borderRadius:5, fontSize:12, cursor:'pointer', fontFamily:'inherit', fontWeight:500 }}>Skip → See results</button>
+            <button onClick={() => goStep(1)} style={{ flex:2, padding:'10px', background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Customize deductions →</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── STEP 1: Income ── */}
+      {step === 1 && (
         <div>
           <div style={sCard}>
             <div style={sCH}>Your income — FY 2024-25</div>
@@ -329,12 +499,12 @@ export default function TaxPage() {
               ₹75,000 standard deduction applies to both regimes. The next steps find additional deductions for Old Regime — which may or may not save more than New Regime based on your actual investments.
             </div>
           </div>
-          <NavButtons onReset={reset} onProceed={() => goStep(1)} proceedLabel="Proceed to HRA →" />
+          <NavButtons onReset={reset} onProceed={() => goStep(2)} proceedLabel="Proceed to HRA →" />
         </div>
       )}
 
       {/* ── STEP 1: HRA ── */}
-      {step === 1 && (
+      {step === 2 && (
         <div>
           <div style={sCard}>
             <div style={sCH}>
@@ -372,12 +542,12 @@ export default function TaxPage() {
               </div>
             )}
           </div>
-          <NavButtons onBack={() => goStep(0)} onReset={reset} onProceed={() => goStep(2)} proceedLabel="Proceed to 80C →" />
+          <NavButtons onBack={() => goStep(1)} onReset={reset} onProceed={() => goStep(3)} proceedLabel="Proceed to 80C →" />
         </div>
       )}
 
       {/* ── STEP 2: 80C ── */}
-      {step === 2 && (
+      {step === 3 && (
         <div>
           <div style={sCard}>
             <div style={sCH}>80C — Investments & Payments <span style={{ fontSize:10, background:C.fg, color:C.wheat, padding:'2px 8px', borderRadius:3, fontWeight:600, textTransform:'none', letterSpacing:0 }}>Max ₹1,50,000</span></div>
@@ -393,12 +563,12 @@ export default function TaxPage() {
               All of the above pool into a single ₹1,50,000 limit. Any amount beyond ₹1.5L gives no additional benefit in Old Regime.
             </div>
           </div>
-          <NavButtons onBack={() => goStep(1)} onReset={reset} onProceed={() => goStep(3)} proceedLabel="Proceed to 80D →" />
+          <NavButtons onBack={() => goStep(2)} onReset={reset} onProceed={() => goStep(4)} proceedLabel="Proceed to 80D →" />
         </div>
       )}
 
       {/* ── STEP 3: 80D ── */}
-      {step === 3 && (
+      {step === 4 && (
         <div>
           <div style={sCard}>
             <div style={sCH}>80D — Health Insurance Premiums <span style={{ fontSize:10, background:C.fg, color:C.wheat, padding:'2px 8px', borderRadius:3, fontWeight:600, textTransform:'none', letterSpacing:0 }}>Max ₹25K–75K</span></div>
@@ -436,12 +606,12 @@ export default function TaxPage() {
               <span style={{ fontSize:15, fontWeight:700, color:C.fg }}>{fmt(clamp(ded.selfFamily, ded.selfSenior?50000:25000) + clamp(ded.parents, ded.parentsSenior?50000:25000))}</span>
             </div>
           </div>
-          <NavButtons onBack={() => goStep(2)} onReset={reset} onProceed={() => goStep(4)} proceedLabel="Proceed to Other Deductions →" />
+          <NavButtons onBack={() => goStep(3)} onReset={reset} onProceed={() => goStep(5)} proceedLabel="Proceed to Other Deductions →" />
         </div>
       )}
 
       {/* ── STEP 4: Other deductions ── */}
-      {step === 4 && (
+      {step === 5 && (
         <div>
           {/* 80CCD(1B) */}
           <div style={sCard}>
@@ -494,12 +664,12 @@ export default function TaxPage() {
             <Row label="50% qualifying donations (charitable trusts etc.)"><AmtInput value={ded.donations50} onChange={updateDed('donations50')} /></Row>
           </div>
 
-          <NavButtons onBack={() => goStep(3)} onReset={reset} onProceed={() => goStep(5)} proceedLabel="See my tax results →" />
+          <NavButtons onBack={() => goStep(4)} onReset={reset} onProceed={() => goStep(6)} proceedLabel="See my tax results →" />
         </div>
       )}
 
       {/* ── STEP 5: Results ── */}
-      {step === 5 && tax && (
+      {step === 6 && tax && (
         <div>
           {/* Stat strip */}
           <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:1, background:C.border, border:`1px solid ${C.border}`, borderRadius:6, overflow:'hidden', marginBottom:20 }}>
@@ -602,7 +772,7 @@ export default function TaxPage() {
           </div>
 
           <div style={{ display:'flex', gap:8 }}>
-            <button onClick={() => goStep(4)} style={{ flex:1, padding:'10px', background:C.card, color:C.muted, border:`1px solid ${C.border}`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit' }}>← Back</button>
+            <button onClick={() => goStep(5)} style={{ flex:1, padding:'10px', background:C.card, color:C.muted, border:`1px solid ${C.border}`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit' }}>← Back</button>
             <button onClick={reset} style={{ flex:1, padding:'10px', background:'#FBF0F0', color:C.danger, border:`1px solid #F0CECE`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit' }}>↺ Start over</button>
             <Link href="/dashboard/invest" style={{ flex:2, padding:'10px', background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:'inherit', textDecoration:'none', display:'flex', alignItems:'center', justifyContent:'center' }}>Proceed to Investments →</Link>
           </div>
