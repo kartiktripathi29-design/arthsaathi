@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
-import { parseStatement } from '@/lib/statementParser'
+import { parseStatement, detectFileKind } from '@/lib/statementParser'
+import { parseExcelFileLocally } from '@/lib/localExcelParser'
 
 export const maxDuration = 120
 
@@ -83,6 +84,29 @@ export async function POST(req: NextRequest) {
 
     const buffer = Buffer.from(await file.arrayBuffer())
     log(`buffer ready (${file.size} bytes)`)
+
+    // ─── FAST PATH: Excel/CSV → parse locally, skip Haiku ───────────────
+    const fileKind = detectFileKind(buffer, file.name, file.type)
+    if (fileKind === 'excel-xlsx' || fileKind === 'excel-xls' || fileKind === 'csv') {
+      log(`fast path: ${fileKind} — parsing locally`)
+      try {
+        const localResult = await parseExcelFileLocally(buffer, file.name, password)
+        if (localResult && localResult.transactions.length >= 2) {
+          log(`local parse done — ${localResult.transactions.length} transactions`)
+          return NextResponse.json({ data: localResult, fileKind, parsedLocally: true })
+        }
+        log('local parse returned too few transactions — falling through to Haiku')
+      } catch (e: any) {
+        if (e.message === 'requires_password') {
+          return NextResponse.json({ error: 'requires_password' }, { status: 422 })
+        }
+        if (e.message === 'incorrect_password') {
+          return NextResponse.json({ error: 'incorrect_password' }, { status: 422 })
+        }
+        log(`local parse failed: ${e.message} — falling through to Haiku`)
+      }
+    }
+    // ─── END FAST PATH ──────────────────────────────────────────────────
 
     const result = await parseStatement(buffer, file.name, file.type, password)
     log(`parseStatement done — ok=${result.ok}, kind=${result.kind}`)
