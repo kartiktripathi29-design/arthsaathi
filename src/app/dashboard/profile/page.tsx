@@ -140,8 +140,9 @@ function computePnL(transactions: any[], months: number, confirmedDetections: Re
     if (rtNetOff && (usedCredits.has(t.id) || usedDebits.has(t.id))) return
     const mega: MegaCategory = t.megaFinal
     const info = MEGA_CATEGORIES[mega]
-    const isIncome = mega === 'salary' || mega === 'interest' || mega === 'cashback' || (t.type === 'credit' && info?.routesTo === 'income')
-    const target = (isIncome || (t.type === 'credit' && (mega === 'transfer' || mega === 'misc'))) ? incomeMap : expenseMap
+    // Simple rule: credits = income, debits = expense. Category determines the label, not the direction.
+    const isIncome = t.type === 'credit'
+    const target = isIncome ? incomeMap : expenseMap
     if (!target[mega]) {
       target[mega] = { mega, label: info.label, icon: info.icon, color: info.color, amount: 0, monthlyAvg: 0, transactions: [] }
     }
@@ -172,8 +173,8 @@ function computePnL(transactions: any[], months: number, confirmedDetections: Re
     const m = monthMap[key]
     const mega: MegaCategory = t.megaFinal
     const info = MEGA_CATEGORIES[mega]
-    const isIncome = mega === 'salary' || mega === 'interest' || mega === 'cashback' || (t.type === 'credit' && info?.routesTo === 'income')
-    if (isIncome || (t.type === 'credit' && (mega === 'transfer' || mega === 'misc'))) m.income += t.amount
+    const isIncome = t.type === 'credit'
+    if (isIncome) m.income += t.amount
     else m.expenses += t.amount
     m.byCategory[mega] = (m.byCategory[mega] || 0) + t.amount
   })
@@ -550,7 +551,11 @@ export default function ProfilePage() {
         ? bankAccounts.map(a => a.id === uploadingAccountId ? newAccount : a)
         : [...bankAccounts, newAccount]
       setBankAccounts(updated)
-      try { localStorage.setItem('av_banks', JSON.stringify(updated)) } catch {}
+      try { 
+        const json = JSON.stringify(updated)
+        localStorage.setItem('av_banks', json)
+        console.log('[av_banks] saved OK, size:', json.length, 'bytes, accounts:', updated.length)
+      } catch (e) { console.error('[av_banks] SAVE FAILED:', e) }
       rebuildMergedTransactions(updated)
       setUploadingAccountId(null)
       toast.success(`${bd.bank || 'Bank'} · ${bd.transactions?.length||0} transactions across ${period.months} month${period.months>1?'s':''}`, { id:tid, duration:5000 })
