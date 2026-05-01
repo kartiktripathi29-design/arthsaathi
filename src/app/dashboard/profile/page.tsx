@@ -746,15 +746,20 @@ export default function ProfilePage() {
     setSalBreakdown(prev => ({ ...prev, netSalary: monthly, employerName: txns[0]?.brand || (txns[0]?.description || '').split('/')[0].substring(0,30) || prev.employerName || 'Detected' }))
     toast.success(`Net salary set to ${fmt(monthly)}/month`)
     setSalCardOpen(false)
+    // Auto-open next uncategorized section
+    if (roundtripPairs.length > 0 && !confirmedDetections['roundtrip']) setRtCardOpen(true)
+    else if (interestTxns.length > 0 && !confirmedDetections['interest']) setIntCardOpen(true)
   }
 
-  const noneIsSalary = () => { setConfirmedSalaryIds(new Set()); setTickedSalary(new Set()); toast('Park salary detection — set manually in Salary tab'); setSalCardOpen(false) }
-  const parkSalaryReview = () => { setConfirmedSalaryIds(new Set()); toast('Salary parked for later'); setSalCardOpen(false) }
+  const noneIsSalary = () => { setConfirmedSalaryIds(new Set()); setTickedSalary(new Set()); toast('Moved to miscellaneous income'); setSalCardOpen(false); if (roundtripPairs.length > 0 && !confirmedDetections['roundtrip']) setRtCardOpen(true); else if (interestTxns.length > 0 && !confirmedDetections['interest']) setIntCardOpen(true) }
+  const parkSalaryReview = () => { setConfirmedSalaryIds(new Set()); toast('Moved to miscellaneous income'); setSalCardOpen(false); if (roundtripPairs.length > 0 && !confirmedDetections['roundtrip']) setRtCardOpen(true); else if (interestTxns.length > 0 && !confirmedDetections['interest']) setIntCardOpen(true) }
   const netOffTickedRoundtrips = () => {
     if (tickedRoundtrip.size === 0) { toast.error('Tick at least one pair'); return }
     setConfirmedDetections(p => ({ ...p, roundtrip: true }))
     toast.success(`${tickedRoundtrip.size} pair${tickedRoundtrip.size>1?'s':''} netted off`)
     setRtCardOpen(false)
+    // Auto-open next
+    if (interestTxns.length > 0 && !confirmedDetections['interest']) setIntCardOpen(true)
   }
   const sendUntickedRtToMisc = () => {
     const untickedPairs = roundtripPairs.filter(p => !tickedRoundtrip.has(p.id))
@@ -763,6 +768,8 @@ export default function ProfilePage() {
     untickedPairs.forEach(p => { overrides[p.credit.id] = 'misc'; overrides[p.debit.id] = 'misc' })
     setManualOverrides(overrides)
     toast.success(`${untickedPairs.length} pairs sent to Miscellaneous`)
+    setRtCardOpen(false)
+    if (interestTxns.length > 0 && !confirmedDetections['interest']) setIntCardOpen(true)
   }
   const routeTickedToOtherIncome = () => {
     if (tickedInterest.size === 0) { toast.error('Tick at least one'); return }
@@ -774,8 +781,13 @@ export default function ProfilePage() {
     setOtherVals(p => ({ ...p, fd: annual }))
     toast.success(`${fmt(annual)} → Other Income (annual)`)
     setIntCardOpen(false)
+    // All Smart Review sections done — auto-switch to Apply to Expenses
+    if (confirmedSalaryIds.size > 0 || tickedSalary.size === 0) {
+      toast('Smart Review complete — moving to Apply to Expenses', { icon:'💡', duration:3000 })
+      setTimeout(() => setIncTab('suggestions'), 500)
+    }
   }
-  const parkInterestReview = () => { toast('Interest parked for later'); setIntCardOpen(false) }
+  const parkInterestReview = () => { toast('Moved to miscellaneous income'); setIntCardOpen(false) }
 
   const reassignSingle = (newMega: MegaCategory) => {
     if (!singleCategoryModal.transaction) return
@@ -1157,7 +1169,7 @@ export default function ProfilePage() {
                             <span>No clear pattern detected. Browse all credits below to pick yours.</span>
                           </div>
                         )}
-                        {salaryCandidates.flatMap(c => c.transactions).map(t => {
+                        {salaryCandidates.flatMap(c => c.transactions).filter(t => !confirmedSalaryIds.has(t.id)).map(t => {
                           const ticked = tickedSalary.has(t.id)
                           return (
                             <div key={t.id} style={{ display:'grid', gridTemplateColumns:'24px 75px 1fr 90px 28px', padding:'7px 14px', borderBottom:`0.5px solid #FAF7F2`, fontSize:11.5, gap:8, alignItems:'center', background: ticked ? '#F4F9F3' : '#fff' }}>
