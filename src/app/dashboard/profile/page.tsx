@@ -55,7 +55,7 @@ const fileToBase64 = (f:File): Promise<string> => new Promise((res,rej) => { con
 
 const S = {
   card: { background:C.card, border:`1px solid ${C.border}`, borderRadius:6, overflow:'hidden', marginBottom:12 } as React.CSSProperties,
-  cardHead: { padding:'10px 14px', background:C.wl, borderBottom:`1px solid ${C.border}`, fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.07em', textTransform:'uppercase' as const, display:'flex', justifyContent:'space-between', alignItems:'center' },
+  cardHead: { padding:'10px 14px', background:C.wl, borderBottom:`1px solid ${C.border}`, fontSize:9, fontWeight:700, color:C.muted, letterSpacing:'0.07em', textTransform:'uppercase' as const, display:'flex', justifyContent:'space-between', alignItems:'center' },
   row: { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'9px 14px', borderBottom:`1px solid #FAF7F2`, fontSize:12.5, color:C.text } as React.CSSProperties,
   stab: (on:boolean): React.CSSProperties => ({ padding:'0 12px 9px', fontSize:12, cursor:'pointer', borderTop:'none', borderLeft:'none', borderRight:'none', borderBottom:`2px solid ${on?C.wm:'transparent'}`, color:on?C.fg:C.muted, fontWeight:on?600:400, background:'none', fontFamily:'inherit' }),
   maintab: (on:boolean): React.CSSProperties => ({ padding:'0 14px 10px', fontSize:12.5, cursor:'pointer', borderTop:'none', borderLeft:'none', borderRight:'none', borderBottom:`2px solid ${on?C.wheat:'transparent'}`, color:on?C.fg:C.muted, fontWeight:on?600:400, background:'none', fontFamily:'inherit', whiteSpace:'nowrap' as const }),
@@ -451,7 +451,7 @@ export default function ProfilePage() {
 
   const allCredits = useMemo(() => taggedTxns.filter(t => t.type === 'credit').sort((a,b) => b.amount - a.amount), [taggedTxns])
   const largeCredits = useMemo(() => allCredits.filter(t => t.amount >= 5000), [allCredits])
-  const salaryCandidates = useMemo(() => detectSalaryCandidates(taggedTxns), [taggedTxns])
+  const salaryCandidates = useMemo(() => detectSalaryCandidates(taggedTxns.filter(t => !manualOverrides[t.id])), [taggedTxns, manualOverrides])
 
   const roundtripPairs = useMemo(() => {
     const credits = taggedTxns.filter(t => t.type === 'credit')
@@ -469,7 +469,7 @@ export default function ProfilePage() {
     return pairs
   }, [taggedTxns])
 
-  const interestTxns = useMemo(() => taggedTxns.filter(t => t.mega === 'interest' && t.type === 'credit'), [taggedTxns])
+  const interestTxns = useMemo(() => taggedTxns.filter(t => t.mega === 'interest' && t.type === 'credit' && !manualOverrides[t.id]), [taggedTxns, manualOverrides])
 
   // Generate suggestions for Expenses tab — apply manual overrides so reassigned txns move cards
   const overriddenTxns = useMemo(() =>
@@ -632,6 +632,15 @@ export default function ProfilePage() {
         setSavings(newSav); saveProfile(expenses, newSav, variable)
       }
       toast.success(`Slip parsed! Net ₹${(newBreakdown.netSalary).toLocaleString('en-IN')} + PF ₹${empPF.toLocaleString('en-IN')} → 80C`, { id:tid, duration:5000 })
+      // Item 19: Check if slip period mismatches bank statement period
+      if (bankPeriod && slip.month) {
+        const slipMonth = (slip.month || '').toLowerCase()
+        const bankFrom = (bankPeriod.from || '').toLowerCase()
+        const bankTo = (bankPeriod.to || '').toLowerCase()
+        if (slipMonth && !bankFrom.includes(slipMonth) && !bankTo.includes(slipMonth)) {
+          toast(`⚠️ Salary slip is from ${slip.month} but bank statement covers ${bankPeriod.from} to ${bankPeriod.to}. Amounts may differ.`, { duration:8000, icon:'⚠️' })
+        }
+      }
     } catch (e:any) { toast.error(e.message, { id:tid }) }
     finally { setLoadingDoc(null) }
   }
@@ -976,7 +985,7 @@ export default function ProfilePage() {
       {/* DOCUMENTS TAB */}
       {mainTab==='docs' && (
         <div>
-          <p style={{ fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:8 }}>Step 1 — Bank statements</p>
+          <p style={{ fontSize:9, fontWeight:700, color:C.muted, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:6 }}>Bank statements</p>
 
           {/* Existing bank accounts list */}
           {bankAccounts.map((acc, idx) => (
@@ -1035,7 +1044,7 @@ export default function ProfilePage() {
             </div>
           )}
 
-          <p style={{ fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:8 }}>Step 2 — Credit cards (helps track payments)</p>
+          <p style={{ fontSize:9, fontWeight:700, color:C.muted, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:8 }}>Credit cards</p>
           <div style={S.card}>
             <div style={S.cardHead}>Your credit cards</div>
             {creditCards.length === 0 ? (
@@ -1066,7 +1075,7 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <p style={{ fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:8, marginTop:6 }}>Step 3 — Tax documents (optional)</p>
+          <p style={{ fontSize:9, fontWeight:700, color:C.muted, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:8, marginTop:6 }}>Tax documents (optional)</p>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
             <div style={S.upload(!!aisData)} onClick={() => !aisData&&!loadingDoc&&aisRef.current?.click()}>
               {aisData ? (
@@ -1096,7 +1105,7 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <p style={{ fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:8, marginTop:6 }}>Step 4 — Demat holdings (CAS)</p>
+          <p style={{ fontSize:9, fontWeight:700, color:C.muted, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:8, marginTop:6 }}>Demat holdings</p>
           <DematHoldings
             existingHoldings={casData ? {
               investor: casData.investor?.name || '',
@@ -1348,8 +1357,8 @@ export default function ProfilePage() {
                   { key:'netSalary' as const, icon:'💵', label:'Take-home (net)', sub:'What hits your bank', tag:null },
                   { key:'employeePF' as const, icon:'🏛️', label:'Employee PF', sub:'Deducted from salary', tag:{ text:'→ 80C ✓', bg:'#EEF2EE', color:'#2A7A4A' } },
                   { key:'employerPF' as const, icon:'🏢', label:'Employer PF', sub:'Direct to PF account, not via salary', tag:{ text:'wealth tracker', bg:'#F5F5F0', color:C.muted } },
-                  { key:'bonus' as const, icon:'🎁', label:'Bonus this period', sub:'Variable component', tag:null },
-                  { key:'otherBenefits' as const, icon:'🍽️', label:'Other benefits', sub:'LTA, vouchers, RSU vesting', tag:null },
+                  { key:'bonus' as const, icon:'🎁', label:'Bonus this period', sub:'One-time · not included in monthly recurring', tag:{ text:'one-time', bg:'#FBF6EE', color:'#8A6A1A' } },
+                  { key:'otherBenefits' as const, icon:'🍽️', label:'Other benefits', sub:'One-time perquisites (accommodation, ESOP, etc.)', tag:{ text:'one-time', bg:'#FBF6EE', color:'#8A6A1A' } },
                 ].map(field => (
                   <div key={field.key} style={S.row}>
                     <div style={{ flex:1 }}>
@@ -1360,7 +1369,16 @@ export default function ProfilePage() {
                       </span>
                       <span style={{ fontSize:10.5, color:C.muted, marginLeft:21 }}>{field.sub}</span>
                     </div>
-                    <AmtInput value={salBreakdown[field.key]} onChange={v => setSalBreakdown(prev => ({ ...prev, [field.key]: v }))} />
+                    <AmtInput value={salBreakdown[field.key]} onChange={v => {
+                      setSalBreakdown(prev => {
+                        const updated = { ...prev, [field.key]: v }
+                        // Item 17: When Employee PF changes, auto-fill Employer PF to match (if not manually edited)
+                        if (field.key === 'employeePF' && prev.employerPF === prev.employeePF) {
+                          updated.employerPF = v
+                        }
+                        return updated
+                      })
+                    }} />
                   </div>
                 ))}
                 <div style={{ ...S.row, background:C.wl, fontWeight:700, fontSize:13.5, color:C.fg }}>
@@ -1621,7 +1639,30 @@ export default function ProfilePage() {
                 {expenses.map((exp,i)=>(
                   <div key={exp.id} className="av-row" style={{ ...S.row, borderBottom:i<expenses.length-1?`1px solid #FAF7F2`:'none' }}>
                     <span style={{ display:'flex', alignItems:'center', gap:7 }}><span>{exp.icon}</span>{exp.label}</span>
-                    <AmtInput value={exp.amount} onChange={v=>updExp(exp.id,v)} />
+                    <span style={{ display:'flex', alignItems:'center', gap:6 }}>
+                      <AmtInput value={exp.amount} onChange={v=>updExp(exp.id,v)} />
+                      <select
+                        value=""
+                        onChange={e => {
+                          const dest = e.target.value
+                          if (!dest) return
+                          if (dest === 'variable') {
+                            setVariable(prev => [...prev, { ...exp }])
+                            setExpenses(prev => prev.filter(x => x.id !== exp.id))
+                          } else if (dest === 'savings') {
+                            setSavings(prev => [...prev, { ...exp }])
+                            setExpenses(prev => prev.filter(x => x.id !== exp.id))
+                          }
+                          saveProfile(expenses.filter(x => x.id !== exp.id), dest === 'savings' ? [...savings, exp] : savings, dest === 'variable' ? [...variable, exp] : variable)
+                          toast.success(`${exp.label} moved to ${dest === 'variable' ? 'Variable' : 'Savings'}`)
+                        }}
+                        style={{ padding:'3px 4px', fontSize:10, border:`1px solid ${C.border}`, borderRadius:3, color:C.muted, background:C.card, cursor:'pointer', fontFamily:'inherit' }}
+                      >
+                        <option value="">Move</option>
+                        <option value="variable">→ Variable</option>
+                        <option value="savings">→ Savings</option>
+                      </select>
+                    </span>
                   </div>
                 ))}
               </div>
@@ -1630,7 +1671,30 @@ export default function ProfilePage() {
                 {variable.map((v,i)=>(
                   <div key={v.id} className="av-row" style={{ ...S.row, borderBottom:i<variable.length-1?`1px solid #FAF7F2`:'none' }}>
                     <span style={{ display:'flex', alignItems:'center', gap:7 }}><span>{v.icon}</span>{v.label}</span>
-                    <AmtInput value={v.amount} onChange={amt=>updVar(v.id,amt)} />
+                    <span style={{ display:'flex', alignItems:'center', gap:6 }}>
+                      <AmtInput value={v.amount} onChange={amt=>updVar(v.id,amt)} />
+                      <select
+                        value=""
+                        onChange={e => {
+                          const dest = e.target.value
+                          if (!dest) return
+                          if (dest === 'fixed') {
+                            setExpenses(prev => [...prev, { ...v }])
+                            setVariable(prev => prev.filter(x => x.id !== v.id))
+                          } else if (dest === 'savings') {
+                            setSavings(prev => [...prev, { ...v }])
+                            setVariable(prev => prev.filter(x => x.id !== v.id))
+                          }
+                          saveProfile(dest === 'fixed' ? [...expenses, v] : expenses, dest === 'savings' ? [...savings, v] : savings, variable.filter(x => x.id !== v.id))
+                          toast.success(`${v.label} moved to ${dest === 'fixed' ? 'Fixed' : 'Savings'}`)
+                        }}
+                        style={{ padding:'3px 4px', fontSize:10, border:`1px solid ${C.border}`, borderRadius:3, color:C.muted, background:C.card, cursor:'pointer', fontFamily:'inherit' }}
+                      >
+                        <option value="">Move</option>
+                        <option value="fixed">→ Fixed</option>
+                        <option value="savings">→ Savings</option>
+                      </select>
+                    </span>
                   </div>
                 ))}
               </div>
@@ -1645,7 +1709,30 @@ export default function ProfilePage() {
                         <span>{sv.icon}</span>{sv.label}
                         {is80c && <span style={{ fontSize:9.5, padding:'1px 6px', borderRadius:3, background:'#EEF2EE', color:'#2A7A4A', fontWeight:500 }}>→ 80C</span>}
                       </span>
-                      <AmtInput value={sv.amount} onChange={v=>updSav(sv.id,v)} />
+                      <span style={{ display:'flex', alignItems:'center', gap:6 }}>
+                        <AmtInput value={sv.amount} onChange={v=>updSav(sv.id,v)} />
+                        <select
+                          value=""
+                          onChange={e => {
+                            const dest = e.target.value
+                            if (!dest) return
+                            if (dest === 'fixed') {
+                              setExpenses(prev => [...prev, { ...sv }])
+                              setSavings(prev => prev.filter(x => x.id !== sv.id))
+                            } else if (dest === 'variable') {
+                              setVariable(prev => [...prev, { ...sv }])
+                              setSavings(prev => prev.filter(x => x.id !== sv.id))
+                            }
+                            saveProfile(dest === 'fixed' ? [...expenses, sv] : expenses, savings.filter(x => x.id !== sv.id), dest === 'variable' ? [...variable, sv] : variable)
+                            toast.success(`${sv.label} moved to ${dest === 'fixed' ? 'Fixed' : 'Variable'}`)
+                          }}
+                          style={{ padding:'3px 4px', fontSize:10, border:`1px solid ${C.border}`, borderRadius:3, color:C.muted, background:C.card, cursor:'pointer', fontFamily:'inherit' }}
+                        >
+                          <option value="">Move</option>
+                          <option value="fixed">→ Fixed</option>
+                          <option value="variable">→ Variable</option>
+                        </select>
+                      </span>
                     </div>
                   )
                 })}
