@@ -198,7 +198,7 @@ export function parseExcelLocally(csvText: string, originalFileName: string = ''
   let headerIdx = -1
   let colMap: ColumnMap | null = null
   
-  for (let i = 0; i < Math.min(15, lines.length); i++) {
+  for (let i = 0; i < Math.min(30, lines.length); i++) {
     const map = detectColumns(lines[i])
     if (isValidColumnMap(map)) {
       headerIdx = i
@@ -353,7 +353,7 @@ export async function parseExcelFileLocally(buffer: Buffer, fileName: string, pa
     let headerIdx = -1
     let colMap: ColumnMap | null = null
     
-    for (let i = 0; i < Math.min(15, rows.length); i++) {
+    for (let i = 0; i < Math.min(30, rows.length); i++) {
       const headers = rows[i].map((c: any) => String(c || '').trim())
       const map = detectColumns(headers)
       if (isValidColumnMap(map)) {
