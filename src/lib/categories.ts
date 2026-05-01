@@ -32,8 +32,34 @@ export const MEGA_CATEGORIES: Record<MegaCategory, MegaCategoryInfo> = {
   housing:              { key:'housing',              label:'Housing (Rent / EMI)',     icon:'🏠', color:'#B94040', bgColor:'#FBF0F0', borderColor:'#F0CECE', routesTo:'expense' },
   insurance:            { key:'insurance',            label:'Insurance',                icon:'🛡️', color:'#B94040', bgColor:'#FBF0F0', borderColor:'#F0CECE', routesTo:'expense' },
   cc_payment:           { key:'cc_payment',           label:'Credit Card Payment',      icon:'💳', color:'#7A8A7E', bgColor:'#F5F5F0', borderColor:'#E4DDD1', routesTo:'expense' },
-  transfer:             { key:'transfer',             label:'Personal Transfers',       icon:'👤', color:'#7A8A7E', bgColor:'#F5F5F0', borderColor:'#E4DDD1', routesTo:'transfer' },
+  transfer:             { key:'transfer',             label:'Transfer to Persons',      icon:'👤', color:'#7A8A7E', bgColor:'#F5F5F0', borderColor:'#E4DDD1', routesTo:'transfer' },
   misc:                 { key:'misc',                 label:'Miscellaneous',            icon:'📦', color:'#7A8A7E', bgColor:'#F5F5F0', borderColor:'#E4DDD1', routesTo:'expense' },
+}
+
+// Extract person name from UPI transaction description
+export function extractPersonName(description: string): string | null {
+  if (!description) return null
+  const desc = description.toUpperCase()
+  // Pattern: UPI-FIRSTNAME LASTNAME-... or UPI/FIRSTNAME LASTNAME/...
+  const upiMatch = desc.match(/UPI[-/]([A-Z][A-Z ]{2,25})[-/@]/)
+  if (upiMatch) {
+    const name = upiMatch[1].trim()
+    // Filter out known merchants/brands
+    const merchantWords = ['SWIGGY','AMAZON','FLIPKART','MYNTRA','MEESHO','ZOMATO','BLINKIT','ZEPTO','CRED','GROWW','PHONEPE','PAYTM','GPAY','AIRTEL','JIO','NETFLIX','UBER','OLA','RAPIDO','BIGBASKET','BOOKMYSHOW','IRCTC','LIC','HDFC','ICICI','SBI','AXIS','KOTAK','NYKAA','AJIO']
+    if (merchantWords.some(m => name.includes(m))) return null
+    // Must have at least 2 chars and look like a name (not all caps abbreviation like "ACH D-")
+    if (name.length >= 3 && name.includes(' ') || name.length >= 4) {
+      // Title case it
+      return name.split(' ').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ').trim()
+    }
+  }
+  // Pattern: IMPS-...-FIRSTNAME LASTNAME-...
+  const impsMatch = desc.match(/IMPS[-/]\d+[-/]([A-Z][A-Z ]{2,25})[-/]/)
+  if (impsMatch) {
+    const name = impsMatch[1].trim()
+    if (name.length >= 4) return name.split(' ').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ').trim()
+  }
+  return null
 }
 
 export const MERCHANT_RULES: Array<{ patterns: string[]; mega: MegaCategory; brandName?: string }> = [
@@ -83,7 +109,7 @@ export const MERCHANT_RULES: Array<{ patterns: string[]; mega: MegaCategory; bra
   { patterns:['JIO'], mega:'utilities', brandName:'Jio' },
   { patterns:['VI ','VODAFONE','IDEA','BSNL'], mega:'utilities' },
   { patterns:['ELECTRICITY','BSES','TATA POWER','BESCOM','MSEDCL','TANGEDCO'], mega:'utilities' },
-  { patterns:['INDIAN R/SBIN','IRUTS'], mega:'utilities', brandName:'Indian Railways' },
+  { patterns:['INDIAN R/SBIN','IRUTS','IRCTC','INDIAN RAILWAY'], mega:'transport', brandName:'Indian Railways' },
   // Healthcare
   { patterns:['APOLLO','MEDPLUS','1MG','NETMEDS','PHARMEASY'], mega:'healthcare' },
   { patterns:['POLICYBA','POLICYBAZAAR'], mega:'healthcare', brandName:'PolicyBazaar' },
@@ -173,8 +199,20 @@ export function tagTransactions(transactions: any[], cards: Array<{bank:string; 
       const matched = cards.find(c => (t.description||'').toUpperCase().includes(c.last4))
       brand = matched ? `${matched.bank} ****${matched.last4}` : 'Credit card'
     }
+    // Extract person name from UPI for transfer categorization
+    const personName = extractPersonName(t.description || '')
+    if (personName && mega === 'misc' && t.type === 'debit') {
+      mega = 'transfer'
+      brand = personName
+    }
+    // Auto-route dividends to interest (Item 10)
+    const desc = (t.description || '').toUpperCase()
+    if (t.type === 'credit' && (desc.includes('DIVIDEND') || desc.includes('DIV ') || desc.includes('DIVID'))) {
+      mega = 'interest'
+      brand = brand || 'Dividend'
+    }
     const id = `t_${i}_${(t.date||'').replace(/[-/]/g,'')}_${Math.round(t.amount)}`
-    return { ...t, id, mega, brand }
+    return { ...t, id, mega, brand, personName }
   })
 }
 

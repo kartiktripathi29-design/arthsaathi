@@ -1100,7 +1100,7 @@ export default function ProfilePage() {
 
           {bankAccounts.length > 0 && (
             <button onClick={() => { setMainTab('income'); setIncTab('review') }} style={{ ...S.btn(true), width:'100%', padding:'11px' }}>
-              Next: Smart Review →
+              Proceed →
             </button>
           )}
         </div>
@@ -1143,6 +1143,15 @@ export default function ProfilePage() {
                     </div>
                     {salCardOpen && (
                       <>
+                        {salaryCandidates.length > 0 && (
+                          <div style={{ padding:'6px 14px', background:'#FAFAF8', borderBottom:`0.5px solid #FAF7F2`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                            <span style={{ fontSize:11, color:C.muted }}>Select salary credits:</span>
+                            <span style={{ display:'flex', gap:6 }}>
+                              <button onClick={() => { const all = new Set(salaryCandidates.flatMap(c=>c.transactions).map(t=>t.id)); setTickedSalary(all) }} style={{ fontSize:10.5, padding:'3px 8px', background:'#EEF2EE', color:'#2A7A4A', border:'1px solid #C8D8C8', borderRadius:3, cursor:'pointer', fontFamily:'inherit' }}>Select all</button>
+                              <button onClick={() => setTickedSalary(new Set())} style={{ fontSize:10.5, padding:'3px 8px', background:'#FBF0F0', color:C.danger, border:'1px solid #F0CECE', borderRadius:3, cursor:'pointer', fontFamily:'inherit' }}>Deselect all</button>
+                            </span>
+                          </div>
+                        )}
                         {salaryCandidates.length === 0 && (
                           <div style={{ ...S.row, fontSize:12, color:C.muted, fontStyle:'italic' as const }}>
                             <span>No clear pattern detected. Browse all credits below to pick yours.</span>
@@ -1156,7 +1165,7 @@ export default function ProfilePage() {
                               <span style={{ color:C.muted }}>{t.date}</span>
                               <span style={{ color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>{t.brand?<strong>{t.brand} · </strong>:''}{t.description}</span>
                               <span style={{ color:'#2A7A4A', fontWeight:600, textAlign:'right' as const }}>+{fmt(t.amount)}</span>
-                              <button onClick={() => setSingleCategoryModal({ open:true, transaction:t })} title="Reassign" style={{ width:22, height:22, borderRadius:3, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted, display:'flex', alignItems:'center', justifyContent:'center' }}>↻</button>
+                              <button onClick={() => setSingleCategoryModal({ open:true, transaction:t })} title="Reassign" style={{ width:22, height:22, borderRadius:3, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted, display:'flex', alignItems:'center', justifyContent:'center' }}>✎</button>
                             </div>
                           )
                         })}
@@ -1175,16 +1184,16 @@ export default function ProfilePage() {
                               <span style={{ color:C.muted }}>{t.date}</span>
                               <span style={{ color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>{t.brand?<strong>{t.brand} · </strong>:''}{t.description}</span>
                               <span style={{ color:'#2A7A4A', fontWeight:500, textAlign:'right' as const }}>+{fmt(t.amount)}</span>
-                              <button onClick={() => setSingleCategoryModal({ open:true, transaction:t })} title="Reassign" style={{ width:22, height:22, borderRadius:3, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted, display:'flex', alignItems:'center', justifyContent:'center' }}>↻</button>
+                              <button onClick={() => setSingleCategoryModal({ open:true, transaction:t })} title="Reassign" style={{ width:22, height:22, borderRadius:3, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted, display:'flex', alignItems:'center', justifyContent:'center' }}>✎</button>
                             </div>
                           )
                         })}
                         <div style={S.bulkBar}>
-                          <span>{tickedSalary.size} ticked = {fmt(tickedSalaryAmount)} · avg {fmt(Math.round(tickedSalaryAmount/Math.max(1,bankMonths)))}/mo</span>
+                          <span>{tickedSalary.size} ticked = {fmt(tickedSalaryAmount)}</span>
                           <span style={{ display:'flex', gap:5 }}>
                             <button onClick={useTickedAsSalary} style={S.bulkBtn}>Use as salary</button>
                             <button onClick={noneIsSalary} style={S.bulkBtn}>None are salary</button>
-                            <button onClick={parkSalaryReview} style={S.bulkBtn}>Park</button>
+                            <button onClick={parkSalaryReview} style={S.bulkBtn}>Misc Income</button>
                           </span>
                         </div>
                       </>
@@ -1255,7 +1264,7 @@ export default function ProfilePage() {
                                 <span style={{ color:C.muted }}>{t.date}</span>
                                 <span style={{ color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>{t.brand?<strong>{t.brand} · </strong>:''}{t.description}</span>
                                 <span style={{ color:'#2A7A4A', fontWeight:500, textAlign:'right' as const }}>+{fmt(t.amount)}</span>
-                                <button onClick={() => setSingleCategoryModal({ open:true, transaction:t })} title="Reassign" style={{ width:22, height:22, borderRadius:3, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted, display:'flex', alignItems:'center', justifyContent:'center' }}>↻</button>
+                                <button onClick={() => setSingleCategoryModal({ open:true, transaction:t })} title="Reassign" style={{ width:22, height:22, borderRadius:3, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted, display:'flex', alignItems:'center', justifyContent:'center' }}>✎</button>
                               </div>
                             )
                           })}
@@ -1263,7 +1272,7 @@ export default function ProfilePage() {
                             <span>{tickedInterest.size} ticked = {fmt(tickedInterestAmount)} → {fmt(Math.round(tickedInterestAmount*(12/bankMonths)))} annual</span>
                             <span style={{ display:'flex', gap:5 }}>
                               <button onClick={routeTickedToOtherIncome} style={S.bulkBtn}>Route to Other Income</button>
-                              <button onClick={parkInterestReview} style={S.bulkBtn}>Park</button>
+                              <button onClick={parkInterestReview} style={S.bulkBtn}>Misc Income</button>
                             </span>
                           </div>
                         </>
@@ -1294,7 +1303,7 @@ export default function ProfilePage() {
                 salBreakdown.netSalary > 0 ? (
                   <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:10 }}>
                     <button onClick={() => (salMode==='slip'?slipRef:offerRef).current?.click()} style={{ padding:'5px 12px', fontSize:11, color:C.fg, background:C.wl, border:`1px solid ${C.wm}`, borderRadius:4, cursor:'pointer', fontFamily:'inherit', fontWeight:500 }}>
-                      ↻ Re-upload {salMode==='slip'?'salary slip':'offer letter'}
+                      ✎ Re-upload {salMode==='slip'?'salary slip':'offer letter'}
                     </button>
                   </div>
                 ) : (
@@ -1486,7 +1495,7 @@ export default function ProfilePage() {
 
                         {expanded && txns.length > 0 && (
                           <div style={{ background:'#FAFAF8' }}>
-                            <div style={{ padding:'7px 14px', fontSize:11, color:C.muted, borderBottom:`0.5px solid #FAF7F2` }}>Untick wrong ones · use ↻ to send to a different category</div>
+                            <div style={{ padding:'7px 14px', fontSize:11, color:C.muted, borderBottom:`0.5px solid #FAF7F2` }}>Untick wrong ones · use ✎ to send to a different category</div>
                             {visibleTxns.map(t => {
                               const ticked = !unticked.has(t.id)
                               return (
@@ -1495,7 +1504,7 @@ export default function ProfilePage() {
                                   <span style={{ color:C.muted }}>{t.date}</span>
                                   <span style={{ color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>{t.brand?<strong>{t.brand} · </strong>:''}{t.description}</span>
                                   <span style={{ color:C.danger, fontWeight:500, textAlign:'right' as const }}>−{fmt(t.amount)}</span>
-                                  <button onClick={() => setSingleCategoryModal({ open:true, transaction:t, from:'apply-expenses', fromMega: sugg.mega })} title="Reassign to a different category" style={{ width:22, height:22, borderRadius:3, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted, display:'flex', alignItems:'center', justifyContent:'center' }}>↻</button>
+                                  <button onClick={() => setSingleCategoryModal({ open:true, transaction:t, from:'apply-expenses', fromMega: sugg.mega })} title="Reassign to a different category" style={{ width:22, height:22, borderRadius:3, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted, display:'flex', alignItems:'center', justifyContent:'center' }}>✎</button>
                                 </div>
                               )
                             })}
@@ -1540,7 +1549,7 @@ export default function ProfilePage() {
                             ✗ No
                           </button>
                           <button onClick={() => parkSuggestion(sugg)} style={{ padding:'6px 12px', fontSize:11.5, background:'#FBF6EE', color:'#8A6A1A', border:'1px solid #EDD898', borderRadius:4, cursor:'pointer', fontFamily:'inherit' }}>
-                            🅿 Park
+                            📦 Misc Income
                           </button>
                         </div>
                       </div>
@@ -1594,6 +1603,7 @@ export default function ProfilePage() {
 
           <div style={{ display:'grid', gridTemplateColumns:'1fr 220px', gap:20 }}>
             <div>
+              <p style={{ fontSize:11, fontWeight:700, color:C.fg, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:8 }}>📤 Monthly Expenses</p>
               <div style={S.card}>
                 <div style={S.cardHead}>Fixed Monthly Bills <button onClick={addExp} style={{ fontSize:11, color:C.fg, background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', fontWeight:500, textTransform:'none' as const, letterSpacing:0 }}>+ Add</button></div>
                 {expenses.map((exp,i)=>(
@@ -1612,8 +1622,9 @@ export default function ProfilePage() {
                   </div>
                 ))}
               </div>
+              <p style={{ fontSize:11, fontWeight:700, color:C.fg, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:8, marginTop:16 }}>💰 Monthly Savings & Investments</p>
               <div style={S.card}>
-                <div style={S.cardHead}>Monthly Savings & Investments <button onClick={addSav} style={{ fontSize:11, color:C.fg, background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', fontWeight:500, textTransform:'none' as const, letterSpacing:0 }}>+ Add</button></div>
+                <div style={S.cardHead}>Savings & Investments <button onClick={addSav} style={{ fontSize:11, color:C.fg, background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', fontWeight:500, textTransform:'none' as const, letterSpacing:0 }}>+ Add</button></div>
                 {savings.map((sv,i)=>{
                   const is80c = sv.label.includes('ELSS') || sv.label.includes('80C')
                   return (
@@ -1697,7 +1708,7 @@ export default function ProfilePage() {
                               <span style={{ color:C.muted }}>{t.date}</span>
                               <span style={{ color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>{t.brand?<strong>{t.brand} · </strong>:''}{t.description}</span>
                               <span style={{ color:'#2A7A4A', fontWeight:600, textAlign:'right' as const }}>+{fmt(t.amount)}</span>
-                              <button onClick={() => setSingleCategoryModal({ open:true, transaction:t })} title="Reassign category" style={{ width:22, height:22, borderRadius:3, border:`1px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted, display:'flex', alignItems:'center', justifyContent:'center' }}>↻</button>
+                              <button onClick={() => setSingleCategoryModal({ open:true, transaction:t })} title="Reassign category" style={{ width:22, height:22, borderRadius:3, border:`1px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted, display:'flex', alignItems:'center', justifyContent:'center' }}>✎</button>
                             </div>
                           ))}
                           {line.transactions.length > 15 && (
@@ -1740,7 +1751,7 @@ export default function ProfilePage() {
                               <span style={{ color:C.muted }}>{t.date}</span>
                               <span style={{ color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>{t.brand?<strong>{t.brand} · </strong>:''}{t.description}</span>
                               <span style={{ color:C.danger, fontWeight:500, textAlign:'right' as const }}>−{fmt(t.amount)}</span>
-                              <button onClick={() => setSingleCategoryModal({ open:true, transaction:t })} title="Reassign category" style={{ width:22, height:22, borderRadius:3, border:`1px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted, display:'flex', alignItems:'center', justifyContent:'center' }}>↻</button>
+                              <button onClick={() => setSingleCategoryModal({ open:true, transaction:t })} title="Reassign category" style={{ width:22, height:22, borderRadius:3, border:`1px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted, display:'flex', alignItems:'center', justifyContent:'center' }}>✎</button>
                             </div>
                           ))}
                           {line.transactions.length > 15 && (
