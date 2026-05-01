@@ -1162,7 +1162,7 @@ export default function ProfilePage() {
                       </span>
                       <button onClick={() => setSalCardOpen(!salCardOpen)} style={{ width:22, height:22, borderRadius:4, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:13, color:C.fg, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:600 }}>{salCardOpen?'−':'+'}</button>
                     </div>
-                    {salCardOpen && (
+                    {salCardOpen && confirmedSalaryIds.size === 0 && (
                       <>
                         {salaryCandidates.length > 0 && (
                           <div style={{ padding:'6px 14px', background:'#FAFAF8', borderBottom:`0.5px solid #FAF7F2`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
