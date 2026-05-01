@@ -284,12 +284,21 @@ export function generateExpenseSuggestions(transactions: any[], months: number, 
 
   // Group by mega category
   const grouped: Record<string, any[]> = {}
+  // Also track per-person transfers for clubbing (Item 13)
+  const personTransfers: Record<string, any[]> = {}
+
   transactions.forEach(t => {
     if (t.type !== 'debit') return
     if (salaryIds.has(t.id) || parkedIds.has(t.id)) return
     const k = t.mega || 'misc'
     if (!grouped[k]) grouped[k] = []
     grouped[k].push(t)
+    // Club unknown/transfer transactions per person name (Item 13)
+    if ((k === 'transfer' || k === 'misc') && t.personName) {
+      const name = t.personName.toUpperCase()
+      if (!personTransfers[name]) personTransfers[name] = []
+      personTransfers[name].push(t)
+    }
   })
 
   const fieldMap: Record<string, { target: ExpenseSuggestion['targetField']; label: string }> = {
@@ -304,14 +313,15 @@ export function generateExpenseSuggestions(transactions: any[], months: number, 
     investments_elss: { target: 'tax_save', label: 'ELSS (80C)' },
     investments_regular: { target: 'savings', label: 'SIP / Mutual Funds' },
     cc_payment: { target: 'cc', label: 'Credit card bill' },
+    transfer: { target: 'variable', label: 'Transfer to Persons' },
   }
 
   Object.entries(grouped).forEach(([mega, txns]) => {
-    if (!fieldMap[mega]) return  // skip transfer, misc — not auto-suggested
+    if (!fieldMap[mega]) return  // skip misc — not auto-suggested unless clubbed
     const total = txns.reduce((s,t) => s + t.amount, 0)
     if (total < 200) return
     const monthly = Math.round(total / months)
-    const brands = Array.from(new Set(txns.map(t => t.brand).filter(Boolean))) as string[]
+    const brands = Array.from(new Set(txns.map(t => t.brand || t.personName).filter(Boolean))) as string[]
     const info = MEGA_CATEGORIES[mega as MegaCategory]
     suggestions.push({
       id: `sugg_${mega}`,
@@ -328,6 +338,32 @@ export function generateExpenseSuggestions(transactions: any[], months: number, 
         ? `${brands.slice(0,3).join(' + ')}${brands.length>3?'...':''} = ₹${monthly.toLocaleString('en-IN')}/mo`
         : `${txns.length} transactions = ₹${monthly.toLocaleString('en-IN')}/mo`,
     })
+  })
+
+  // Item 13: Add person-based clubbed suggestions for recurring transfers
+  Object.entries(personTransfers).forEach(([name, txns]) => {
+    if (txns.length < 2) return  // only club if 2+ transactions to same person
+    const total = txns.reduce((s,t) => s + t.amount, 0)
+    if (total < 500) return
+    const monthly = Math.round(total / months)
+    const displayName = name.split(' ').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ')
+    // Check if already covered by the transfer suggestion
+    const existingSugg = suggestions.find(s => s.mega === 'transfer')
+    if (!existingSugg) {
+      suggestions.push({
+        id: `sugg_person_${name.replace(/\s/g,'_')}`,
+        mega: 'transfer',
+        label: `Transfers to ${displayName}`,
+        icon: '👤',
+        monthlyAmount: monthly,
+        totalAmount: total,
+        count: txns.length,
+        brands: [displayName],
+        targetField: 'variable',
+        targetLabel: `Transfer to ${displayName}`,
+        description: `${txns.length} payments to ${displayName} = ₹${monthly.toLocaleString('en-IN')}/mo`,
+      })
+    }
   })
 
   return suggestions.sort((a,b) => b.monthlyAmount - a.monthlyAmount)

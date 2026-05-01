@@ -71,8 +71,11 @@ interface SalaryBreakdown {
   employeePF: number         // → 80C
   employerPF: number         // wealth tracker
   bonus: number              // variable
+  incentive: number          // recurring incentive
   otherBenefits: number      // LTA, vouchers, etc.
   employerName: string
+  bonusRecurring: boolean
+  otherBenefitsRecurring: boolean
 }
 
 interface CreditCard {
@@ -114,7 +117,7 @@ function computePnL(transactions: any[], months: number, confirmedDetections: Re
   const txns = transactions.map(t => {
     let mega: MegaCategory = manualOverrides[t.id] || t.mega || 'misc'
     if (selectedSalaryIds.has(t.id)) mega = 'salary'
-    if (parkedIds.has(t.id)) mega = 'misc'
+    // Parked IDs stay in their original category for P&L display — don't force to misc
     return { ...t, megaFinal: mega }
   })
 
@@ -195,7 +198,7 @@ export default function ProfilePage() {
 
   // Salary breakdown — full editable picture
   const [salBreakdown, setSalBreakdown] = useState<SalaryBreakdown>({
-    netSalary: 0, employeePF: 0, employerPF: 0, bonus: 0, otherBenefits: 0, employerName: ''
+    netSalary: 0, employeePF: 0, employerPF: 0, bonus: 0, incentive: 0, otherBenefits: 0, employerName: '', bonusRecurring: false, otherBenefitsRecurring: false
   })
 
   // Credit cards
@@ -431,8 +434,8 @@ export default function ProfilePage() {
     if(sel.size>0){setOtherSel(sel);setOtherVals(vals)}
   }, [aisData])
 
-  const grossMonthly = salBreakdown.netSalary + salBreakdown.employeePF + salBreakdown.employerPF + salBreakdown.bonus + salBreakdown.otherBenefits
-  const annualCTC = grossMonthly * 12
+  const grossMonthly = salBreakdown.netSalary + salBreakdown.employeePF + salBreakdown.employerPF + salBreakdown.incentive + (salBreakdown.bonusRecurring ? salBreakdown.bonus : 0) + (salBreakdown.otherBenefitsRecurring ? salBreakdown.otherBenefits : 0)
+  const annualCTC = grossMonthly * 12 + (!salBreakdown.bonusRecurring ? salBreakdown.bonus : 0) + (!salBreakdown.otherBenefitsRecurring ? salBreakdown.otherBenefits : 0)
 
   const salMonthly = salBreakdown.netSalary
   const otherAnnual = Array.from(otherSel).reduce((s,k)=>s+(otherVals[k]||0),0)
@@ -622,8 +625,11 @@ export default function ProfilePage() {
         employeePF: empPF,
         employerPF: empPF,  // typically equal — user can edit
         bonus: 0,
+        incentive: 0,
         otherBenefits: 0,
         employerName: slip.employerName || 'Your employer',
+        bonusRecurring: false,
+        otherBenefitsRecurring: false,
       }
       setSalBreakdown(newBreakdown)
       // Auto-fill ELSS field with employee PF (it goes to 80C)
@@ -661,8 +667,11 @@ export default function ProfilePage() {
         employeePF: estPF,
         employerPF: estPF,
         bonus: 0,
+        incentive: 0,
         otherBenefits: 0,
         employerName: data.employerName || 'Your employer',
+        bonusRecurring: false,
+        otherBenefitsRecurring: false,
       })
       toast.success('Offer letter parsed — review breakdown', { id:tid })
     } catch (e:any) { toast.error(e.message, { id:tid }) }
@@ -752,7 +761,13 @@ export default function ProfilePage() {
     const total = txns.reduce((s,t) => s + t.amount, 0)
     const monthly = Math.round(total / bankMonths)
     setConfirmedSalaryIds(new Set(tickedSalary))
-    setSalBreakdown(prev => ({ ...prev, netSalary: monthly, employerName: txns[0]?.brand || (txns[0]?.description || '').split('/')[0].substring(0,30) || prev.employerName || 'Detected' }))
+    setSalBreakdown(prev => {
+      let name = txns[0]?.brand || (txns[0]?.description || '').split('/')[0].substring(0,30) || prev.employerName || 'Detected'
+      // Clean UPI prefix from employer name
+      name = name.replace(/^UPI[-/\s]*/i, '').replace(/^NEFT\s*(CR|DR)?[-/\s]*/i, '').replace(/^IMPS[-/\s]*\d*[-/\s]*/i, '').trim()
+      if (name.length < 3) name = prev.employerName || 'Detected'
+      return { ...prev, netSalary: monthly, employerName: name }
+    })
     toast.success(`Net salary set to ${fmt(monthly)}/month`)
     setSalCardOpen(false)
     // Auto-open next uncategorized section
@@ -783,12 +798,30 @@ export default function ProfilePage() {
   const routeTickedToOtherIncome = () => {
     if (tickedInterest.size === 0) { toast.error('Tick at least one'); return }
     const txns = taggedTxns.filter(t => tickedInterest.has(t.id))
-    const total = txns.reduce((s,t) => s + t.amount, 0)
-    const annual = Math.round(total * (12 / bankMonths))
+    // Split into dividends vs interest/savings
+    const dividendTxns = txns.filter(t => {
+      const desc = (t.description || t.brand || '').toUpperCase()
+      return desc.includes('DIVIDEND') || desc.includes('DIV ') || desc.includes('DIVID')
+    })
+    const interestOnlyTxns = txns.filter(t => !dividendTxns.includes(t))
+    
+    const dividendTotal = dividendTxns.reduce((s,t) => s + t.amount, 0)
+    const interestTotal = interestOnlyTxns.reduce((s,t) => s + t.amount, 0)
+    const dividendAnnual = Math.round(dividendTotal * (12 / bankMonths))
+    const interestAnnual = Math.round(interestTotal * (12 / bankMonths))
+    
     setConfirmedDetections(p => ({ ...p, interest: true }))
-    const newSel = new Set(otherSel); newSel.add('fd'); setOtherSel(newSel)
-    setOtherVals(p => ({ ...p, fd: annual }))
-    toast.success(`${fmt(annual)} → Other Income (annual)`)
+    const newSel = new Set(otherSel)
+    const newVals = { ...otherVals }
+    if (interestAnnual > 0) { newSel.add('fd'); newVals.fd = (newVals.fd || 0) + interestAnnual }
+    if (dividendAnnual > 0) { newSel.add('dividend'); newVals.dividend = (newVals.dividend || 0) + dividendAnnual }
+    setOtherSel(newSel)
+    setOtherVals(p => ({ ...p, ...newVals }))
+    
+    const parts = []
+    if (interestAnnual > 0) parts.push(`${fmt(interestAnnual)} interest`)
+    if (dividendAnnual > 0) parts.push(`${fmt(dividendAnnual)} dividends`)
+    toast.success(`${parts.join(' + ')} → Other Income (annual)`)
     setIntCardOpen(false)
     // All Smart Review sections done — auto-switch to Apply to Expenses
     if (confirmedSalaryIds.size > 0 || tickedSalary.size === 0) {
@@ -1162,7 +1195,7 @@ export default function ProfilePage() {
                       </span>
                       <button onClick={() => setSalCardOpen(!salCardOpen)} style={{ width:22, height:22, borderRadius:4, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:13, color:C.fg, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:600 }}>{salCardOpen?'−':'+'}</button>
                     </div>
-                    {salCardOpen && confirmedSalaryIds.size === 0 && (
+                    {salCardOpen && (
                       <>
                         {salaryCandidates.length > 0 && (
                           <div style={{ padding:'6px 14px', background:'#FAFAF8', borderBottom:`0.5px solid #FAF7F2`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
@@ -1357,8 +1390,9 @@ export default function ProfilePage() {
                   { key:'netSalary' as const, icon:'💵', label:'Take-home (net)', sub:'What hits your bank', tag:null },
                   { key:'employeePF' as const, icon:'🏛️', label:'Employee PF', sub:'Deducted from salary', tag:{ text:'→ 80C ✓', bg:'#EEF2EE', color:'#2A7A4A' } },
                   { key:'employerPF' as const, icon:'🏢', label:'Employer PF', sub:'Direct to PF account, not via salary', tag:{ text:'wealth tracker', bg:'#F5F5F0', color:C.muted } },
-                  { key:'bonus' as const, icon:'🎁', label:'Bonus this period', sub:'One-time · not included in monthly recurring', tag:{ text:'one-time', bg:'#FBF6EE', color:'#8A6A1A' } },
-                  { key:'otherBenefits' as const, icon:'🍽️', label:'Other benefits', sub:'One-time perquisites (accommodation, ESOP, etc.)', tag:{ text:'one-time', bg:'#FBF6EE', color:'#8A6A1A' } },
+                  { key:'bonus' as const, icon:'🎁', label:'Bonus', sub:salBreakdown.bonusRecurring ? 'Monthly recurring' : 'One-time · added to Annual only', tag:{ text:salBreakdown.bonusRecurring?'recurring':'one-time', bg:salBreakdown.bonusRecurring?'#EEF2EE':'#FBF6EE', color:salBreakdown.bonusRecurring?'#2A7A4A':'#8A6A1A' }, toggle:'bonusRecurring' as const },
+                  { key:'incentive' as const, icon:'🏆', label:'Incentive', sub:'Monthly recurring incentive/commission', tag:null },
+                  { key:'otherBenefits' as const, icon:'🍽️', label:'Other benefits', sub:salBreakdown.otherBenefitsRecurring ? 'Monthly recurring (LTA, allowances)' : 'One-time (ESOP, accommodation)', tag:{ text:salBreakdown.otherBenefitsRecurring?'recurring':'one-time', bg:salBreakdown.otherBenefitsRecurring?'#EEF2EE':'#FBF6EE', color:salBreakdown.otherBenefitsRecurring?'#2A7A4A':'#8A6A1A' }, toggle:'otherBenefitsRecurring' as const },
                 ].map(field => (
                   <div key={field.key} style={S.row}>
                     <div style={{ flex:1 }}>
@@ -1366,6 +1400,11 @@ export default function ProfilePage() {
                         <span style={{ fontSize:14 }}>{field.icon}</span>
                         <span>{field.label}</span>
                         {field.tag && <span style={{ fontSize:9.5, padding:'1px 6px', borderRadius:3, fontWeight:500, background:field.tag.bg, color:field.tag.color }}>{field.tag.text}</span>}
+                        {'toggle' in field && field.toggle && (
+                          <button onClick={() => setSalBreakdown(prev => ({ ...prev, [field.toggle!]: !prev[field.toggle!] }))} style={{ fontSize:9, padding:'1px 6px', borderRadius:3, border:`1px solid ${C.border}`, background:C.card, color:C.muted, cursor:'pointer', fontFamily:'inherit', marginLeft:4 }}>
+                            switch
+                          </button>
+                        )}
                       </span>
                       <span style={{ fontSize:10.5, color:C.muted, marginLeft:21 }}>{field.sub}</span>
                     </div>
@@ -1406,7 +1445,63 @@ export default function ProfilePage() {
 
           {incTab==='other' && (
             <div>
-              {(aisData||otherSel.size>0)&&<div style={S.insight}>{otherSel.size} sources auto-filled from {aisData?'AIS':'bank statement'}</div>}
+              {(aisData||otherSel.size>0)&&<div style={S.insight}>{otherSel.size} source{otherSel.size!==1?'s':''} detected from {aisData?'AIS':'bank statement'}</div>}
+              
+              {/* Show detected interest/dividend transactions grouped */}
+              {confirmedDetections['interest'] && (() => {
+                const intTxns = taggedTxns.filter(t => t.mega === 'interest' && t.type === 'credit')
+                const dividendTxns = intTxns.filter(t => {
+                  const desc = (t.description || t.brand || '').toUpperCase()
+                  return desc.includes('DIVIDEND') || desc.includes('DIV ')
+                })
+                const savIntTxns = intTxns.filter(t => !dividendTxns.includes(t))
+                
+                return (
+                  <>
+                    {savIntTxns.length > 0 && (
+                      <div style={S.card}>
+                        <div style={{ ...S.cardHead, background:'#EEF2EE', borderColor:'#C8D8C8' }}>
+                          <span>🏦 FD / Savings Interest · {savIntTxns.length} transaction{savIntTxns.length>1?'s':''}</span>
+                          <span style={{ fontSize:12, fontWeight:700, color:C.fg }}>{fmt(savIntTxns.reduce((s,t) => s + t.amount, 0))}</span>
+                        </div>
+                        {savIntTxns.map((t,i) => (
+                          <div key={t.id} style={{ display:'grid', gridTemplateColumns:'75px 1fr 90px', padding:'7px 14px', borderBottom:i<savIntTxns.length-1?'1px solid #FAF7F2':'none', fontSize:11.5, gap:8, alignItems:'center' }}>
+                            <span style={{ color:C.muted }}>{t.date}</span>
+                            <span style={{ color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>{t.brand ? <strong>{t.brand} · </strong> : ''}{t.description}</span>
+                            <span style={{ color:'#2A7A4A', fontWeight:600, textAlign:'right' as const }}>+{fmt(t.amount)}</span>
+                          </div>
+                        ))}
+                        <div style={{ ...S.row, background:C.wl, fontWeight:600, fontSize:12, color:C.fg }}>
+                          <span>Annual estimate</span>
+                          <span>{fmt(Math.round(savIntTxns.reduce((s,t) => s + t.amount, 0) * (12 / bankMonths)))}/yr</span>
+                        </div>
+                      </div>
+                    )}
+                    {dividendTxns.length > 0 && (
+                      <div style={S.card}>
+                        <div style={{ ...S.cardHead, background:'#EEF2EE', borderColor:'#C8D8C8' }}>
+                          <span>📈 Dividend Income · {dividendTxns.length} transaction{dividendTxns.length>1?'s':''}</span>
+                          <span style={{ fontSize:12, fontWeight:700, color:C.fg }}>{fmt(dividendTxns.reduce((s,t) => s + t.amount, 0))}</span>
+                        </div>
+                        {dividendTxns.map((t,i) => (
+                          <div key={t.id} style={{ display:'grid', gridTemplateColumns:'75px 1fr 90px', padding:'7px 14px', borderBottom:i<dividendTxns.length-1?'1px solid #FAF7F2':'none', fontSize:11.5, gap:8, alignItems:'center' }}>
+                            <span style={{ color:C.muted }}>{t.date}</span>
+                            <span style={{ color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>{t.brand ? <strong>{t.brand} · </strong> : ''}{t.description}</span>
+                            <span style={{ color:'#2A7A4A', fontWeight:600, textAlign:'right' as const }}>+{fmt(t.amount)}</span>
+                          </div>
+                        ))}
+                        <div style={{ ...S.row, background:C.wl, fontWeight:600, fontSize:12, color:C.fg }}>
+                          <span>Annual estimate</span>
+                          <span>{fmt(Math.round(dividendTxns.reduce((s,t) => s + t.amount, 0) * (12 / bankMonths)))}/yr</span>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
+
+              {/* Manual other income types */}
+              <p style={{ fontSize:9, fontWeight:700, color:C.muted, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:6, marginTop:8 }}>Other sources (manual)</p>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:16 }}>
                 {OTHER_TYPES.map(type => {
                   const sel = otherSel.has(type.key)
