@@ -1453,11 +1453,6 @@ export default function ProfilePage() {
                         <span style={{ fontSize:14 }}>{field.icon}</span>
                         <span>{field.label}</span>
                         {field.tag && <span style={{ fontSize:9.5, padding:'1px 6px', borderRadius:3, fontWeight:500, background:field.tag.bg, color:field.tag.color }}>{field.tag.text}</span>}
-                        {'toggle' in field && field.toggle && (
-                          <button onClick={() => setSalBreakdown(prev => ({ ...prev, [field.toggle!]: !prev[field.toggle!] }))} style={{ fontSize:9, padding:'1px 6px', borderRadius:3, border:`1px solid ${C.border}`, background:C.card, color:C.muted, cursor:'pointer', fontFamily:'inherit', marginLeft:4 }}>
-                            switch
-                          </button>
-                        )}
                       </span>
                       <span style={{ fontSize:10.5, color:C.muted, marginLeft:21 }}>{field.sub}</span>
                     </div>
