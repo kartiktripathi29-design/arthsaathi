@@ -73,6 +73,11 @@ export const MERCHANT_RULES: Array<{ patterns: string[]; mega: MegaCategory; bra
   // ── SALARY KEYWORDS ──────────────────────────────────────────────────
   { patterns:['SALARY','SAL CR','SAL/','PAYROLL','STIPEND','WAGES','EMOLUMENT'], mega:'salary', brandName:'Salary' },
 
+  // ── FREELANCE / CONSULTING INCOME ────────────────────────────────────
+  // These are income credits, not expenses. Route to salary so they appear in income section.
+  { patterns:['FREELANCE','CONSULTING FEE','PROFESSIONAL FEE','CONSULTANCY','CONTRACT PAYMENT'], mega:'salary', brandName:'Freelance Income' },
+  { patterns:['BONUS','INCENTIVE','AWARD','COMMISSION','HONORARIUM'], mega:'salary', brandName:'Bonus/Incentive' },
+
   // ── CREDIT CARD PAYMENTS ─────────────────────────────────────────────
   { patterns:['CREDIT CARD','CC PAYMENT','CARD PAYMENT'], mega:'cc_payment', brandName:'Credit Card' },
   { patterns:['CRED MINT','CRED CLUB','CRED PAY','CRED '], mega:'cc_payment', brandName:'CRED' },
@@ -626,7 +631,14 @@ export function tagTransactions(transactions: any[], cards: Array<{bank:string; 
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 12. detectSalaryCandidates — preserved exactly
+// 12. SALARY DETECTION — 4-trigger decision tree
+//
+// Trigger 1: Salary keyword in narration + all months covered → auto-confirm
+// Trigger 2: Salary keyword + missing month(s) → auto-confirm found, ask about gaps
+// Trigger 3: No keyword but consistent pattern (same source, same date range,
+//            amount > expenses, n months) → auto-confirm
+// Trigger 4: Single month but credit from Pvt Ltd / registered company → likely salary
+// Trigger 5: Nothing clear → show candidates, ask user
 // ═══════════════════════════════════════════════════════════════════════════
 
 export interface SalaryCandidate {
@@ -639,43 +651,218 @@ export interface SalaryCandidate {
   confidence: 'high' | 'medium' | 'low'
 }
 
-export function detectSalaryCandidates(transactions: any[]): SalaryCandidate[] {
-  const credits = transactions.filter((t:any) => t.type === 'credit' && t.amount >= 5000)
+export interface SalaryDetectionResult {
+  // Auto-confirmed salary (don't show in picker — we're sure)
+  autoConfirmed: SalaryCandidate[]
+  // Uncertain candidates (show in picker — ask user)
+  candidates: SalaryCandidate[]
+  // Total months in the statement
+  statementMonths: number
+  // Months where salary keyword was found
+  salaryMonths: number
+  // Gap detected: salary keyword exists but not for all months
+  hasGap: boolean
+  // Message to show the user (if any)
+  message: string | null
+}
+
+// Patterns that are NEVER salary (these are other types of income or non-income)
+const NOT_SALARY_PATTERNS = [
+  'SELF TRANSFER', 'SELF TRF', 'SELF TR', 'OWN A/C', 'OWN ACCOUNT',
+  'FREELANCE', 'CONSULTING FEE', 'PROFESSIONAL FEE', 'CONTRACT PAYMENT',
+  'BONUS', 'INCENTIVE', 'AWARD', 'COMMISSION', 'HONORARIUM',
+  'INTEREST', 'INT.PD', 'INT PD', 'INT CR', 'INT.COLL',
+  'DIVIDEND', 'DIV CR', 'DIV ',
+  'CASHBACK', 'CASH BACK', 'REFUND', 'REVERSAL', 'RETURN',
+  'FD MATURITY', 'RD MATURITY', 'SWEEP',
+  'REDEMPTION', 'MF REDEMP',
+]
+
+const SALARY_KEYWORDS = ['SALARY', 'SAL CR', 'SAL/', 'PAYROLL', 'STIPEND', 'WAGES']
+const COMPANY_SUFFIXES = ['PVT LTD', 'PRIVATE LIMITED', 'LIMITED', 'LTD', 'LLP', 'CORP', 'CORPORATION', 'INC', 'TECHNOLOGIES', 'SOLUTIONS', 'SERVICES', 'INFOTECH', 'CONSULTING', 'ENTERPRISES']
+
+export function detectSalary(transactions: any[]): SalaryDetectionResult {
+  // ── Step 1: Determine statement span ──
+  const allDates = transactions.map((t: any) => t.date).filter(Boolean).sort()
+  const months = new Set(allDates.map((d: string) => d.substring(0, 7)))
+  const statementMonths = Math.max(1, months.size)
+
+  // ── Step 2: Filter to potential salary credits ──
+  const credits = transactions.filter((t: any) => {
+    if (t.type !== 'credit' || t.amount < 5000) return false
+    const desc = (t.description || '').toUpperCase()
+    if (NOT_SALARY_PATTERNS.some(p => desc.includes(p))) return false
+    return true
+  })
+
+  // ── Step 3: Group by source (company/sender) ──
   const groups: Record<string, any[]> = {}
-  credits.forEach((t:any) => {
-    const desc = (t.description || '').trim()
-    let key = desc.split(/[/—-]/)[0].trim().substring(0, 30).toUpperCase()
-    if (!key) key = 'UNKNOWN'
+  credits.forEach((t: any) => {
+    const desc = (t.description || '').toUpperCase().trim()
+    // Extract source: for NEFT use the company name after channel prefix
+    // "NEFT-SALARY-TECHVISTA SOLUTIONS" → "TECHVISTA SOLUTIONS"
+    // "NEFT CR-IFSC-COMPANY NAME-..." → "COMPANY NAME"
+    let key = extractSourceKey(desc)
     if (!groups[key]) groups[key] = []
     groups[key].push(t)
   })
 
+  const autoConfirmed: SalaryCandidate[] = []
   const candidates: SalaryCandidate[] = []
-  Object.entries(groups).forEach(([source, txns]) => {
-    if (txns.length < 1) return
-    const amounts = txns.map((t:any) => t.amount)
-    const avg = amounts.reduce((a:number, b:number) => a + b, 0) / amounts.length
-    const maxDev = txns.length > 1 ? Math.max(...amounts.map((a:number) => Math.abs(a - avg) / avg)) : 0
-    if (avg < 8000) return
+  let salaryMonths = 0
+  let hasGap = false
+  let message: string | null = null
 
-    // Enhanced: boost confidence if narration contains salary keywords
-    const hasSalaryKeyword = txns.some((t:any) => {
+  // ── Step 4: Evaluate each group against triggers ──
+  for (const [source, txns] of Object.entries(groups)) {
+    const amounts = txns.map((t: any) => t.amount)
+    const avg = amounts.reduce((a: number, b: number) => a + b, 0) / amounts.length
+    const maxDev = txns.length > 1 ? Math.max(...amounts.map((a: number) => Math.abs(a - avg) / avg)) : 0
+    if (avg < 8000) continue
+
+    const hasSalaryKw = txns.some((t: any) => {
       const d = (t.description || '').toUpperCase()
-      return d.includes('SALARY') || d.includes('SAL CR') || d.includes('SAL/') || d.includes('PAYROLL') || d.includes('STIPEND')
+      return SALARY_KEYWORDS.some(k => d.includes(k))
     })
 
-    let confidence: 'high' | 'medium' | 'low' = 'low'
-    if (hasSalaryKeyword && txns.length >= 1) confidence = 'high'
-    else if (txns.length >= 3 && maxDev < 0.20 && avg >= 15000) confidence = 'high'
-    else if (txns.length >= 2 && maxDev < 0.30 && avg >= 10000) confidence = 'medium'
-    else if (txns.length >= 1 && avg >= 15000) confidence = 'low'
-    else return
+    const hasCompanySuffix = COMPANY_SUFFIXES.some(s => source.includes(s))
 
-    candidates.push({ source, averageAmount: Math.round(avg), totalAmount: amounts.reduce((a:number,b:number) => a + b, 0), occurrences: txns.length, variance: maxDev, transactions: txns, confidence })
+    // Count unique months this source appears in
+    const sourceMonths = new Set(txns.map((t: any) => (t.date || '').substring(0, 7)))
+    const sourceMonthCount = sourceMonths.size
+
+    const candidate: SalaryCandidate = {
+      source,
+      averageAmount: Math.round(avg),
+      totalAmount: amounts.reduce((a: number, b: number) => a + b, 0),
+      occurrences: txns.length,
+      variance: maxDev,
+      transactions: txns,
+      confidence: 'low',
+    }
+
+    // ── TRIGGER 1: Salary keyword + covers all months → auto-confirm ──
+    if (hasSalaryKw && sourceMonthCount >= statementMonths) {
+      candidate.confidence = 'high'
+      salaryMonths = sourceMonthCount
+      autoConfirmed.push(candidate)
+      continue
+    }
+
+    // ── TRIGGER 2: Salary keyword + missing month(s) → auto-confirm found, flag gap ──
+    if (hasSalaryKw && sourceMonthCount < statementMonths && sourceMonthCount >= 1) {
+      candidate.confidence = 'high'
+      salaryMonths = sourceMonthCount
+      hasGap = true
+      autoConfirmed.push(candidate)
+      // Find which months are missing
+      const allMonthsList = Array.from(months).sort()
+      const missingMonths = allMonthsList.filter(m => !sourceMonths.has(m))
+      message = `Salary from "${source}" found for ${sourceMonthCount} of ${statementMonths} months. Missing: ${missingMonths.join(', ')}. Was there a job change, or is another credit your salary for those months?`
+      continue
+    }
+
+    // ── TRIGGER 3: No keyword but consistent pattern from same source ──
+    // Same source, similar amount (< 30% variance), appears 2+ months, roughly monthly
+    if (!hasSalaryKw && sourceMonthCount >= 2 && maxDev < 0.30 && avg >= 10000) {
+      // Check if roughly monthly: dates are 20-40 days apart
+      const sorted = txns.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      let monthlyCount = 0
+      for (let i = 1; i < sorted.length; i++) {
+        const gap = (new Date(sorted[i].date).getTime() - new Date(sorted[i - 1].date).getTime()) / (1000 * 60 * 60 * 24)
+        if (gap >= 20 && gap <= 40) monthlyCount++
+      }
+      const isMonthly = monthlyCount >= Math.floor((sorted.length - 1) * 0.7)
+
+      // Check if dates cluster around same day of month (within ±5 days)
+      const daysOfMonth = txns.map((t: any) => new Date(t.date).getDate())
+      const avgDay = daysOfMonth.reduce((s: number, d: number) => s + d, 0) / daysOfMonth.length
+      const dayVariance = Math.max(...daysOfMonth.map((d: number) => Math.abs(d - avgDay)))
+      const consistentDate = dayVariance <= 5
+
+      if (isMonthly && consistentDate) {
+        // High confidence if from a company, medium otherwise
+        if (hasCompanySuffix) {
+          candidate.confidence = 'high'
+          autoConfirmed.push(candidate)
+        } else {
+          candidate.confidence = 'medium'
+          autoConfirmed.push(candidate)
+        }
+        continue
+      }
+    }
+
+    // ── TRIGGER 4: Single month, but from a company (Pvt Ltd etc.) ──
+    if (statementMonths === 1 && sourceMonthCount === 1 && hasCompanySuffix && avg >= 15000) {
+      candidate.confidence = 'medium'
+      autoConfirmed.push(candidate)
+      continue
+    }
+
+    // ── TRIGGER 5: Can't determine — show as candidate for user to pick ──
+    // Only show if it's a meaningful amount and recurring or large enough
+    if (txns.length >= 2 && maxDev < 0.30 && avg >= 10000) {
+      candidate.confidence = 'low'
+      candidates.push(candidate)
+    } else if (txns.length === 1 && avg >= 20000) {
+      candidate.confidence = 'low'
+      candidates.push(candidate)
+    }
+  }
+
+  // If no salary was auto-confirmed and no message set, provide guidance
+  if (autoConfirmed.length === 0 && candidates.length === 0) {
+    message = 'No salary pattern detected. Please select which credits are your salary income.'
+  } else if (autoConfirmed.length === 0 && candidates.length > 0) {
+    message = 'Could not auto-detect salary. Please confirm which of these credits is your salary.'
+  }
+
+  return { autoConfirmed, candidates, statementMonths, salaryMonths, hasGap, message }
+}
+
+// ── Backward-compatible wrapper ──
+// The profile page calls detectSalaryCandidates(). This preserves that contract
+// but now uses the smart detection underneath.
+export function detectSalaryCandidates(transactions: any[]): SalaryCandidate[] {
+  const result = detectSalary(transactions)
+  // Return ONLY the uncertain candidates — auto-confirmed ones don't need user input
+  // The caller should also check result.autoConfirmed for already-detected salary
+  return result.candidates
+}
+
+// Extract a clean source key from a narration for grouping
+function extractSourceKey(desc: string): string {
+  // NEFT-SALARY-TECHVISTA SOLUTIONS → TECHVISTA SOLUTIONS
+  // NEFT CR-KKBK0000958-WHEELPORT LOGISTICS PRIVATE LIMITED-... → WHEELPORT LOGISTICS PRIVATE LIMITED
+  // NEFT-FREELANCE PAYMENT-DIGISPARK MEDIA → DIGISPARK MEDIA (but freelance is filtered earlier)
+  // UPI-PERSON NAME-VPA@BANK → PERSON NAME
+
+  // Try to extract company name from NEFT format
+  const neftParts = desc.split(/[-/]/).map(s => s.trim()).filter(s => s.length > 2)
+  // Skip channel identifiers and IFSCs
+  const skipPatterns = ['NEFT', 'NEFT CR', 'NEFT DR', 'RTGS', 'IMPS', 'UPI', 'NACH', 'ECS', 'ACH']
+  const meaningful = neftParts.filter(part => {
+    if (skipPatterns.includes(part)) return false
+    if (/^[A-Z]{4}\d{7}$/.test(part)) return false // IFSC code
+    if (/^\d{10,}$/.test(part)) return false // Reference number
+    if (/^[A-Z]{4}[A-Z0-9]{8,}$/.test(part)) return false // UTR
+    if (part === 'SALARY' || part === 'SAL CR' || part === 'PAYROLL') return false // Salary keyword (we want the company)
+    if (part === 'FREELANCE PAYMENT' || part === 'BONUS') return false
+    return true
   })
 
-  const order = { high: 0, medium: 1, low: 2 }
-  return candidates.sort((a, b) => order[a.confidence] - order[b.confidence] || b.averageAmount - a.averageAmount)
+  // The company name is usually the longest meaningful part, or the last one
+  if (meaningful.length > 0) {
+    // Prefer the part with a company suffix
+    const companyPart = meaningful.find(p => COMPANY_SUFFIXES.some(s => p.includes(s)))
+    if (companyPart) return companyPart.substring(0, 40)
+    // Otherwise take the longest part (likely the company name)
+    const longest = meaningful.sort((a, b) => b.length - a.length)[0]
+    return longest.substring(0, 40)
+  }
+
+  return desc.substring(0, 30)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
