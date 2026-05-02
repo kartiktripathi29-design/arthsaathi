@@ -4,7 +4,7 @@ import Link from 'next/link'
 import toast from 'react-hot-toast'
 import DematHoldings from '@/components/DematHoldings'
 import { useAppStore } from '@/store/AppStore'
-import { MEGA_CATEGORIES, MegaCategory, tagTransactions, detectSalaryCandidates, SalaryCandidate, generateExpenseSuggestions, ExpenseSuggestion, loadMerchantMemory, saveMerchantMemory, extractMerchantKey } from '@/lib/categories'
+import { MEGA_CATEGORIES, MegaCategory, tagTransactions, detectSalaryCandidates, detectSalary, SalaryCandidate, SalaryDetectionResult, generateExpenseSuggestions, ExpenseSuggestion, loadMerchantMemory, saveMerchantMemory, extractMerchantKey } from '@/lib/categories'
 
 const C = { fg:'#3A4B41', wheat:'#E6CFA7', wl:'#F5ECD8', wm:'#D4B98A', bg:'#FDFAF6', card:'#fff', border:'#E4DDD1', text:'#1C2B22', muted:'#7A8A7E', danger:'#B94040' }
 const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`
@@ -188,7 +188,7 @@ type MainTab = 'docs' | 'income' | 'expenses' | 'pnl'
 export default function ProfilePage() {
   const { salary, setSalary, aisData, setAisData } = useAppStore() as any
   const [mainTab, setMainTab] = useState<MainTab>('docs')
-  const [incTab, setIncTab] = useState<'review'|'salary'|'other'|'suggestions'>('review')
+  const [incTab, setIncTab] = useState<'review'|'salary'|'bonus'|'other'|'suggestions'>('review')
   const [salMode, setSalMode] = useState<'slip'|'offer'|'manual'>('slip')
   const [loadingDoc, setLoadingDoc] = useState<string|null>(null)
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
@@ -318,7 +318,6 @@ export default function ProfilePage() {
       setTaggedTxns([]); setBankPeriod(null); setBankMonths(1)
       return
     }
-    // Pool all transactions, tagging each with its source account
     const allTxns: any[] = []
     accounts.forEach(acc => {
       const txns = acc.data?.transactions || []
@@ -331,9 +330,59 @@ export default function ProfilePage() {
     const { months, from, to } = detectMonths(tagged)
     setBankMonths(months)
     setBankPeriod({ from, to })
-    const candidates = detectSalaryCandidates(tagged)
-    if (candidates.length > 0 && tickedSalary.size === 0) {
-      setTickedSalary(new Set(candidates[0].transactions.map((t:any) => t.id)))
+
+    // ── Smart salary detection (4-trigger decision tree) ──
+    const salaryResult = detectSalary(tagged.filter(t => !manualOverrides[t.id]))
+
+    if (salaryResult.autoConfirmed.length > 0) {
+      const primary = salaryResult.autoConfirmed[0]
+      const salaryIds = new Set(primary.transactions.map((t: any) => t.id))
+      setConfirmedSalaryIds(salaryIds)
+      setTickedSalary(salaryIds)
+
+      const monthlyNet = Math.round(primary.totalAmount / Math.max(1, months))
+      let employerName = primary.source || ''
+      employerName = employerName.replace(/^(NEFT|IMPS|UPI|RTGS)[-/\s]*/i, '').replace(/^(CR|DR)[-/\s]*/i, '').replace(/^SALARY[-/\s]*/i, '').trim()
+      if (employerName.length < 3) employerName = 'Detected'
+
+      setSalBreakdown(prev => ({
+        ...prev,
+        netSalary: prev.netSalary > 0 ? prev.netSalary : monthlyNet,
+        employerName: prev.employerName || employerName,
+      }))
+
+      // Auto-fill bonus from tagged bonus transactions
+      const bonusTxns = tagged.filter(t => t.type === 'credit' && t.brand === 'Bonus/Incentive')
+      if (bonusTxns.length > 0) {
+        const bonusTotal = bonusTxns.reduce((s: number, t: any) => s + t.amount, 0)
+        setSalBreakdown(prev => ({ ...prev, bonus: prev.bonus > 0 ? prev.bonus : bonusTotal, bonusRecurring: false }))
+      }
+
+      // Auto-fill freelance income total
+      const freelanceTxns = tagged.filter(t => t.type === 'credit' && t.brand === 'Freelance Income')
+      if (freelanceTxns.length > 0) {
+        const freelanceMonthly = Math.round(freelanceTxns.reduce((s: number, t: any) => s + t.amount, 0) / Math.max(1, months))
+        setSalBreakdown(prev => ({ ...prev, otherBenefits: prev.otherBenefits > 0 ? prev.otherBenefits : freelanceMonthly, otherBenefitsRecurring: true }))
+      }
+
+      if (!salaryResult.hasGap) {
+        toast.success(`Salary auto-detected: ${fmt(monthlyNet)}/mo from ${employerName}`, { duration: 4000 })
+        setSalCardOpen(false)
+      } else {
+        toast(`Salary found for ${salaryResult.salaryMonths} of ${salaryResult.statementMonths} months`, { icon: '⚠️', duration: 5000 })
+        setSalCardOpen(true)
+      }
+
+      if (salaryResult.message) {
+        setTimeout(() => toast(salaryResult.message!, { icon: '💡', duration: 6000 }), 1000)
+      }
+    } else if (salaryResult.candidates.length > 0) {
+      // Uncertain — show picker
+      setTickedSalary(new Set(salaryResult.candidates[0].transactions.map((t: any) => t.id)))
+      setSalCardOpen(true)
+    } else {
+      // Nothing found
+      setSalCardOpen(true)
     }
   }
 
@@ -455,7 +504,8 @@ export default function ProfilePage() {
 
   const allCredits = useMemo(() => taggedTxns.filter(t => t.type === 'credit').sort((a,b) => b.amount - a.amount), [taggedTxns])
   const largeCredits = useMemo(() => allCredits.filter(t => t.amount >= 5000), [allCredits])
-  const salaryCandidates = useMemo(() => detectSalaryCandidates(taggedTxns.filter(t => !manualOverrides[t.id])), [taggedTxns, manualOverrides])
+  const salaryDetection = useMemo(() => detectSalary(taggedTxns.filter(t => !manualOverrides[t.id])), [taggedTxns, manualOverrides])
+  const salaryCandidates = salaryDetection.candidates
 
   const roundtripPairs = useMemo(() => {
     const credits = taggedTxns.filter(t => t.type === 'credit')
@@ -1171,6 +1221,7 @@ export default function ProfilePage() {
           <div style={{ display:'flex', borderBottom:`1px solid ${C.border}`, marginBottom:18, gap:0, overflowX:'auto' as const }}>
             <button onClick={() => setIncTab('review')} style={S.stab(incTab==='review')}>🔍 Smart Review</button>
             <button onClick={() => setIncTab('salary')} style={S.stab(incTab==='salary')}>📄 Salary</button>
+            <button onClick={() => setIncTab('bonus')} style={S.stab(incTab==='bonus')}>🎁 Bonus</button>
             <button onClick={() => setIncTab('other')} style={S.stab(incTab==='other')}>🏦 Other Income</button>
             {bankAccounts.length > 0 && (
               <button onClick={() => setIncTab('suggestions')} style={S.stab(incTab==='suggestions')}>
@@ -1395,9 +1446,6 @@ export default function ProfilePage() {
                   { key:'netSalary' as const, icon:'💵', label:'Take-home (net)', sub:'What hits your bank', tag:null },
                   { key:'employeePF' as const, icon:'🏛️', label:'Employee PF', sub:'Deducted from salary', tag:{ text:'→ 80C ✓', bg:'#EEF2EE', color:'#2A7A4A' } },
                   { key:'employerPF' as const, icon:'🏢', label:'Employer PF', sub:'Direct to PF account, not via salary', tag:{ text:'wealth tracker', bg:'#F5F5F0', color:C.muted } },
-                  { key:'bonus' as const, icon:'🎁', label:'Bonus', sub:salBreakdown.bonusRecurring ? 'Monthly recurring' : 'One-time · added to Annual only', tag:{ text:salBreakdown.bonusRecurring?'recurring':'one-time', bg:salBreakdown.bonusRecurring?'#EEF2EE':'#FBF6EE', color:salBreakdown.bonusRecurring?'#2A7A4A':'#8A6A1A' }, toggle:'bonusRecurring' as const },
-                  { key:'incentive' as const, icon:'🏆', label:'Incentive', sub:'Monthly recurring incentive/commission', tag:null },
-                  { key:'otherBenefits' as const, icon:'🍽️', label:'Other benefits', sub:salBreakdown.otherBenefitsRecurring ? 'Monthly recurring (LTA, allowances)' : 'One-time (ESOP, accommodation)', tag:{ text:salBreakdown.otherBenefitsRecurring?'recurring':'one-time', bg:salBreakdown.otherBenefitsRecurring?'#EEF2EE':'#FBF6EE', color:salBreakdown.otherBenefitsRecurring?'#2A7A4A':'#8A6A1A' }, toggle:'otherBenefitsRecurring' as const },
                 ].map(field => (
                   <div key={field.key} style={S.row}>
                     <div style={{ flex:1 }}>
@@ -1443,10 +1491,100 @@ export default function ProfilePage() {
 
               <div style={{ display:'flex', gap:8, marginTop:12 }}>
                 <button onClick={() => setIncTab('review')} style={{ ...S.btn(false), padding:'10px 16px' }}>← Back</button>
-                <button onClick={() => setIncTab('other')} style={{ ...S.btn(true), flex:1 }}>Next: Other Income →</button>
+                <button onClick={() => setIncTab('bonus')} style={{ ...S.btn(true), flex:1 }}>Next: Bonus →</button>
               </div>
             </div>
           )}
+
+          {/* BONUS TAB */}
+          {incTab==='bonus' && (() => {
+            const bonusTxns = taggedTxns.filter(t => t.type === 'credit' && t.brand === 'Bonus/Incentive')
+            const freelanceTxns = taggedTxns.filter(t => t.type === 'credit' && t.brand === 'Freelance Income')
+            const bonusTotal = bonusTxns.reduce((s: number, t: any) => s + t.amount, 0)
+            const freelanceTotal = freelanceTxns.reduce((s: number, t: any) => s + t.amount, 0)
+            const freelanceMonthly = Math.round(freelanceTotal / Math.max(1, bankMonths))
+
+            return (
+              <div>
+                {/* Auto-detected bonus */}
+                {bonusTxns.length > 0 && (
+                  <div style={S.card}>
+                    <div style={{ ...S.cardHead, background:'#EEF2EE', borderColor:'#C8D8C8' }}>
+                      <span>🎁 Bonus / Incentive detected from bank statement</span>
+                      <span style={{ fontSize:12, fontWeight:700, color:C.fg }}>{fmt(bonusTotal)}</span>
+                    </div>
+                    {bonusTxns.map((t: any, i: number) => (
+                      <div key={t.id} style={{ display:'grid', gridTemplateColumns:'80px 1fr 100px', padding:'8px 14px', borderBottom: i < bonusTxns.length - 1 ? '1px solid #FAF7F2' : 'none', fontSize:12, gap:8, alignItems:'center' }}>
+                        <span style={{ color:C.muted }}>{t.date}</span>
+                        <span style={{ color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>{t.description}</span>
+                        <span style={{ color:'#2A7A4A', fontWeight:600, textAlign:'right' as const }}>+{fmt(t.amount)}</span>
+                      </div>
+                    ))}
+                    <div style={{ ...S.row, background:C.wl, fontWeight:600, fontSize:12, color:C.fg }}>
+                      <span>Total bonus (one-time)</span>
+                      <span>{fmt(bonusTotal)}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Auto-detected freelance */}
+                {freelanceTxns.length > 0 && (
+                  <div style={S.card}>
+                    <div style={{ ...S.cardHead, background:'#EEF4FD', borderColor:'#B5D4F4' }}>
+                      <span>💻 Freelance / Consulting income detected</span>
+                      <span style={{ fontSize:12, fontWeight:700, color:'#2A5A8A' }}>{fmt(freelanceTotal)} ({fmt(freelanceMonthly)}/mo)</span>
+                    </div>
+                    {freelanceTxns.map((t: any, i: number) => (
+                      <div key={t.id} style={{ display:'grid', gridTemplateColumns:'80px 1fr 100px', padding:'8px 14px', borderBottom: i < freelanceTxns.length - 1 ? '1px solid #FAF7F2' : 'none', fontSize:12, gap:8, alignItems:'center' }}>
+                        <span style={{ color:C.muted }}>{t.date}</span>
+                        <span style={{ color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>{t.description}</span>
+                        <span style={{ color:'#2A7A4A', fontWeight:600, textAlign:'right' as const }}>+{fmt(t.amount)}</span>
+                      </div>
+                    ))}
+                    <div style={{ ...S.row, background:C.wl, fontWeight:600, fontSize:12, color:C.fg }}>
+                      <span>Monthly average</span>
+                      <span>{fmt(freelanceMonthly)}/mo</span>
+                    </div>
+                  </div>
+                )}
+
+                {bonusTxns.length === 0 && freelanceTxns.length === 0 && (
+                  <div style={S.insight}>No bonus or freelance income detected from your bank statement. You can add manually below.</div>
+                )}
+
+                {/* Manual editable fields */}
+                <div style={S.card}>
+                  <div style={S.cardHead}>Editable bonus & other variable income</div>
+                  {[
+                    { key:'bonus' as const, icon:'🎁', label:'Bonus', sub: salBreakdown.bonusRecurring ? 'Monthly recurring' : 'One-time · added to annual only', toggle:'bonusRecurring' as const },
+                    { key:'incentive' as const, icon:'🏆', label:'Incentive / Commission', sub:'Monthly recurring' },
+                    { key:'otherBenefits' as const, icon:'💻', label:'Freelance / Other benefits', sub: salBreakdown.otherBenefitsRecurring ? 'Monthly recurring' : 'One-time', toggle:'otherBenefitsRecurring' as const },
+                  ].map(field => (
+                    <div key={field.key} style={S.row}>
+                      <div style={{ flex:1 }}>
+                        <span style={{ display:'flex', alignItems:'center', gap:7, marginBottom:2 }}>
+                          <span style={{ fontSize:14 }}>{field.icon}</span>
+                          <span>{field.label}</span>
+                          {'toggle' in field && field.toggle && (
+                            <button onClick={() => setSalBreakdown(prev => ({ ...prev, [field.toggle!]: !prev[field.toggle!] }))} style={{ fontSize:9, padding:'1px 6px', borderRadius:3, border:`1px solid ${C.border}`, background:C.card, color:C.muted, cursor:'pointer', fontFamily:'inherit', marginLeft:4 }}>
+                              {(salBreakdown as any)[field.toggle] ? 'recurring' : 'one-time'} · switch
+                            </button>
+                          )}
+                        </span>
+                        <span style={{ fontSize:10.5, color:C.muted, marginLeft:21 }}>{field.sub}</span>
+                      </div>
+                      <AmtInput value={salBreakdown[field.key]} onChange={v => setSalBreakdown(prev => ({ ...prev, [field.key]: v }))} />
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display:'flex', gap:8, marginTop:12 }}>
+                  <button onClick={() => setIncTab('salary')} style={{ ...S.btn(false), padding:'10px 16px' }}>← Back</button>
+                  <button onClick={() => setIncTab('other')} style={{ ...S.btn(true), flex:1 }}>Next: Other Income →</button>
+                </div>
+              </div>
+            )
+          })()}
 
           {incTab==='other' && (
             <div>
@@ -1523,7 +1661,7 @@ export default function ProfilePage() {
                 })}
               </div>
               <div style={{ display:'flex', gap:8 }}>
-                <button onClick={() => setIncTab('salary')} style={{ ...S.btn(false), padding:'10px 16px' }}>← Back</button>
+                <button onClick={() => setIncTab('bonus')} style={{ ...S.btn(false), padding:'10px 16px' }}>← Back</button>
                 <button onClick={() => bankAccounts.length > 0 ? setIncTab('suggestions') : setMainTab('expenses')} style={{ ...S.btn(true), flex:1 }}>
                   {bankAccounts.length > 0 ? 'Next: Apply to Expenses →' : 'Next: Expenses →'}
                 </button>
