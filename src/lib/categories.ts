@@ -76,7 +76,7 @@ export const MERCHANT_RULES: Array<{ patterns: string[]; mega: MegaCategory; bra
   // ── FREELANCE / CONSULTING INCOME ────────────────────────────────────
   // These are income credits, not expenses. Route to salary so they appear in income section.
   { patterns:['FREELANCE','CONSULTING FEE','PROFESSIONAL FEE','CONSULTANCY','CONTRACT PAYMENT'], mega:'salary', brandName:'Freelance Income' },
-  { patterns:['BONUS','INCENTIVE','AWARD','COMMISSION','HONORARIUM'], mega:'salary', brandName:'Bonus/Incentive' },
+  { patterns:['BONUS','BONU','INCENTIVE','AWARD','COMMISSION','HONORARIUM','PERF BONUS','PERFORMANCE BONUS','PROJECT BONUS','DIWALI BONUS','ANNUAL BONUS','JOINING BONUS'], mega:'salary', brandName:'Bonus/Incentive' },
 
   // ── CREDIT CARD PAYMENTS ─────────────────────────────────────────────
   { patterns:['CREDIT CARD','CC PAYMENT','CARD PAYMENT'], mega:'cc_payment', brandName:'Credit Card' },
@@ -160,8 +160,9 @@ export const MERCHANT_RULES: Array<{ patterns: string[]; mega: MegaCategory; bra
   // ── INTEREST / DIVIDENDS (credits) ───────────────────────────────────
   { patterns:['INT.PD','INT PD','INTEREST PAID','INTEREST CR','INTEREST ON','INT.COLL','INT CR'], mega:'interest', brandName:'Bank Interest' },
   { patterns:['FD INTEREST','FD MATURITY','RD MATURITY'], mega:'interest', brandName:'FD Interest' },
-  { patterns:['DIVIDEND','DIV CREDIT','DIV CR','DIV '], mega:'interest', brandName:'Dividend' },
-  { patterns:['NHPC','COAL INDIA','POWER FINANCE','POWERGRID','ONGC','NTPC','ITC','VEDANTA','INFOSYS','TCS','RELIANCE','TATA'], mega:'interest', brandName:'Dividend' },
+  { patterns:['DIVIDEND','DIV CREDIT','DIV CR'], mega:'interest', brandName:'Dividend' },
+  // Note: Do NOT add broad company names like TATA, RELIANCE here — they match TATA 1MG, RELIANCE JIO etc.
+  // Dividend detection should rely on the word DIVIDEND in the narration, not company names.
   { patterns:['ECS Credit','ECS CR'], mega:'interest', brandName:'ECS Credit' },
 
   // ── TRANSPORT ────────────────────────────────────────────────────────
@@ -209,7 +210,7 @@ export const MERCHANT_RULES: Array<{ patterns: string[]; mega: MegaCategory; bra
   // ── HOUSING & EMI/LOAN ───────────────────────────────────────────────
   { patterns:['RENT','HOUSE RENT','HOME LOAN','MORTGAGE'], mega:'housing' },
   { patterns:['NOBROKER','MAGICBRICKS','99ACRES','HOUSING.COM','NESTAWAY','OYO LIFE'], mega:'housing', brandName:'Housing' },
-  { patterns:['URBAN COMPANY','URBAN CLAP','URBANCLAP'], mega:'housing', brandName:'Home Services' },
+  { patterns:['URBAN COMPANY','URBAN CLAP','URBANCLAP'], mega:'misc', brandName:'Home Services' },
   { patterns:['MAINTENANCE','SOCIETY','RWA','APARTMENT'], mega:'housing', brandName:'Society' },
   // EMI / Lender patterns
   { patterns:['EMI','LOAN REPAY','LOAN EMI','HOME LOAN','HOUSING LOAN','PERSONAL LOAN','EDUCATION LOAN','GOLD LOAN','CONSUMER DURABLE','CAR LOAN','VEHICLE LOAN','AUTO LOAN'], mega:'housing', brandName:'EMI/Loan' },
@@ -222,7 +223,9 @@ export const MERCHANT_RULES: Array<{ patterns: string[]; mega: MegaCategory; bra
   // BNPL / Micro-lenders
   { patterns:['SAMSUNG FINANCE','APPLE FINANCE','ZESTMONEY','SIMPL','LAZYPAY','KISSHT','SLICE','UNI CARD','ONECARD','FLEXMONEY'], mega:'shopping', brandName:'BNPL EMI' },
   { patterns:['NAVI FINSERV','MONEYVIEW','MONEY VIEW','EARLY SALARY','EARLYSALARY','KREDITBEE','CASHE','FIBE','MPOKKET','PREFR','LENDINGKART','INDIFI','STASHFIN'], mega:'housing', brandName:'Personal Loan EMI' },
-  { patterns:['NACH','NACH DR','NACH DEBIT','ACH D-','ECS DR','ECS DEBIT'], mega:'housing', brandName:'EMI/Loan' },
+  // Note: NACH/ECS are auto-debit channels, NOT categories. Specific NACH transactions 
+  // are caught by their content above (LIC → insurance, AXIS BLUECHIP → investments, etc.)
+  // Do NOT add bare 'NACH' here — it catches insurance, SIPs, PPF, NPS as EMIs.
 
   // ── INSURANCE ────────────────────────────────────────────────────────
   { patterns:['LIC OF INDIA','LIC PREMIUM','LIC INS','LIC-','LIC ','LIFE INSURANCE'], mega:'insurance', brandName:'LIC' },
@@ -609,14 +612,14 @@ export function tagTransactions(transactions: any[], cards: Array<{bank:string; 
     }
 
     // Auto-route dividends to interest
-    if (t.type === 'credit' && (desc.includes('DIVIDEND') || desc.includes('DIV ') || desc.includes('DIVID'))) {
+    if (t.type === 'credit' && (desc.includes('DIVIDEND') || desc.includes('DIV CREDIT') || desc.includes('DIV CR'))) {
       mega = 'interest'
       brand = brand || 'Dividend'
       confidence = 0.90
     }
 
     // Interest credits
-    if (t.type === 'credit' && mega === 'misc' && (desc.includes('INT') || desc.includes('INTEREST'))) {
+    if (t.type === 'credit' && mega === 'misc' && (desc.includes('INTEREST') || desc.includes('INT.PD') || desc.includes('INT PD') || desc.includes('INT CR') || desc.includes('INT.COLL'))) {
       mega = 'interest'
       brand = 'Bank Interest'
       confidence = 0.85
@@ -672,7 +675,7 @@ const NOT_SALARY_PATTERNS = [
   'FREELANCE', 'CONSULTING FEE', 'PROFESSIONAL FEE', 'CONTRACT PAYMENT',
   'BONUS', 'INCENTIVE', 'AWARD', 'COMMISSION', 'HONORARIUM',
   'INTEREST', 'INT.PD', 'INT PD', 'INT CR', 'INT.COLL',
-  'DIVIDEND', 'DIV CR', 'DIV ',
+  'DIVIDEND', 'DIV CR', 'DIV CREDIT',
   'CASHBACK', 'CASH BACK', 'REFUND', 'REVERSAL', 'RETURN',
   'FD MATURITY', 'RD MATURITY', 'SWEEP',
   'REDEMPTION', 'MF REDEMP',
@@ -1020,7 +1023,7 @@ export function detectRecurringPatterns(transactions: any[]): RecurringPattern[]
     const { mega } = matchMega(sorted[0].description)
     let type: RecurringPattern['type'] = 'UNKNOWN'
     const n = (sorted[0].description || '').toUpperCase()
-    if (n.includes('EMI') || n.includes('LOAN') || n.includes('NACH') || n.includes('BAJAJ') || n.includes('HDFC LTD')) type = 'EMI'
+    if (n.includes('EMI') || n.includes('LOAN') || n.includes('BAJAJ') || n.includes('HDFC LTD')) type = 'EMI'
     else if (mega === 'investments_regular' || mega === 'investments_elss') type = 'SIP'
     else if (mega === 'housing' && avg > 5000) type = 'RENT'
     else if (avg < 2000 && (mega === 'entertainment' || mega === 'utilities')) type = 'SUBSCRIPTION'
@@ -1066,7 +1069,7 @@ export function detectIncome(transactions: any[]): IncomeBreakdown {
       result.selfTransfers.push(t)
     } else if (n.includes('SALARY') || n.includes('SAL CR') || n.includes('SAL/') || n.includes('PAYROLL') || n.includes('STIPEND')) {
       result.salary.push(t)
-    } else if (n.includes('DIVIDEND') || n.includes('DIV CR') || n.includes('DIV ')) {
+    } else if (n.includes('DIVIDEND') || n.includes('DIV CR') || n.includes('DIV CREDIT')) {
       result.dividends.push(t)
     } else if (n.includes('INTEREST') || n.includes('INT.PD') || n.includes('INT PD') || n.includes('INT CR') || n.includes('INT.COLL')) {
       result.interest.push(t)
@@ -1125,7 +1128,7 @@ export function detectInsights(transactions: any[], monthlyIncome: number): Fina
   const debits = transactions.filter((t: any) => t.type === 'debit')
   const emiTransactions = debits.filter((t: any) => {
     const d = (t.description || '').toUpperCase()
-    return d.includes('EMI') || d.includes('LOAN') || d.includes('NACH') || (t.mega === 'housing' && t.amount > 3000)
+    return d.includes('EMI') || d.includes('LOAN') || (t.mega === 'housing' && t.amount > 3000)
   })
   const totalEMI = emiTransactions.reduce((s: number, t: any) => s + t.amount, 0)
   const months = Math.max(1, new Set(transactions.map((t: any) => (t.date || '').substring(0, 7))).size)

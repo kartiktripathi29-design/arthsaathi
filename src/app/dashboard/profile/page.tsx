@@ -150,30 +150,34 @@ function computePnL(transactions: any[], months: number, confirmedDetections: Re
 // ── REVIEW TAB: Bucket definitions ──
 const REVIEW_BUCKETS = {
   income: [
-    { id:'salary', icon:'💰', label:'Salary', megas:['salary'] as MegaCategory[] },
-    { id:'bonus', icon:'🎁', label:'Bonus', megas:[] as MegaCategory[], brandMatch:['Bonus/Incentive'] },
-    { id:'other_income', icon:'💼', label:'Other income', megas:[] as MegaCategory[], brandMatch:['Freelance Income'] },
-    { id:'transfers', icon:'🔄', label:'Transfers', megas:['transfer'] as MegaCategory[] },
-    { id:'dividends', icon:'💸', label:'Dividend / interest', megas:['interest','cashback'] as MegaCategory[] },
+    { id:'salary', icon:'💰', label:'Salary', megas:['salary'] as MegaCategory[], descMatch:['SALARY','SAL CR','SAL/','PAYROLL','STIPEND'] },
+    { id:'bonus', icon:'🎁', label:'Bonus', megas:[] as MegaCategory[], brandMatch:['Bonus/Incentive'], descMatch:['BONUS','BONU','PERF BONUS','INCENTIVE','AWARD','DIWALI BONUS','PROJECT BONUS','JOINING BONUS','ANNUAL BONUS'] },
+    { id:'freelance', icon:'💼', label:'Freelance / other income', megas:[] as MegaCategory[], brandMatch:['Freelance Income'], descMatch:['FREELANCE','CONSULTING FEE','PROFESSIONAL FEE','CONTRACT PAYMENT'] },
+    { id:'self_transfer', icon:'🔄', label:'Self-transfers (not income)', megas:[] as MegaCategory[], descMatch:['SELF TRANSFER','SELF TRF','OWN A/C','OWN ACCOUNT'] },
+    { id:'transfers', icon:'👤', label:'Person transfers', megas:['transfer'] as MegaCategory[] },
+    { id:'dividends', icon:'💸', label:'Dividend / interest', megas:['interest','cashback'] as MegaCategory[], descMatch:['INTEREST','INT.PD','INT CR','INT.COLL','DIVIDEND','DIV CR','FD INTEREST','CASHBACK','CASH BACK','REFUND'] },
   ],
   expenses: [
-    { id:'rent', icon:'🏠', label:'House rent', megas:['housing'] as MegaCategory[] },
-    { id:'emi', icon:'🏦', label:'EMIs', megas:[] as MegaCategory[], descMatch:['EMI','LOAN','NACH','BAJAJ','HDFC LTD','PERSONAL LOAN','EDUCATION LOAN','GOLD LOAN','CAR LOAN'] },
-    { id:'insurance', icon:'🛡', label:'Insurance', megas:['insurance'] as MegaCategory[] },
+    { id:'rent', icon:'🏠', label:'House rent', megas:[] as MegaCategory[], descMatch:['RENT PAYMENT','HOUSE RENT'] },
+    { id:'emi', icon:'🏦', label:'EMIs / loans', megas:[] as MegaCategory[], descMatch:['EMI-','EMI ','HOME LOAN','CAR LOAN','PERSONAL LOAN','EDUCATION LOAN','GOLD LOAN','CONSUMER DURABLE','LAPTOP LOAN','VEHICLE LOAN','BAJAJ FINANCE','BAJAJ FINSERV','BAJAJFIN','HDFC LTD','HDFCHL','HDFCCL','HDFCPL','HDFCGL','HDFCDL','HDFCLL','LOAN REPAY'] },
+    { id:'insurance', icon:'🛡', label:'Insurance', megas:['insurance'] as MegaCategory[], descMatch:['LIC PREMIUM','LIC-','LIC ','NACH-LIC','NACH/LIC','STAR HEALTH','NACH-STAR','NACH/STAR','INSURANCE','MEDICLAIM','ICICI LOMBARD','HDFC ERGO','PREMIUM-POL','NIVA BUPA','CARE HEALTH','MAX LIFE','HDFC LIFE','SBI LIFE','TATA AIA','GO DIGIT','ACKO'] },
+    { id:'cc_payment', icon:'💳', label:'Credit card payments', megas:['cc_payment'] as MegaCategory[], descMatch:['CC AUTOPAY','CC PAYMENT','CREDIT CARD','CRED MINT','CRED PAY','CRED CLUB','AMEX CC','SIMPLY SAVE CC','REGALIA CC'] },
     { id:'fuel', icon:'⛽', label:'Fuel / transport', megas:['transport'] as MegaCategory[] },
-    { id:'utilities', icon:'⚡', label:'Utilities', megas:['utilities'] as MegaCategory[] },
+    { id:'utilities', icon:'⚡', label:'Utilities', megas:['utilities'] as MegaCategory[], descMatch:['ELECTRICITY','BESCOM','BWSSB','WATER BILL','BROADBAND','AIRTEL','JIO','RECHARGE','GAS CYLINDER','LPG'] },
     { id:'food', icon:'🍽', label:'Food / dining', megas:['food'] as MegaCategory[] },
     { id:'shopping', icon:'🛍', label:'Shopping', megas:['shopping'] as MegaCategory[] },
     { id:'healthcare', icon:'💊', label:'Healthcare', megas:['healthcare'] as MegaCategory[] },
     { id:'entertainment', icon:'🎬', label:'Entertainment', megas:['entertainment'] as MegaCategory[] },
-    { id:'cc_payment', icon:'💳', label:'Credit card', megas:['cc_payment'] as MegaCategory[] },
+    { id:'home_services', icon:'🏠', label:'Home services', megas:[] as MegaCategory[], descMatch:['URBAN COMPANY','URBAN CLAP','URBANCLAP','HOME CLEANING','PLUMBER','ELECTRICIAN'] },
+    { id:'tax', icon:'📋', label:'Tax payments', megas:[] as MegaCategory[], descMatch:['ADVANCE TAX','INCOME TAX','TAX PAYMENT','TDS','CHALLAN','NSDL/ADTAX'] },
     { id:'misc', icon:'📦', label:'Miscellaneous', megas:['misc'] as MegaCategory[] },
   ],
   savings: [
-    { id:'sip', icon:'📈', label:'SIPs', megas:['investments_regular'] as MegaCategory[] },
-    { id:'elss', icon:'🛡', label:'ELSS / 80C', megas:['investments_elss'] as MegaCategory[] },
-    { id:'fd_rd', icon:'🏛', label:'FD / RD', megas:[] as MegaCategory[], descMatch:['FD BOOKING','FIXED DEPOSIT','RECURRING DEPOSIT','RD INST'] },
-    { id:'ppf_nps', icon:'🏛', label:'PPF / NPS', megas:[] as MegaCategory[], descMatch:['PPF','NPS','NATIONAL PENSION','PUBLIC PROVIDENT'] },
+    { id:'sip', icon:'📈', label:'SIPs (mutual fund)', megas:[] as MegaCategory[], descMatch:['MUTUAL FUND SIP','MUTUAL FUND','SIP-','SIP ','NACH/AXIS','NACH-AXIS','NACH/HDFC','NACH-HDFC','NACH/PPFAS','NACH-PPFAS','NACH/SBI MF','NACH-SBI MF','NACH/NIPPON','NACH-NIPPON','NACH/DSP','NACH-DSP','NACH/MIRAE','NACH-MIRAE','NACH/QUANT','NACH-QUANT','NACH/CANARA','NACH-CANARA','NACH-MUTUAL','BLUECHIP','MID CAP','PARAG PARIKH','FLEXI CAP','AXIS BLUECHIP','HDFC MID CAP'] },
+    { id:'stocks', icon:'📊', label:'Stock purchases', megas:[] as MegaCategory[], descMatch:['ZERODHA','STOCK PURCHASE','GROWW','ANGELONE','ANGEL ONE','UPSTOX','DHAN ','KITE ','5PAISA'] },
+    { id:'elss', icon:'🛡', label:'ELSS / 80C', megas:['investments_elss'] as MegaCategory[], descMatch:['ELSS','TAX SAVING','TAX SAVER'] },
+    { id:'ppf_nps', icon:'🏛', label:'PPF / NPS', megas:[] as MegaCategory[], descMatch:['PPF','PPF DEPOSIT','NPS CONTRIBUTION','NPS TIER','NPS-','NATIONAL PENSION','PUBLIC PROVIDENT','NACH-PPF','NACH-NPS','NACH/PPF','NACH/NPS'] },
+    { id:'fd_rd', icon:'🏛', label:'FD / RD', megas:[] as MegaCategory[], descMatch:['FD BOOKING','FIXED DEPOSIT','RECURRING DEPOSIT','RD INST','FD OPENING'] },
   ],
 }
 
@@ -184,21 +188,21 @@ function assignToBucket(t: any): string {
   const mega: MegaCategory = t.mega || 'misc'
   const brand = t.brand || ''
 
-  // Brand matches first (bonus, freelance)
-  for (const b of ALL_BUCKET_LIST) {
-    if ('brandMatch' in b && b.brandMatch) {
-      if (b.brandMatch.some((bm: string) => brand === bm)) return b.id
-    }
-  }
-
-  // Description matches (EMI, FD, PPF etc)
+  // 1. Description matches first (EMI, BONUS, FD, PPF etc — most reliable)
   for (const b of ALL_BUCKET_LIST) {
     if ('descMatch' in b && b.descMatch) {
       if (b.descMatch.some((dm: string) => desc.includes(dm))) return b.id
     }
   }
 
-  // Mega category matches
+  // 2. Brand matches (bonus, freelance from tagTransactions)
+  for (const b of ALL_BUCKET_LIST) {
+    if ('brandMatch' in b && b.brandMatch) {
+      if (b.brandMatch.some((bm: string) => brand === bm)) return b.id
+    }
+  }
+
+  // 3. Mega category matches
   for (const b of ALL_BUCKET_LIST) {
     if (b.megas.includes(mega)) return b.id
   }
@@ -241,10 +245,14 @@ function ProfileContent() {
 
   // Review tab: bucket overrides (user drags txn from one bucket to another)
   const [bucketOverrides, setBucketOverrides] = useState<Record<string, string>>({})
-  const [openBuckets, setOpenBuckets] = useState<Set<string>>(new Set(['salary','emi','sip','rent']))
+  const [openBuckets, setOpenBuckets] = useState<Set<string>>(new Set())
   const [dragTxnId, setDragTxnId] = useState<string|null>(null)
   const [selectedTxn, setSelectedTxn] = useState<Record<string, string>>({})
 
+  // User classifications — answers to "what is this?" questions
+  // Key: pattern (counterparty name, NACH mandate, etc.) → bucket id
+  // Once answered, auto-applied forever
+  const [userClassifications, setUserClassifications] = useState<Record<string, string>>({})
   const [singleCategoryModal, setSingleCategoryModal] = useState<{ open:boolean; transaction:any|null }>({ open:false, transaction:null })
   const [pnlExpanded, setPnlExpanded] = useState<Record<string, boolean>>({})
 
@@ -308,6 +316,8 @@ function ProfileContent() {
       if (cas) setCasData(JSON.parse(cas))
       const bo = localStorage.getItem('av_bucket_overrides')
       if (bo) setBucketOverrides(JSON.parse(bo))
+      const uc = localStorage.getItem('av_user_classifications')
+      if (uc) setUserClassifications(JSON.parse(uc))
       loadSavedBankAccounts()
     } catch {}
   }, [])
@@ -409,6 +419,7 @@ function ProfileContent() {
   useEffect(() => { try { localStorage.setItem('av_confirmed_salary_ids', JSON.stringify(Array.from(confirmedSalaryIds))) } catch {} }, [confirmedSalaryIds])
   useEffect(() => { try { localStorage.setItem('av_parked_ids', JSON.stringify(Array.from(parkedIds))) } catch {} }, [parkedIds])
   useEffect(() => { try { localStorage.setItem('av_bucket_overrides', JSON.stringify(bucketOverrides)) } catch {} }, [bucketOverrides])
+  useEffect(() => { try { localStorage.setItem('av_user_classifications', JSON.stringify(userClassifications)) } catch {} }, [userClassifications])
   useEffect(() => { if (bankAccounts.length === 0) rebuildMergedTransactions(bankAccounts) }, [creditCards.length])
 
   const saveProfile = useCallback((exp=expenses, sav=savings, vari=variable) => {
@@ -435,18 +446,224 @@ function ProfileContent() {
   const pnl = useMemo(() => taggedTxns.length ? computePnL(taggedTxns, bankMonths, confirmedDetections, manualOverrides, confirmedSalaryIds, parkedIds) : null,
     [taggedTxns, bankMonths, confirmedDetections, manualOverrides, confirmedSalaryIds, parkedIds])
 
-  // ── Review tab: compute bucket assignments ──
-  const txnBuckets = useMemo(() => {
+  // ══════════════════════════════════════════════════════════════════════
+  // SMART CLASSIFICATION — ask when uncertain, remember forever
+  //
+  // Certain: auto-classify (keyword is explicit — SALARY, EMI, RENT, BONUS)
+  // Uncertain: generate question cards, user picks once, stored forever
+  // ══════════════════════════════════════════════════════════════════════
+
+  // Extract a "pattern key" for a transaction — used to match user answers to future transactions
+  function getPatternKey(t: any): string {
+    const desc = (t.description || '').toUpperCase()
+    // Person name is the strongest key
+    if (t.personName) return `PERSON:${t.personName.toUpperCase()}`
+    // NACH mandate — use the entity name after NACH-
+    const nachMatch = desc.match(/NACH[-/]([A-Z0-9 ]{3,30})/)
+    if (nachMatch) return `NACH:${nachMatch[1].trim()}`
+    // Company/brand
+    if (t.brand && t.brand !== 'Salary' && t.brand !== 'EMI/Loan') return `BRAND:${t.brand.toUpperCase()}`
+    // Fallback: first meaningful words
+    const words = desc.replace(/^(UPI|NEFT|IMPS|RTGS)[-/\s]*/i, '').substring(0, 30).trim()
+    return `DESC:${words}`
+  }
+
+  interface Question {
+    id: string
+    patternKey: string
+    description: string
+    amount: number
+    date: string
+    occurrences: number
+    monthlyAmount: number
+    question: string
+    options: Array<{ bucketId: string; label: string }>
+    txnIds: string[]
+  }
+
+  const { txnBuckets, questions } = useMemo(() => {
     const map: Record<string, any[]> = {}
     ALL_BUCKET_LIST.forEach(b => { map[b.id] = [] })
+    const qList: Question[] = []
+    const assignments: Record<string, string> = {}
+    const questionedPatterns = new Set<string>()
+
+    // ── Step 1: Auto-classify CERTAIN transactions ──
     taggedTxns.forEach(t => {
-      const overrideBucket = bucketOverrides[t.id]
-      const bucket = overrideBucket || assignToBucket(t)
+      // User override always wins
+      if (bucketOverrides[t.id]) { assignments[t.id] = bucketOverrides[t.id]; return }
+
+      // Check if user previously answered for this pattern
+      const pk = getPatternKey(t)
+      if (userClassifications[pk]) { assignments[t.id] = userClassifications[pk]; return }
+
+      const desc = (t.description || '').toUpperCase()
+      const brand = t.brand || ''
+
+      // ── CERTAIN: explicit keywords ──
+      // Salary: says SALARY
+      if (desc.includes('SALARY') || desc.includes('SAL CR') || desc.includes('PAYROLL')) { assignments[t.id] = 'salary'; return }
+      // Bonus: says BONUS
+      if (desc.includes('BONUS') || desc.includes('BONU')) { assignments[t.id] = 'bonus'; return }
+      // Freelance: says FREELANCE
+      if (desc.includes('FREELANCE') || desc.includes('CONSULTING FEE') || desc.includes('PROFESSIONAL FEE')) { assignments[t.id] = 'freelance'; return }
+      // Self-transfer: says SELF TRANSFER
+      if (desc.includes('SELF TRANSFER') || desc.includes('SELF TRF') || desc.includes('OWN A/C') || desc.includes('OWN ACCOUNT')) { assignments[t.id] = 'self_transfer'; return }
+      // EMI: says EMI
+      if (desc.match(/\bEMI[-\s]/) || desc.includes('HOME LOAN') || desc.includes('CAR LOAN') || desc.includes('PERSONAL LOAN') || desc.includes('EDUCATION LOAN') || desc.includes('GOLD LOAN') || desc.includes('LAPTOP LOAN') || desc.includes('CONSUMER DURABLE') || desc.includes('VEHICLE LOAN') || desc.includes('LOAN REPAY')) { assignments[t.id] = 'emi'; return }
+      // Rent: says RENT
+      if (desc.includes('RENT PAYMENT') || desc.includes('HOUSE RENT')) { assignments[t.id] = 'rent'; return }
+      // CC payment: says CC / CREDIT CARD
+      if (desc.includes('CC AUTOPAY') || desc.includes('CC PAYMENT') || desc.includes('CREDIT CARD') || desc.includes('CRED MINT') || desc.includes('CRED PAY')) { assignments[t.id] = 'cc_payment'; return }
+      // Interest: says INTEREST
+      if (desc.includes('INTEREST CREDIT') || desc.includes('INT.PD') || desc.includes('INT PD') || desc.includes('INT CR') || desc.includes('INT.COLL') || desc.includes('FD INTEREST')) { assignments[t.id] = 'dividends'; return }
+      // Dividend: says DIVIDEND
+      if (desc.includes('DIVIDEND') || desc.includes('DIV CREDIT') || desc.includes('DIV CR')) { assignments[t.id] = 'dividends'; return }
+      // Cashback/refund
+      if (desc.includes('CASHBACK') || desc.includes('CASH BACK') || desc.includes('REFUND') || desc.includes('REVERSAL')) { assignments[t.id] = 'dividends'; return }
+      // Insurance: says INSURANCE/PREMIUM/LIC
+      if (desc.includes('INSURANCE') || desc.includes('MEDICLAIM') || desc.includes('LIC PREMIUM') || desc.match(/\bLIC[-\s]/) || desc.includes('PREMIUM-POL')) { assignments[t.id] = 'insurance'; return }
+      // PPF/NPS: says PPF or NPS
+      if (desc.includes('PPF') || desc.includes('NPS CONTRIBUTION') || desc.includes('NPS TIER') || desc.includes('NATIONAL PENSION') || desc.includes('PUBLIC PROVIDENT')) { assignments[t.id] = 'ppf_nps'; return }
+      // Tax: says TAX
+      if (desc.includes('ADVANCE TAX') || desc.includes('INCOME TAX') || desc.includes('TAX PAYMENT') || desc.includes('CHALLAN') || desc.includes('NSDL/ADTAX')) { assignments[t.id] = 'tax'; return }
+      // ATM
+      if (desc.includes('ATM') || desc.includes('CASH WDL') || desc.includes('CASH WITHDRAWAL')) { assignments[t.id] = 'misc'; return }
+      // Mutual fund SIP: says MUTUAL FUND or BLUECHIP or MID CAP etc
+      if (desc.includes('MUTUAL FUND') || desc.includes('BLUECHIP') || desc.includes('MID CAP') || desc.includes('FLEXI CAP') || desc.includes('PARAG PARIKH') || desc.includes('AXIS BLUECHIP') || desc.includes('HDFC MID')) { assignments[t.id] = 'sip'; return }
+      // Stock purchase
+      if (desc.includes('STOCK PURCHASE') || desc.includes('ZERODHA') || desc.includes('GROWW') || desc.includes('ANGELONE') || desc.includes('UPSTOX')) { assignments[t.id] = 'stocks'; return }
+      // FD/RD
+      if (desc.includes('FIXED DEPOSIT') || desc.includes('FD BOOKING') || desc.includes('RECURRING DEPOSIT') || desc.includes('RD INST')) { assignments[t.id] = 'fd_rd'; return }
+
+      // ── CERTAIN: known merchants (from mega category) ──
+      const mega = t.mega as string
+      if (mega === 'food') { assignments[t.id] = 'food'; return }
+      if (mega === 'shopping') { assignments[t.id] = 'shopping'; return }
+      if (mega === 'transport') { assignments[t.id] = 'fuel'; return }
+      if (mega === 'utilities') { assignments[t.id] = 'utilities'; return }
+      if (mega === 'healthcare') { assignments[t.id] = 'healthcare'; return }
+      if (mega === 'entertainment') { assignments[t.id] = 'entertainment'; return }
+      if (mega === 'cc_payment') { assignments[t.id] = 'cc_payment'; return }
+      if (mega === 'insurance') { assignments[t.id] = 'insurance'; return }
+      if (mega === 'investments_elss') { assignments[t.id] = 'elss'; return }
+
+      // ── UNCERTAIN: mark for questioning ──
+      assignments[t.id] = '__uncertain__'
+    })
+
+    // ── Step 2: Group uncertain transactions by pattern key and generate questions ──
+    const uncertainGroups: Record<string, any[]> = {}
+    taggedTxns.forEach(t => {
+      if (assignments[t.id] !== '__uncertain__') return
+      const pk = getPatternKey(t)
+      if (!uncertainGroups[pk]) uncertainGroups[pk] = []
+      uncertainGroups[pk].push(t)
+    })
+
+    for (const [pk, group] of Object.entries(uncertainGroups)) {
+      const first = group[0]
+      const desc = (first.description || '').toUpperCase()
+      const total = group.reduce((s: number, t: any) => s + t.amount, 0)
+      const monthly = Math.round(total / Math.max(1, bankMonths))
+      const isCredit = first.type === 'credit'
+      const personName = first.personName || ''
+
+      // Build contextual question and options
+      let question = ''
+      let options: Array<{ bucketId: string; label: string }> = []
+
+      if (pk.startsWith('PERSON:') && !isCredit) {
+        question = `You pay ${personName} ${fmt(group[0].amount)} ${group.length > 1 ? 'every month' : ''}. What is this?`
+        options = [
+          { bucketId: 'rent', label: '🏠 Rent' },
+          { bucketId: 'transfers', label: '👤 Family / household' },
+          { bucketId: 'home_services', label: '🏠 Domestic help / services' },
+          { bucketId: 'misc', label: '📦 Something else' },
+        ]
+      } else if (desc.includes('NACH') && !isCredit) {
+        const entity = desc.replace(/^.*NACH[-/]/, '').split(/[-/]/)[0].trim()
+        question = `Auto-debit (NACH) of ${fmt(group[0].amount)} to "${entity}". What is this for?`
+        options = [
+          { bucketId: 'sip', label: '📈 Mutual fund SIP' },
+          { bucketId: 'emi', label: '🏦 EMI / loan repayment' },
+          { bucketId: 'insurance', label: '🛡 Insurance premium' },
+          { bucketId: 'ppf_nps', label: '🏛 PPF / NPS' },
+          { bucketId: 'utilities', label: '⚡ Utility bill' },
+          { bucketId: 'misc', label: '📦 Something else' },
+        ]
+      } else if (isCredit && !desc.includes('SALARY') && !desc.includes('SELF') && !desc.includes('INTEREST')) {
+        question = `Credit of ${fmt(first.amount)} — "${first.description?.substring(0, 40)}". What is this?`
+        options = [
+          { bucketId: 'salary', label: '💰 Salary' },
+          { bucketId: 'bonus', label: '🎁 Bonus / incentive' },
+          { bucketId: 'freelance', label: '💼 Freelance / consulting' },
+          { bucketId: 'dividends', label: '💸 Dividend / interest' },
+          { bucketId: 'self_transfer', label: '🔄 Self-transfer (not income)' },
+          { bucketId: 'misc', label: '📦 Something else' },
+        ]
+      } else {
+        question = `${fmt(first.amount)} — "${first.description?.substring(0, 40)}". What category?`
+        options = [
+          { bucketId: 'food', label: '🍽 Food / dining' },
+          { bucketId: 'shopping', label: '🛍 Shopping' },
+          { bucketId: 'fuel', label: '⛽ Fuel / transport' },
+          { bucketId: 'utilities', label: '⚡ Utilities' },
+          { bucketId: 'healthcare', label: '💊 Healthcare' },
+          { bucketId: 'entertainment', label: '🎬 Entertainment' },
+          { bucketId: 'home_services', label: '🏠 Home services' },
+          { bucketId: 'emi', label: '🏦 EMI / loan' },
+          { bucketId: 'misc', label: '📦 Other' },
+        ]
+      }
+
+      // Don't ask the same pattern twice
+      if (!questionedPatterns.has(pk)) {
+        questionedPatterns.add(pk)
+        qList.push({
+          id: pk,
+          patternKey: pk,
+          description: first.description || '',
+          amount: first.amount,
+          date: first.date || '',
+          occurrences: group.length,
+          monthlyAmount: monthly,
+          question,
+          options,
+          txnIds: group.map((t: any) => t.id),
+        })
+      }
+
+      // For now, put uncertain in misc until user answers
+      group.forEach((t: any) => { assignments[t.id] = 'misc' })
+    }
+
+    // Build final bucket map
+    taggedTxns.forEach(t => {
+      const bucket = assignments[t.id] || 'misc'
       if (map[bucket]) map[bucket].push(t)
       else if (map['misc']) map['misc'].push(t)
     })
-    return map
-  }, [taggedTxns, bucketOverrides])
+
+    // Sort questions: largest amounts first
+    qList.sort((a, b) => (b.monthlyAmount * b.occurrences) - (a.monthlyAmount * a.occurrences))
+
+    return { txnBuckets: map, questions: qList }
+  }, [taggedTxns, bucketOverrides, userClassifications, bankMonths])
+
+  // Answer a question — store classification forever, apply to all matching transactions
+  const answerQuestion = (q: Question, bucketId: string) => {
+    // Store the answer for this pattern
+    setUserClassifications(prev => ({ ...prev, [q.patternKey]: bucketId }))
+    // Also override all current transactions with this pattern
+    setBucketOverrides(prev => {
+      const updated = { ...prev }
+      q.txnIds.forEach(id => { updated[id] = bucketId })
+      return updated
+    })
+    const bucketInfo = ALL_BUCKET_LIST.find(b => b.id === bucketId)
+    toast.success(`Got it — "${q.description.substring(0, 25)}…" → ${bucketInfo?.label}. Remembered for next time.`)
+  }
 
   // ── File handlers (unchanged) ──
   const handleBankFile = async (file:File, password='') => {
@@ -477,7 +694,7 @@ function ProfileContent() {
       setUploadingAccountId(null)
       toast.success(`${bd.bank || 'Bank'} · ${bd.transactions?.length||0} transactions across ${period.months} month${period.months>1?'s':''}`, { id:tid, duration:5000 })
       // Auto-navigate to Review tab after upload
-      setTimeout(() => setMainTab('review'), 500)
+      setMainTab('review')
     } catch (e:any) {
       const errStr=(e.message||'').toLowerCase()
       if (errStr.includes('password')||errStr.includes('encrypted')) { setPwdModal({ open:true, type:'bank', file, error:'' }); setPwd(''); toast.dismiss(tid); return }
@@ -776,9 +993,57 @@ function ProfileContent() {
                 <div style={S.insight}>Upload a bank statement in Documents first.</div>
               ) : (
                 <>
-                  <div style={{ ...S.insight, marginBottom:16 }}>
-                    Drag transactions between buckets to reassign, or click a transaction and use the dropdown. Changes are remembered for future uploads.
-                  </div>
+                  {/* ── QUESTIONS: needs your input ── */}
+                  {questions.length > 0 && (
+                    <div style={{ marginBottom:20 }}>
+                      <div style={{ background:'#1E293B', borderRadius:8, padding:'12px 16px', marginBottom:12 }}>
+                        <p style={{ fontSize:10, color:'rgba(230,207,167,0.5)', letterSpacing:'0.08em', margin:'0 0 4px' }}>NEEDS YOUR INPUT</p>
+                        <p style={{ fontSize:13, color:'rgba(255,255,255,0.75)', margin:0, lineHeight:1.6 }}>
+                          {questions.length} transaction{questions.length > 1 ? 's' : ''} we're not sure about. Pick once — we'll remember forever.
+                        </p>
+                      </div>
+                      {questions.map(q => (
+                        <div key={q.id} style={{ ...S.card, border:`1px solid ${C.wm}` }}>
+                          <div style={{ padding:'12px 14px', background:C.wl, borderBottom:`1px solid ${C.wm}` }}>
+                            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10 }}>
+                              <div style={{ flex:1 }}>
+                                <p style={{ fontSize:13, fontWeight:600, color:C.text, margin:'0 0 4px' }}>{q.question}</p>
+                                <p style={{ fontSize:11, color:C.muted, margin:0 }}>
+                                  {q.description.substring(0, 50)}{q.description.length > 50 ? '…' : ''} · {q.date}
+                                  {q.occurrences > 1 && <span style={{ marginLeft:6, fontWeight:500 }}>× {q.occurrences} times</span>}
+                                </p>
+                              </div>
+                              <span style={{ fontSize:14, fontWeight:700, color: q.amount > 0 ? (q.txnIds.length > 0 && taggedTxns.find(t => t.id === q.txnIds[0])?.type === 'credit' ? '#1D9E75' : '#D85A30') : C.text, flexShrink:0 }}>
+                                {fmt(q.monthlyAmount)}{q.occurrences > 1 ? '/mo' : ''}
+                              </span>
+                            </div>
+                          </div>
+                          <div style={{ padding:'10px 14px', display:'flex', flexWrap:'wrap' as const, gap:6 }}>
+                            {q.options.map(opt => (
+                              <button key={opt.bucketId} onClick={() => answerQuestion(q, opt.bucketId)} style={{
+                                padding:'7px 14px', fontSize:11.5, fontWeight:500,
+                                background:C.card, border:`1px solid ${C.border}`, borderRadius:5,
+                                cursor:'pointer', fontFamily:'inherit', color:C.text,
+                                transition:'all 0.15s',
+                              }}
+                              onMouseEnter={e => { (e.target as HTMLElement).style.background = C.wl; (e.target as HTMLElement).style.borderColor = C.wm }}
+                              onMouseLeave={e => { (e.target as HTMLElement).style.background = C.card; (e.target as HTMLElement).style.borderColor = C.border }}
+                              >
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* ── CLASSIFIED BUCKETS ── */}
+                  {questions.length === 0 && (
+                    <div style={{ ...S.insight, marginBottom:16, background:'#EEF2EE', borderColor:'#C8D8C8' }}>
+                      All transactions classified. Drag between buckets or click ✎ to reassign. Changes are remembered forever.
+                    </div>
+                  )}
                   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
                     {(['income','expenses','savings'] as const).map(colKey => (
                       <div key={colKey}>
