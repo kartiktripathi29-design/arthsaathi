@@ -1,6 +1,7 @@
 'use client'
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'react'
 import Link from 'next/link'
+import { useSearchParams, useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import DematHoldings from '@/components/DematHoldings'
 import { useAppStore } from '@/store/AppStore'
@@ -61,9 +62,6 @@ const S = {
   upload: (done=false): React.CSSProperties => ({ border:`1.5px dashed ${done?C.fg:C.border}`, borderRadius:6, padding:14, textAlign:'center' as const, background:done?'#EEF2EE':C.wl, cursor:done?'default':'pointer', display:'flex', flexDirection:'column' as const, alignItems:done?'flex-start':'center', justifyContent:done?'flex-start':'center', gap:6, minHeight:130 }),
   bulkBar: { padding:'9px 14px', background:'#1E293B', color:'rgba(230,207,167,0.9)', fontSize:11.5, display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, flexWrap:'wrap' as const } as React.CSSProperties,
   bulkBtn: { padding:'4px 11px', borderRadius:3, fontSize:11, cursor:'pointer', border:'1px solid rgba(230,207,167,0.3)', background:'transparent', color:C.wheat, fontFamily:'inherit', whiteSpace:'nowrap' as const } as React.CSSProperties,
-  // Sidebar styles
-  sidebar: { width:180, flexShrink:0, borderRight:`1px solid ${C.border}`, paddingRight:16, marginRight:20 } as React.CSSProperties,
-  sideBtn: (on:boolean): React.CSSProperties => ({ display:'block', width:'100%', textAlign:'left' as const, padding:'10px 14px', fontSize:12.5, fontWeight:on?600:400, color:on?C.fg:C.muted, background:on?C.wl:'transparent', border:'none', borderRadius:6, cursor:'pointer', fontFamily:'inherit', marginBottom:4, transition:'background 0.15s' }),
   // Review tab bucket styles
   bucket: { background:C.card, border:`1px solid ${C.border}`, borderRadius:6, marginBottom:8, overflow:'hidden' } as React.CSSProperties,
   bucketHead: { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'9px 12px', cursor:'pointer', userSelect:'none' as const, fontSize:12.5 } as React.CSSProperties,
@@ -212,8 +210,15 @@ function assignToBucket(t: any): string {
 type MainTab = 'docs' | 'review' | 'reports' | 'analytics'
 
 export default function ProfilePage() {
+  return <Suspense fallback={<div style={{ padding:40, textAlign:'center', color:'#7A8A7E', fontFamily:'"Sora",sans-serif' }}>Loading…</div>}><ProfileContent /></Suspense>
+}
+
+function ProfileContent() {
   const { salary, setSalary, aisData, setAisData } = useAppStore() as any
-  const [mainTab, setMainTab] = useState<MainTab>('docs')
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const mainTab = (searchParams.get('tab') || 'docs') as MainTab
+  const setMainTab = (tab: MainTab) => router.push(tab === 'docs' ? '/dashboard/profile' : `/dashboard/profile?tab=${tab}`)
   const [loadingDoc, setLoadingDoc] = useState<string|null>(null)
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
   const [taggedTxns, setTaggedTxns] = useState<any[]>([])
@@ -657,25 +662,8 @@ export default function ProfilePage() {
         <p style={{ fontSize:13, color:C.muted, margin:0 }}>Your complete financial picture</p>
       </div>
 
-      {/* ── LAYOUT: sidebar + content ── */}
-      <div style={{ display:'flex', gap:0 }}>
-
-        {/* SIDEBAR */}
-        <div style={S.sidebar}>
-          {([
-            { key:'docs' as const, icon:'📁', label:'Documents' },
-            { key:'review' as const, icon:'🔍', label:'Review' },
-            { key:'reports' as const, icon:'📊', label:'Reports' },
-            { key:'analytics' as const, icon:'📈', label:'Analytics' },
-          ]).map(t => (
-            <button key={t.key} onClick={() => setMainTab(t.key)} style={S.sideBtn(mainTab===t.key)}>
-              <span style={{ marginRight:8 }}>{t.icon}</span>{t.label}
-            </button>
-          ))}
-        </div>
-
-        {/* CONTENT */}
-        <div style={{ flex:1, minWidth:0 }}>
+      {/* ── LAYOUT: content only (sidebar is in layout.tsx) ── */}
+      <div>
 
           {/* ════════════ DOCUMENTS TAB ════════════ */}
           {mainTab==='docs' && (
@@ -1057,7 +1045,6 @@ export default function ProfilePage() {
           )}
 
         </div>{/* end content */}
-      </div>{/* end sidebar+content flex */}
 
       {/* ── SINGLE CATEGORY MODAL ── */}
       {singleCategoryModal.open && singleCategoryModal.transaction && (

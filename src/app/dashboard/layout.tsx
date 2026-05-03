@@ -1,5 +1,5 @@
 'use client'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAppStore } from '@/store/AppStore'
@@ -10,6 +10,13 @@ const FREE_NAV = [
   { href:'/dashboard', icon:'📊', label:'Dashboard' },
   { href:'/dashboard/profile', icon:'👤', label:'My Profile' },
   { href:'/dashboard/tax', icon:'🧮', label:'Tax Optimiser' },
+]
+
+const PROFILE_SUBNAV = [
+  { key:'docs', icon:'📁', label:'Documents', query:'' },
+  { key:'review', icon:'🔍', label:'Review', query:'?tab=review' },
+  { key:'reports', icon:'📊', label:'Reports', query:'?tab=reports' },
+  { key:'analytics', icon:'📈', label:'Analytics', query:'?tab=analytics' },
 ]
 const PREMIUM_NAV = [
   { href:'/dashboard/invest', icon:'📈', label:'Investment Plan' },
@@ -34,6 +41,33 @@ function Sidebar() {
   const { user, logout } = useAppStore()
   const initials = user?.name?.split(' ').map((n:string)=>n[0]).slice(0,2).join('').toUpperCase() || '?'
   const isActive = (href:string) => href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(href)
+  const isProfile = pathname.startsWith('/dashboard/profile')
+
+  // Progressive unlock: check localStorage for what's been completed
+  const [unlocked, setUnlocked] = useState<Record<string,boolean>>({ docs:true, review:false, reports:false, analytics:false })
+  useEffect(() => {
+    try {
+      const banks = localStorage.getItem('av_banks')
+      const hasBanks = banks ? JSON.parse(banks).length > 0 : false
+      const hasOverrides = !!localStorage.getItem('av_bucket_overrides')
+      const hasConfirmed = !!localStorage.getItem('av_confirmed_salary_ids')
+      setUnlocked({
+        docs: true,
+        review: hasBanks,
+        reports: hasBanks && (hasOverrides || hasConfirmed),
+        analytics: hasBanks && (hasOverrides || hasConfirmed),
+      })
+    } catch {}
+  }, [pathname]) // Re-check on every navigation
+
+  // Read current tab from URL search params
+  const [currentTab, setCurrentTab] = useState('docs')
+  useEffect(() => {
+    if (typeof window !== 'undefined' && isProfile) {
+      const params = new URLSearchParams(window.location.search)
+      setCurrentTab(params.get('tab') || 'docs')
+    }
+  }, [pathname, isProfile])
 
   // Load DNA for sidebar badge
   let dnaEmoji = null
@@ -65,18 +99,51 @@ function Sidebar() {
         {/* Free section */}
         <div style={{ fontSize:9, color:'rgba(230,207,167,0.3)', letterSpacing:'0.14em', textTransform:'uppercase', padding:'10px 16px 5px' }}>Free</div>
         {FREE_NAV.map(item => (
-          <Link key={item.href} href={item.href} style={{
-            display:'flex', alignItems:'center', gap:9, padding:'10px 16px', textDecoration:'none',
-            fontSize:13, fontFamily:'inherit',
-            borderLeft:`2px solid ${isActive(item.href)?C.wheat:'transparent'}`,
-            background:isActive(item.href)?'rgba(230,207,167,0.1)':'transparent',
-            color:isActive(item.href)?C.wheat:'rgba(255,255,255,0.45)',
-            fontWeight:isActive(item.href)?600:400,
-            transition:'all 0.15s',
-          }}>
-            <span style={{ fontSize:15, width:20, textAlign:'center' }}>{item.icon}</span>
-            {item.label}
-          </Link>
+          <div key={item.href}>
+            <Link href={item.href} style={{
+              display:'flex', alignItems:'center', gap:9, padding:'10px 16px', textDecoration:'none',
+              fontSize:13, fontFamily:'inherit',
+              borderLeft:`2px solid ${isActive(item.href)?C.wheat:'transparent'}`,
+              background:isActive(item.href)?'rgba(230,207,167,0.1)':'transparent',
+              color:isActive(item.href)?C.wheat:'rgba(255,255,255,0.45)',
+              fontWeight:isActive(item.href)?600:400,
+              transition:'all 0.15s',
+            }}>
+              <span style={{ fontSize:15, width:20, textAlign:'center' }}>{item.icon}</span>
+              {item.label}
+            </Link>
+            {/* Sub-nav under My Profile */}
+            {item.href === '/dashboard/profile' && isProfile && (
+              <div style={{ marginLeft:28, borderLeft:'1px solid rgba(230,207,167,0.15)', paddingLeft:0, marginTop:2, marginBottom:4 }}>
+                {PROFILE_SUBNAV.map(sub => {
+                  const isSubActive = currentTab === sub.key
+                  const isLocked = !unlocked[sub.key]
+                  return (
+                    <Link
+                      key={sub.key}
+                      href={isLocked ? '#' : `/dashboard/profile${sub.query}`}
+                      onClick={e => { if (isLocked) e.preventDefault() }}
+                      style={{
+                        display:'flex', alignItems:'center', gap:7, padding:'7px 12px',
+                        fontSize:11.5, fontFamily:'inherit', textDecoration:'none',
+                        borderRadius:0,
+                        borderLeft:`2px solid ${isSubActive && !isLocked ? C.wheat : 'transparent'}`,
+                        background: isSubActive && !isLocked ? 'rgba(230,207,167,0.08)' : 'transparent',
+                        color: isLocked ? 'rgba(255,255,255,0.2)' : isSubActive ? C.wheat : 'rgba(255,255,255,0.5)',
+                        fontWeight: isSubActive && !isLocked ? 500 : 400,
+                        cursor: isLocked ? 'not-allowed' : 'pointer',
+                        transition:'all 0.15s',
+                      }}
+                    >
+                      <span style={{ fontSize:12, width:16, textAlign:'center' }}>{sub.icon}</span>
+                      {sub.label}
+                      {isLocked && <span style={{ marginLeft:'auto', fontSize:9, opacity:0.5 }}>🔒</span>}
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         ))}
 
         {/* Divider */}
