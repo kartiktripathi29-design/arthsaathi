@@ -23,6 +23,7 @@
     "react-dropzone": "^15.0.0",
     "react-hot-toast": "^2.6.0",
     "recharts": "^3.8.1",
+    "unpdf": "^1.6.2",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
