@@ -529,6 +529,12 @@ function ProfileContent() {
       if (desc.includes('ADVANCE TAX') || desc.includes('INCOME TAX') || desc.includes('TAX PAYMENT') || desc.includes('CHALLAN') || desc.includes('NSDL/ADTAX')) { assignments[t.id] = 'tax'; return }
       // ATM
       if (desc.includes('ATM') || desc.includes('CASH WDL') || desc.includes('CASH WITHDRAWAL')) { assignments[t.id] = 'misc'; return }
+      // Home services: says URBAN COMPANY, HOME CLEANING
+      if (desc.includes('URBAN COMPANY') || desc.includes('URBAN CLAP') || desc.includes('URBANCLAP') || desc.includes('HOME CLEANING')) { assignments[t.id] = 'home_services'; return }
+      // Known shopping/entertainment/food merchants that might not have mega set
+      if (desc.includes('FERNS N PETALS') || desc.includes('FNP')) { assignments[t.id] = 'shopping'; return }
+      if (desc.includes('BOOKMYSHOW') || desc.includes('PVR') || desc.includes('INOX')) { assignments[t.id] = 'entertainment'; return }
+      if (desc.includes('CLEARTRIP') || desc.includes('MAKEMYTRIP') || desc.includes('GOIBIBO') || desc.includes('AIRBNB') || desc.includes('OYO')) { assignments[t.id] = 'entertainment'; return }
       // Mutual fund SIP: says MUTUAL FUND or BLUECHIP or MID CAP etc
       if (desc.includes('MUTUAL FUND') || desc.includes('BLUECHIP') || desc.includes('MID CAP') || desc.includes('FLEXI CAP') || desc.includes('PARAG PARIKH') || desc.includes('AXIS BLUECHIP') || desc.includes('HDFC MID')) { assignments[t.id] = 'sip'; return }
       // Stock purchase
@@ -547,8 +553,13 @@ function ProfileContent() {
       if (mega === 'cc_payment') { assignments[t.id] = 'cc_payment'; return }
       if (mega === 'insurance') { assignments[t.id] = 'insurance'; return }
       if (mega === 'investments_elss') { assignments[t.id] = 'elss'; return }
+      if (mega === 'investments_regular') { assignments[t.id] = 'stocks'; return }
+      if (mega === 'interest') { assignments[t.id] = 'dividends'; return }
+      if (mega === 'cashback') { assignments[t.id] = 'dividends'; return }
+      if (mega === 'salary' && t.type === 'credit') { assignments[t.id] = 'salary'; return }
+      if (mega === 'transfer') { assignments[t.id] = 'transfers'; return }
 
-      // ── UNCERTAIN: mark for questioning ──
+      // ── UNCERTAIN: only if mega is misc AND no known merchant ──
       assignments[t.id] = '__uncertain__'
     })
 
