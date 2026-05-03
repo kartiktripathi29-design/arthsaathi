@@ -148,58 +148,59 @@ function computePnL(transactions: any[], months: number, confirmedDetections: Re
 }
 
 // ── REVIEW TAB: Bucket definitions ──
-const REVIEW_BUCKETS = {
+interface BucketDef {
+  id: string; icon: string; label: string; megas: MegaCategory[]
+  descMatch?: string[]; brandMatch?: string[]
+}
+
+const REVIEW_BUCKETS: Record<string, BucketDef[]> = {
   income: [
-    { id:'salary', icon:'💰', label:'Salary', megas:['salary'] as MegaCategory[], descMatch:['SALARY','SAL CR','SAL/','PAYROLL','STIPEND'] },
-    { id:'bonus', icon:'🎁', label:'Bonus', megas:[] as MegaCategory[], brandMatch:['Bonus/Incentive'], descMatch:['BONUS','BONU','PERF BONUS','INCENTIVE','AWARD','DIWALI BONUS','PROJECT BONUS','JOINING BONUS','ANNUAL BONUS'] },
-    { id:'freelance', icon:'💼', label:'Freelance / other income', megas:[] as MegaCategory[], brandMatch:['Freelance Income'], descMatch:['FREELANCE','CONSULTING FEE','PROFESSIONAL FEE','CONTRACT PAYMENT'] },
-    { id:'self_transfer', icon:'🔄', label:'Self-transfers (not income)', megas:[] as MegaCategory[], descMatch:['SELF TRANSFER','SELF TRF','OWN A/C','OWN ACCOUNT'] },
-    { id:'transfers', icon:'👤', label:'Person transfers', megas:['transfer'] as MegaCategory[] },
-    { id:'dividends', icon:'💸', label:'Dividend / interest', megas:['interest','cashback'] as MegaCategory[], descMatch:['INTEREST','INT.PD','INT CR','INT.COLL','DIVIDEND','DIV CR','FD INTEREST','CASHBACK','CASH BACK','REFUND'] },
+    { id:'salary', icon:'💰', label:'Salary', megas:['salary'], descMatch:['SALARY','SAL CR','SAL/','PAYROLL','STIPEND'] },
+    { id:'bonus', icon:'🎁', label:'Bonus', megas:[], brandMatch:['Bonus/Incentive'], descMatch:['BONUS','BONU','PERF BONUS','INCENTIVE','AWARD','DIWALI BONUS','PROJECT BONUS','JOINING BONUS','ANNUAL BONUS'] },
+    { id:'freelance', icon:'💼', label:'Freelance / other income', megas:[], brandMatch:['Freelance Income'], descMatch:['FREELANCE','CONSULTING FEE','PROFESSIONAL FEE','CONTRACT PAYMENT'] },
+    { id:'self_transfer', icon:'🔄', label:'Self-transfers (not income)', megas:[], descMatch:['SELF TRANSFER','SELF TRF','OWN A/C','OWN ACCOUNT'] },
+    { id:'transfers', icon:'👤', label:'Person transfers', megas:['transfer'] },
+    { id:'dividends', icon:'💸', label:'Dividend / interest', megas:['interest','cashback'], descMatch:['INTEREST','INT.PD','INT CR','INT.COLL','DIVIDEND','DIV CR','FD INTEREST','CASHBACK','CASH BACK','REFUND'] },
   ],
   expenses: [
-    { id:'rent', icon:'🏠', label:'House rent', megas:[] as MegaCategory[], descMatch:['RENT PAYMENT','HOUSE RENT'] },
-    { id:'emi', icon:'🏦', label:'EMIs / loans', megas:[] as MegaCategory[], descMatch:['EMI-','EMI ','HOME LOAN','CAR LOAN','PERSONAL LOAN','EDUCATION LOAN','GOLD LOAN','CONSUMER DURABLE','LAPTOP LOAN','VEHICLE LOAN','BAJAJ FINANCE','BAJAJ FINSERV','BAJAJFIN','HDFC LTD','HDFCHL','HDFCCL','HDFCPL','HDFCGL','HDFCDL','HDFCLL','LOAN REPAY'] },
-    { id:'insurance', icon:'🛡', label:'Insurance', megas:['insurance'] as MegaCategory[], descMatch:['LIC PREMIUM','LIC-','LIC ','NACH-LIC','NACH/LIC','STAR HEALTH','NACH-STAR','NACH/STAR','INSURANCE','MEDICLAIM','ICICI LOMBARD','HDFC ERGO','PREMIUM-POL','NIVA BUPA','CARE HEALTH','MAX LIFE','HDFC LIFE','SBI LIFE','TATA AIA','GO DIGIT','ACKO'] },
-    { id:'cc_payment', icon:'💳', label:'Credit card payments', megas:['cc_payment'] as MegaCategory[], descMatch:['CC AUTOPAY','CC PAYMENT','CREDIT CARD','CRED MINT','CRED PAY','CRED CLUB','AMEX CC','SIMPLY SAVE CC','REGALIA CC'] },
-    { id:'fuel', icon:'⛽', label:'Fuel / transport', megas:['transport'] as MegaCategory[] },
-    { id:'utilities', icon:'⚡', label:'Utilities', megas:['utilities'] as MegaCategory[], descMatch:['ELECTRICITY','BESCOM','BWSSB','WATER BILL','BROADBAND','AIRTEL','JIO','RECHARGE','GAS CYLINDER','LPG'] },
-    { id:'food', icon:'🍽', label:'Food / dining', megas:['food'] as MegaCategory[] },
-    { id:'shopping', icon:'🛍', label:'Shopping', megas:['shopping'] as MegaCategory[] },
-    { id:'healthcare', icon:'💊', label:'Healthcare', megas:['healthcare'] as MegaCategory[] },
-    { id:'entertainment', icon:'🎬', label:'Entertainment', megas:['entertainment'] as MegaCategory[] },
-    { id:'home_services', icon:'🏠', label:'Home services', megas:[] as MegaCategory[], descMatch:['URBAN COMPANY','URBAN CLAP','URBANCLAP','HOME CLEANING','PLUMBER','ELECTRICIAN'] },
-    { id:'tax', icon:'📋', label:'Tax payments', megas:[] as MegaCategory[], descMatch:['ADVANCE TAX','INCOME TAX','TAX PAYMENT','TDS','CHALLAN','NSDL/ADTAX'] },
-    { id:'misc', icon:'📦', label:'Miscellaneous', megas:['misc'] as MegaCategory[] },
+    { id:'rent', icon:'🏠', label:'House rent', megas:[], descMatch:['RENT PAYMENT','HOUSE RENT'] },
+    { id:'emi', icon:'🏦', label:'EMIs / loans', megas:[], descMatch:['EMI-','EMI ','HOME LOAN','CAR LOAN','PERSONAL LOAN','EDUCATION LOAN','GOLD LOAN','CONSUMER DURABLE','LAPTOP LOAN','VEHICLE LOAN','BAJAJ FINANCE','BAJAJ FINSERV','BAJAJFIN','HDFC LTD','HDFCHL','HDFCCL','HDFCPL','HDFCGL','HDFCDL','HDFCLL','LOAN REPAY'] },
+    { id:'insurance', icon:'🛡', label:'Insurance', megas:['insurance'], descMatch:['LIC PREMIUM','LIC-','LIC ','NACH-LIC','NACH/LIC','STAR HEALTH','NACH-STAR','NACH/STAR','INSURANCE','MEDICLAIM','ICICI LOMBARD','HDFC ERGO','PREMIUM-POL','NIVA BUPA','CARE HEALTH','MAX LIFE','HDFC LIFE','SBI LIFE','TATA AIA','GO DIGIT','ACKO'] },
+    { id:'cc_payment', icon:'💳', label:'Credit card payments', megas:['cc_payment'], descMatch:['CC AUTOPAY','CC PAYMENT','CREDIT CARD','CRED MINT','CRED PAY','CRED CLUB','AMEX CC','SIMPLY SAVE CC','REGALIA CC'] },
+    { id:'fuel', icon:'⛽', label:'Fuel / transport', megas:['transport'] },
+    { id:'utilities', icon:'⚡', label:'Utilities', megas:['utilities'], descMatch:['ELECTRICITY','BESCOM','BWSSB','WATER BILL','BROADBAND','AIRTEL','JIO','RECHARGE','GAS CYLINDER','LPG'] },
+    { id:'food', icon:'🍽', label:'Food / dining', megas:['food'] },
+    { id:'shopping', icon:'🛍', label:'Shopping', megas:['shopping'] },
+    { id:'healthcare', icon:'💊', label:'Healthcare', megas:['healthcare'] },
+    { id:'entertainment', icon:'🎬', label:'Entertainment', megas:['entertainment'] },
+    { id:'home_services', icon:'🏠', label:'Home services', megas:[], descMatch:['URBAN COMPANY','URBAN CLAP','URBANCLAP','HOME CLEANING','PLUMBER','ELECTRICIAN'] },
+    { id:'tax', icon:'📋', label:'Tax payments', megas:[], descMatch:['ADVANCE TAX','INCOME TAX','TAX PAYMENT','TDS','CHALLAN','NSDL/ADTAX'] },
+    { id:'misc', icon:'📦', label:'Miscellaneous', megas:['misc'] },
   ],
   savings: [
-    { id:'sip', icon:'📈', label:'SIPs (mutual fund)', megas:[] as MegaCategory[], descMatch:['MUTUAL FUND SIP','MUTUAL FUND','SIP-','SIP ','NACH/AXIS','NACH-AXIS','NACH/HDFC','NACH-HDFC','NACH/PPFAS','NACH-PPFAS','NACH/SBI MF','NACH-SBI MF','NACH/NIPPON','NACH-NIPPON','NACH/DSP','NACH-DSP','NACH/MIRAE','NACH-MIRAE','NACH/QUANT','NACH-QUANT','NACH/CANARA','NACH-CANARA','NACH-MUTUAL','BLUECHIP','MID CAP','PARAG PARIKH','FLEXI CAP','AXIS BLUECHIP','HDFC MID CAP'] },
-    { id:'stocks', icon:'📊', label:'Stock purchases', megas:[] as MegaCategory[], descMatch:['ZERODHA','STOCK PURCHASE','GROWW','ANGELONE','ANGEL ONE','UPSTOX','DHAN ','KITE ','5PAISA'] },
-    { id:'elss', icon:'🛡', label:'ELSS / 80C', megas:['investments_elss'] as MegaCategory[], descMatch:['ELSS','TAX SAVING','TAX SAVER'] },
-    { id:'ppf_nps', icon:'🏛', label:'PPF / NPS', megas:[] as MegaCategory[], descMatch:['PPF','PPF DEPOSIT','NPS CONTRIBUTION','NPS TIER','NPS-','NATIONAL PENSION','PUBLIC PROVIDENT','NACH-PPF','NACH-NPS','NACH/PPF','NACH/NPS'] },
-    { id:'fd_rd', icon:'🏛', label:'FD / RD', megas:[] as MegaCategory[], descMatch:['FD BOOKING','FIXED DEPOSIT','RECURRING DEPOSIT','RD INST','FD OPENING'] },
+    { id:'sip', icon:'📈', label:'SIPs (mutual fund)', megas:[], descMatch:['MUTUAL FUND SIP','MUTUAL FUND','SIP-','SIP ','NACH/AXIS','NACH-AXIS','NACH/HDFC','NACH-HDFC','NACH/PPFAS','NACH-PPFAS','NACH/SBI MF','NACH-SBI MF','NACH/NIPPON','NACH-NIPPON','NACH/DSP','NACH-DSP','NACH/MIRAE','NACH-MIRAE','NACH/QUANT','NACH-QUANT','NACH/CANARA','NACH-CANARA','NACH-MUTUAL','BLUECHIP','MID CAP','PARAG PARIKH','FLEXI CAP','AXIS BLUECHIP','HDFC MID CAP'] },
+    { id:'stocks', icon:'📊', label:'Stock purchases', megas:[], descMatch:['ZERODHA','STOCK PURCHASE','GROWW','ANGELONE','ANGEL ONE','UPSTOX','DHAN ','KITE ','5PAISA'] },
+    { id:'elss', icon:'🛡', label:'ELSS / 80C', megas:['investments_elss'], descMatch:['ELSS','TAX SAVING','TAX SAVER'] },
+    { id:'ppf_nps', icon:'🏛', label:'PPF / NPS', megas:[], descMatch:['PPF','PPF DEPOSIT','NPS CONTRIBUTION','NPS TIER','NPS-','NATIONAL PENSION','PUBLIC PROVIDENT','NACH-PPF','NACH-NPS','NACH/PPF','NACH/NPS'] },
+    { id:'fd_rd', icon:'🏛', label:'FD / RD', megas:[], descMatch:['FD BOOKING','FIXED DEPOSIT','RECURRING DEPOSIT','RD INST','FD OPENING'] },
   ],
 }
 
-const ALL_BUCKET_LIST = [...REVIEW_BUCKETS.income, ...REVIEW_BUCKETS.expenses, ...REVIEW_BUCKETS.savings]
+const ALL_BUCKET_LIST: BucketDef[] = [...REVIEW_BUCKETS.income, ...REVIEW_BUCKETS.expenses, ...REVIEW_BUCKETS.savings]
 
 function assignToBucket(t: any): string {
   const desc = (t.description || '').toUpperCase()
   const mega: MegaCategory = t.mega || 'misc'
   const brand = t.brand || ''
 
-  // 1. Description matches first (EMI, BONUS, FD, PPF etc — most reliable)
+  // 1. Description matches first
   for (const b of ALL_BUCKET_LIST) {
-    if ('descMatch' in b && b.descMatch) {
-      if (b.descMatch.some((dm: string) => desc.includes(dm))) return b.id
-    }
+    if (b.descMatch && b.descMatch.some(dm => desc.includes(dm))) return b.id
   }
 
-  // 2. Brand matches (bonus, freelance from tagTransactions)
+  // 2. Brand matches
   for (const b of ALL_BUCKET_LIST) {
-    if ('brandMatch' in b && b.brandMatch) {
-      if (b.brandMatch.some((bm: string) => brand === bm)) return b.id
-    }
+    if (b.brandMatch && b.brandMatch.some(bm => brand === bm)) return b.id
   }
 
   // 3. Mega category matches
@@ -207,8 +208,7 @@ function assignToBucket(t: any): string {
     if (b.megas.includes(mega)) return b.id
   }
 
-  // Default
-  return t.type === 'credit' ? 'other_income' : 'misc'
+  return t.type === 'credit' ? 'freelance' : 'misc'
 }
 
 type MainTab = 'docs' | 'review' | 'reports' | 'analytics'
