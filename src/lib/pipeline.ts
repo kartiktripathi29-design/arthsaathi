@@ -845,7 +845,8 @@ function detectInternalTransfers(
       );
       if (matchingCredit) {
         // Check if the counterparty is a person (likely round-trip)
-        if (txn.counterparty_type === 'PERSON' || txn.counterparty_type === 'SELF') {
+        const cpType: string = txn.counterparty_type;
+        if (cpType === 'PERSON' || cpType === 'SELF' || cpType === 'UNKNOWN') {
           txn.is_internal_transfer = true;
           txn.is_pnl_item = false;
           matchingCredit.is_internal_transfer = true;
