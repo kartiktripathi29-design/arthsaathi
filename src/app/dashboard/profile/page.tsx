@@ -141,7 +141,8 @@ function computePnL(transactions: any[], months: number, confirmedDetections: Re
     const m = monthMap[key]
     if (t.type === 'credit') m.income += t.amount
     else m.expenses += t.amount
-    m.byCategory[t.megaFinal] = (m.byCategory[t.megaFinal] || 0) + t.amount
+    const mc = t.megaFinal as MegaCategory
+    m.byCategory[mc] = (m.byCategory[mc] || 0) + t.amount
   })
   const monthlyPnL = Object.values(monthMap).map(m => ({ ...m, net: m.income - m.expenses })).sort((a,b)=>a.monthKey.localeCompare(b.monthKey))
 
