@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { parseStatement, detectFileKind } from '@/lib/statementParser'
 import { parseExcelFileLocally } from '@/lib/localExcelParser'
-import { parseLocalPdf } from '@/lib/localPdfParser'
 
 export const maxDuration = 120
+export const dynamic = 'force-dynamic'
 
 const client = new Anthropic()
 
@@ -75,23 +75,55 @@ export async function POST(req: NextRequest) {
   const log = (s: string) => console.log(`[bank-parse] ${s}: ${Date.now()-t0}ms`)
 
   try {
-    const form = await req.formData()
-    const file = form.get('file') as File | null
-    const password = (form.get('password') as string) || ''
-    log('form parsed')
+    let buffer: Buffer
+    let fileName = 'statement'
+    let fileType = ''
+    let password = ''
 
-    if (!file) return NextResponse.json({ error: 'No file' }, { status: 400 })
-    if (file.size > 15*1024*1024) return NextResponse.json({ error: 'too_large' }, { status: 413 })
+    // Check if this is a blob URL request (JSON body) or direct file upload (FormData)
+    const contentType = req.headers.get('content-type') || ''
+    if (contentType.includes('application/json')) {
+      // Blob URL mode — download file from Vercel Blob
+      const body = await req.json()
+      const blobUrl = body.blobUrl
+      password = body.password || ''
+      fileName = body.fileName || 'statement'
+      fileType = body.fileType || ''
+      log(`blob mode: downloading from ${blobUrl}`)
 
-    const buffer = Buffer.from(await file.arrayBuffer())
-    log(`buffer ready (${file.size} bytes)`)
+      const blobRes = await fetch(blobUrl)
+      if (!blobRes.ok) return NextResponse.json({ error: 'Failed to download file from storage' }, { status: 500 })
+      buffer = Buffer.from(await blobRes.arrayBuffer())
+      log(`blob downloaded (${buffer.length} bytes)`)
+
+      // Clean up blob after download
+      try {
+        const { del } = await import('@vercel/blob')
+        await del(blobUrl)
+        log('blob deleted')
+      } catch {}
+    } else {
+      // Direct file upload mode (for files under 4.5MB)
+      const form = await req.formData()
+      const file = form.get('file') as File | null
+      password = (form.get('password') as string) || ''
+      log('form parsed')
+
+      if (!file) return NextResponse.json({ error: 'No file' }, { status: 400 })
+      if (file.size > 50*1024*1024) return NextResponse.json({ error: 'too_large' }, { status: 413 })
+
+      buffer = Buffer.from(await file.arrayBuffer())
+      fileName = file.name
+      fileType = file.type
+      log(`direct upload (${file.size} bytes)`)
+    }
 
     // ─── FAST PATH: Excel/CSV → parse locally, skip Haiku ───────────────
-    const fileKind = detectFileKind(buffer, file.name, file.type)
+    const fileKind = detectFileKind(buffer, fileName, fileType)
     if (fileKind === 'excel-xlsx' || fileKind === 'excel-xls' || fileKind === 'csv') {
       log(`fast path: ${fileKind} — parsing locally`)
       try {
-        const localResult = await parseExcelFileLocally(buffer, file.name, password)
+        const localResult = await parseExcelFileLocally(buffer, fileName, password)
         if (localResult && localResult.transactions.length >= 2) {
           log(`local parse done — ${localResult.transactions.length} transactions`)
           return NextResponse.json({ data: localResult, fileKind, parsedLocally: true })
@@ -112,6 +144,7 @@ export async function POST(req: NextRequest) {
     if (fileKind === 'pdf') {
       log('trying local PDF parser (template-based)')
       try {
+        const { parseLocalPdf } = await import('@/lib/localPdfParser')
         const localResult = await parseLocalPdf(buffer)
         if (localResult && localResult.transactions.length >= 2) {
           const v = localResult.validation
@@ -121,7 +154,6 @@ export async function POST(req: NextRequest) {
         log('local PDF parse: unknown bank or too few transactions — falling through to Haiku')
       } catch (e: any) {
         if (e.message === 'requires_password') {
-          // Don't return error — let statementParser handle password flow
           log('local PDF parse: password required — falling through to statementParser')
         } else {
           log(`local PDF parse failed: ${e.message} — falling through to Haiku`)
@@ -130,7 +162,7 @@ export async function POST(req: NextRequest) {
     }
     // ─── END FAST PATHS ─────────────────────────────────────────────────
 
-    const result = await parseStatement(buffer, file.name, file.type, password)
+    const result = await parseStatement(buffer, fileName, fileType, password)
     log(`parseStatement done — ok=${result.ok}, kind=${result.kind}`)
 
     if (!result.ok) {

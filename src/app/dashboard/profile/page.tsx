@@ -678,12 +678,31 @@ function ProfileContent() {
 
   // ── File handlers (unchanged) ──
   const handleBankFile = async (file:File, password='') => {
-    if (file.size > 15*1024*1024) { toast.error('File too large (max 15MB)'); return }
+    if (file.size > 50*1024*1024) { toast.error('File too large (max 50MB)'); return }
     setLoadingDoc('bank'); setPwdModal({ open:false, type:null, file:null, error:'' })
     const tid = toast.loading('Reading your bank statement…')
     try {
-      const form = new FormData(); form.append('file', file); if (password) form.append('password', password)
-      const res = await fetch('/api/parse-bank-statement', { method:'POST', body:form })
+      let res: Response
+
+      if (file.size > 4 * 1024 * 1024) {
+        // Large file: upload to Blob first, then send URL to parser
+        toast.loading('Uploading large file…', { id: tid })
+        const { upload } = await import('@vercel/blob/client')
+        const blob = await upload(file.name, file, {
+          access: 'private',
+          handleUploadUrl: '/api/blob-upload',
+        })
+        toast.loading('Parsing statement…', { id: tid })
+        res = await fetch('/api/parse-bank-statement', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ blobUrl: blob.url, password, fileName: file.name, fileType: file.type }),
+        })
+      } else {
+        // Small file: direct upload
+        const form = new FormData(); form.append('file', file); if (password) form.append('password', password)
+        res = await fetch('/api/parse-bank-statement', { method:'POST', body:form })
+      }
       const text = await res.text()
       let json:any
       try { json = JSON.parse(text) } catch { json = { error: 'corrupt_file', message: text } }
