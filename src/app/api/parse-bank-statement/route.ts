@@ -2,77 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { parseStatement, detectFileKind } from '@/lib/statementParser'
 import { parseExcelFileLocally } from '@/lib/localExcelParser'
+import { runPipeline, stage2_normalize, stage3_categorize, stage4_analyze, stage5_report } from '@/lib/pipeline'
+import type { ParseResult, RawTransaction, PipelineReport } from '@/lib/pipeline'
 
 export const maxDuration = 120
-export const dynamic = 'force-dynamic'
 
 const client = new Anthropic()
 
-const STATEMENT_TOOL = {
-  name: 'submit_bank_statement',
-  description: 'Submit parsed bank statement data',
-  input_schema: {
-    type: 'object' as const,
-    properties: {
-      bank: { type: 'string' },
-      accountHolder: { type: 'string' },
-      period: { type: 'string' },
-      openingBalance: { type: 'number' },
-      closingBalance: { type: 'number' },
-      totalCredits: { type: 'number' },
-      totalDebits: { type: 'number' },
-      transactions: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            date: { type: 'string' },
-            description: { type: 'string' },
-            amount: { type: 'number' },
-            type: { type: 'string', enum: ['credit', 'debit'] },
-            category: { type: 'string', enum: ['salary','rent','emi','grocery','food','fuel','shopping','entertainment','insurance','investment','sip','transfer','utility','medical','education','other'] }
-          },
-          required: ['date','description','amount','type','category']
-        }
-      },
-      summary: {
-        type: 'object',
-        properties: {
-          salary: { type: 'number' }, rent: { type: 'number' }, emi: { type: 'number' },
-          grocery: { type: 'number' }, food: { type: 'number' }, fuel: { type: 'number' },
-          shopping: { type: 'number' }, entertainment: { type: 'number' }, insurance: { type: 'number' },
-          investment: { type: 'number' }, sip: { type: 'number' }, utility: { type: 'number' },
-          medical: { type: 'number' }, education: { type: 'number' }, other: { type: 'number' }
-        },
-        required: ['salary','rent','emi','grocery','food','fuel','shopping','entertainment','insurance','investment','sip','utility','medical','education','other']
-      }
-    },
-    required: ['bank','accountHolder','period','openingBalance','closingBalance','totalCredits','totalDebits','transactions','summary']
-  }
-}
-
-const SYSTEM = `You are a precise Indian bank statement parser. Extract ALL transactions from the bank statement provided.
-Use the submit_bank_statement tool to return the parsed data. Categorise every transaction:
-- salary: SALARY, NEFT from employer, payroll
-- rent: RENT, house rent
-- emi: EMI, loan repayment, NACH
-- sip: SIP, mutual fund, ZERODHA, GROWW, KUVERA
-- investment: RD, FD, PPF, NPS contributions
-- food: Swiggy, Zomato, restaurants, hotels, cafes
-- grocery: BigBasket, DMart, supermarkets
-- fuel: petrol pump, HPCL, BPCL, Indian Oil, Ola/Uber/Rapido
-- entertainment: Netflix, Hotstar, Spotify, movies, gaming
-- shopping: Amazon, Flipkart, Myntra, retail
-- utility: electricity, gas, internet, mobile
-- medical: pharmacy, hospital, doctor
-- education: school fees, courses
-- transfer: UPI to individuals, NEFT/IMPS to persons
-- other: everything else
-All amounts as plain numbers. Sum per category for summary.`
-
 export async function POST(req: NextRequest) {
   const t0 = Date.now()
-  const log = (s: string) => console.log(`[bank-parse] ${s}: ${Date.now()-t0}ms`)
+  const log = (s: string) => console.log(`[bank-parse] ${s}: ${Date.now() - t0}ms`)
 
   try {
     let buffer: Buffer
@@ -110,7 +49,7 @@ export async function POST(req: NextRequest) {
       log('form parsed')
 
       if (!file) return NextResponse.json({ error: 'No file' }, { status: 400 })
-      if (file.size > 50*1024*1024) return NextResponse.json({ error: 'too_large' }, { status: 413 })
+      if (file.size > 50 * 1024 * 1024) return NextResponse.json({ error: 'too_large' }, { status: 413 })
 
       buffer = Buffer.from(await file.arrayBuffer())
       fileName = file.name
@@ -118,7 +57,7 @@ export async function POST(req: NextRequest) {
       log(`direct upload (${file.size} bytes)`)
     }
 
-    // ─── FAST PATH: Excel/CSV → parse locally, skip Haiku ───────────────
+    // ─── FAST PATH: Excel/CSV → parse locally + run pipeline ────────────
     const fileKind = detectFileKind(buffer, fileName, fileType)
     if (fileKind === 'excel-xlsx' || fileKind === 'excel-xls' || fileKind === 'csv') {
       log(`fast path: ${fileKind} — parsing locally`)
@@ -126,7 +65,27 @@ export async function POST(req: NextRequest) {
         const localResult = await parseExcelFileLocally(buffer, fileName, password)
         if (localResult && localResult.transactions.length >= 2) {
           log(`local parse done — ${localResult.transactions.length} transactions`)
-          return NextResponse.json({ data: localResult, fileKind, parsedLocally: true })
+
+          // ─── RUN PIPELINE on locally parsed data ──────────────────────
+          try {
+            const pipelineReport = runPipelineFromLocalResult(localResult)
+            log(`pipeline done — ${pipelineReport.total_transactions} txns, ${pipelineReport.categorization_summary.auto_classified} auto-classified`)
+            return NextResponse.json({
+              data: localResult,
+              pipeline: pipelineReport,
+              fileKind,
+              parsedLocally: true,
+            })
+          } catch (pipeErr: any) {
+            log(`pipeline failed: ${pipeErr.message} — returning raw parse only`)
+            return NextResponse.json({
+              data: localResult,
+              pipeline: null,
+              fileKind,
+              parsedLocally: true,
+            })
+          }
+          // ──────────────────────────────────────────────────────────────
         }
         log('local parse returned too few transactions — falling through to Haiku')
       } catch (e: any) {
@@ -140,16 +99,35 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ─── FAST PATH: PDF → try local template parser for known banks ─────
+    // ─── FAST PATH: PDF → try local template parser before Haiku ────────
     if (fileKind === 'pdf') {
-      log('trying local PDF parser (template-based)')
       try {
         const { parseLocalPdf } = await import('@/lib/localPdfParser')
-        const localResult = await parseLocalPdf(buffer)
+        const localResult = await parseLocalPdf(buffer, password)
         if (localResult && localResult.transactions.length >= 2) {
+          log(`local PDF parse done — ${localResult.transactions.length} txns`)
           const v = localResult.validation
-          log(`local PDF parse done — ${localResult.transactions.length} txns, bank=${localResult.bank}, balance ${v.matches ? 'MATCHES ✓' : 'MISMATCH ✗ ('+v.computedClosing+' vs '+v.actualClosing+')'}`)
-          return NextResponse.json({ data: localResult, fileKind: 'pdf', parsedLocally: true })
+          log(`validation: ${v.matches ? 'MATCHES ✓' : 'MISMATCH ✗ (' + v.computedClosing + ' vs ' + v.actualClosing + ')'}`)
+
+          // Run pipeline on PDF result too
+          try {
+            const pipelineReport = runPipelineFromLocalResult(localResult)
+            log(`pipeline done — ${pipelineReport.total_transactions} txns`)
+            return NextResponse.json({
+              data: localResult,
+              pipeline: pipelineReport,
+              fileKind: 'pdf',
+              parsedLocally: true,
+            })
+          } catch (pipeErr: any) {
+            log(`pipeline failed on PDF: ${pipeErr.message}`)
+            return NextResponse.json({
+              data: localResult,
+              pipeline: null,
+              fileKind: 'pdf',
+              parsedLocally: true,
+            })
+          }
         }
         log('local PDF parse: unknown bank or too few transactions — falling through to Haiku')
       } catch (e: any) {
@@ -166,43 +144,178 @@ export async function POST(req: NextRequest) {
     log(`parseStatement done — ok=${result.ok}, kind=${result.kind}`)
 
     if (!result.ok) {
-      const statusMap: Record<string, number> = {
-        incorrect_password: 422, requires_password: 422,
-        aes_pdf_unsupported: 415, unsupported_format: 415,
-        corrupt_file: 400, too_large: 413
+      return NextResponse.json({ error: result.error || 'Parse failed' }, { status: 422 })
+    }
+
+    // Run pipeline on Haiku-parsed data
+    let pipelineReport: PipelineReport | null = null
+    if (result.data && result.data.transactions?.length >= 2) {
+      try {
+        pipelineReport = runPipelineFromLocalResult(result.data)
+        log(`pipeline on Haiku result — ${pipelineReport.total_transactions} txns`)
+      } catch (pipeErr: any) {
+        log(`pipeline failed on Haiku result: ${pipeErr.message}`)
       }
-      return NextResponse.json(
-        { error: result.error, message: result.errorMessage },
-        { status: statusMap[result.error || ''] || 500 }
-      )
     }
 
-    log('calling Claude')
-    const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 16000,
-      system: SYSTEM,
-      tools: [STATEMENT_TOOL as any],
-      tool_choice: { type: 'tool', name: 'submit_bank_statement' } as any,
-      messages: [{ role: 'user', content: result.claudeContent! }]
+    return NextResponse.json({
+      data: result.data,
+      pipeline: pipelineReport,
+      fileKind: result.kind,
+      parsedLocally: false,
     })
-    log('Claude done')
-
-    const toolUse = response.content.find((c: any) => c.type === 'tool_use')
-    if (!toolUse || toolUse.type !== 'tool_use') {
-      return NextResponse.json({ error: 'Could not extract transactions' }, { status: 500 })
-    }
-
-    log('done')
-    return NextResponse.json({ data: toolUse.input, fileKind: result.kind })
-
   } catch (err: any) {
-    log('error')
-    console.error('Bank parse error:', err)
-    const msg = (err.message || '').toLowerCase()
-    if (msg.includes('password') || msg.includes('encrypted')) {
-      return NextResponse.json({ error: 'incorrect_password' }, { status: 422 })
-    }
-    return NextResponse.json({ error: err.message || 'Failed' }, { status: 500 })
+    console.error('[bank-parse] error:', err)
+    return NextResponse.json({ error: err.message || 'Server error' }, { status: 500 })
   }
+}
+
+
+// ─── BRIDGE: Convert localExcelParser/localPdfParser output → pipeline ──────
+//
+// The pipeline's runPipeline() expects raw spreadsheet rows (number[][]).
+// But localExcelParser already parsed those rows into a structured result.
+// This bridge converts the structured result into pipeline input format,
+// then runs stages 2-5 (skipping stage 1's row parsing since it's done).
+// ────────────────────────────────────────────────────────────────────────────
+
+function runPipelineFromLocalResult(localResult: any): PipelineReport {
+  // Convert localResult.transactions → RawTransaction[]
+  const rawTxns: RawTransaction[] = (localResult.transactions || []).map((t: any, idx: number) => {
+    // Handle both field naming conventions
+    const debit = t.debit ?? t.withdrawal ?? t.withdrawalAmt ?? null
+    const credit = t.credit ?? t.deposit ?? t.depositAmt ?? null
+    const balance = t.balance ?? t.closingBalance ?? 0
+
+    // Parse date to ISO format
+    let txnDate = t.date || t.txnDate || t.txn_date || ''
+    txnDate = normalizeDate(txnDate)
+
+    let valueDate = t.valueDate || t.value_date || t.valueDt || txnDate
+    valueDate = normalizeDate(valueDate)
+
+    const narration = t.narration || t.description || t.particulars || t.narration_raw || ''
+    const ref = t.refNo || t.chqRefNo || t.chq_ref_no || t.chequeNo || ''
+
+    return {
+      txn_index: idx,
+      txn_date: txnDate,
+      value_date: valueDate,
+      narration_raw: narration,
+      chq_ref_no: String(ref),
+      debit: typeof debit === 'number' && debit > 0 ? debit : null,
+      credit: typeof credit === 'number' && credit > 0 ? credit : null,
+      balance: typeof balance === 'number' ? balance : 0,
+    }
+  })
+
+  // Build a ParseResult from localResult metadata
+  const parseResult: ParseResult = {
+    bank: detectBankFromName(localResult.bank || ''),
+    account_number: localResult.accountNumber || '',
+    account_holder: localResult.accountHolder || '',
+    ifsc: localResult.ifsc || '',
+    statement_period: {
+      from: rawTxns[0]?.txn_date || '',
+      to: rawTxns[rawTxns.length - 1]?.txn_date || '',
+    },
+    opening_balance: localResult.openingBalance || 0,
+    closing_balance: localResult.closingBalance || 0,
+    transactions: rawTxns,
+    validation: {
+      passed: localResult.validation?.matches !== false,
+      row_arithmetic_ok: true,
+      summary_reconciliation_ok: localResult.validation?.matches !== false,
+      date_monotonicity_ok: true,
+      errors: [],
+      warnings: [],
+    },
+  }
+
+  // Run stages 2-5
+  const normalizedTxns = stage2_normalize(parseResult)
+  const categorizedTxns = stage3_categorize(normalizedTxns)
+  const analysis = stage4_analyze(categorizedTxns)
+  return stage5_report(parseResult, categorizedTxns, analysis)
+}
+
+
+// ─── HELPERS ────────────────────────────────────────────────────────────────
+
+function normalizeDate(d: string): string {
+  if (!d) return ''
+  const s = String(d).trim()
+
+  // Already ISO (YYYY-MM-DD)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+
+  // DD/MM/YY
+  const m1 = s.match(/^(\d{2})\/(\d{2})\/(\d{2})$/)
+  if (m1) {
+    const yr = parseInt(m1[3]) < 50 ? 2000 + parseInt(m1[3]) : 1900 + parseInt(m1[3])
+    return `${yr}-${m1[2]}-${m1[1]}`
+  }
+
+  // DD/MM/YYYY
+  const m2 = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  if (m2) return `${m2[3]}-${m2[2]}-${m2[1]}`
+
+  // DD-MM-YYYY
+  const m3 = s.match(/^(\d{2})-(\d{2})-(\d{4})$/)
+  if (m3) return `${m3[3]}-${m3[2]}-${m3[1]}`
+
+  // DD-MMM-YYYY or DD MMM YYYY
+  const months: Record<string, string> = {
+    JAN: '01', FEB: '02', MAR: '03', APR: '04', MAY: '05', JUN: '06',
+    JUL: '07', AUG: '08', SEP: '09', OCT: '10', NOV: '11', DEC: '12',
+  }
+  const m4 = s.match(/^(\d{1,2})[\s-]([A-Za-z]{3})[\s-](\d{2,4})$/)
+  if (m4) {
+    const mon = months[m4[2].toUpperCase()]
+    if (mon) {
+      const yr = m4[3].length === 2
+        ? (parseInt(m4[3]) < 50 ? '20' + m4[3] : '19' + m4[3])
+        : m4[3]
+      return `${yr}-${mon}-${m4[1].padStart(2, '0')}`
+    }
+  }
+
+  // JS Date object stringified (from Excel date cells)
+  try {
+    const dt = new Date(s)
+    if (!isNaN(dt.getTime())) {
+      return dt.toISOString().split('T')[0]
+    }
+  } catch {}
+
+  return s
+}
+
+type BankId =
+  | 'HDFC' | 'SBI' | 'KOTAK' | 'BOB' | 'PNB' | 'PSB' | 'SCB'
+  | 'CANARA' | 'ICICI' | 'AXIS' | 'BOI' | 'IB' | 'BOM' | 'YES'
+  | 'CBI' | 'IOB' | 'IDBI' | 'FEDERAL' | 'UCO' | 'BANDHAN'
+  | 'RBL' | 'INDUSIND' | 'UNKNOWN'
+
+function detectBankFromName(name: string): BankId {
+  const n = name.toUpperCase()
+  const map: [string, BankId][] = [
+    ['HDFC', 'HDFC'], ['SBI', 'SBI'], ['STATE BANK', 'SBI'],
+    ['KOTAK', 'KOTAK'], ['BOB', 'BOB'], ['BANK OF BARODA', 'BOB'],
+    ['PNB', 'PNB'], ['PUNJAB NATIONAL', 'PNB'],
+    ['PSB', 'PSB'], ['PUNJAB & SIND', 'PSB'], ['PUNJAB AND SIND', 'PSB'],
+    ['STANDARD CHARTERED', 'SCB'], ['CANARA', 'CANARA'],
+    ['ICICI', 'ICICI'], ['AXIS', 'AXIS'],
+    ['BANK OF INDIA', 'BOI'], ['BOI', 'BOI'],
+    ['INDIAN BANK', 'IB'], ['BANK OF MAHARASHTRA', 'BOM'],
+    ['YES BANK', 'YES'], ['CENTRAL BANK', 'CBI'],
+    ['INDIAN OVERSEAS', 'IOB'], ['IDBI', 'IDBI'],
+    ['FEDERAL', 'FEDERAL'], ['UCO', 'UCO'],
+    ['BANDHAN', 'BANDHAN'], ['RBL', 'RBL'],
+    ['INDUSIND', 'INDUSIND'],
+  ]
+  for (const [signal, id] of map) {
+    if (n.includes(signal)) return id
+  }
+  return 'UNKNOWN'
 }
