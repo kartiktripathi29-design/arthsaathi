@@ -140,18 +140,21 @@ export async function POST(req: NextRequest) {
     }
     // ─── END FAST PATHS ─────────────────────────────────────────────────
 
-    const result = await parseStatement(buffer, fileName, fileType, password)
+    const result = await parseStatement(buffer, fileName, fileType, password) as any
     log(`parseStatement done — ok=${result.ok}, kind=${result.kind}`)
 
     if (!result.ok) {
       return NextResponse.json({ error: result.error || 'Parse failed' }, { status: 422 })
     }
 
-    // Run pipeline on Haiku-parsed data
+    // The Haiku parseStatement returns the parsed data on result itself
+    // (fields: transactions, bank, accountHolder, etc.)
+    // Try to run pipeline if we have transactions
     let pipelineReport: PipelineReport | null = null
-    if (result.data && result.data.transactions?.length >= 2) {
+    const haikuData = result.data ?? result
+    if (haikuData.transactions?.length >= 2) {
       try {
-        pipelineReport = runPipelineFromLocalResult(result.data)
+        pipelineReport = runPipelineFromLocalResult(haikuData)
         log(`pipeline on Haiku result — ${pipelineReport.total_transactions} txns`)
       } catch (pipeErr: any) {
         log(`pipeline failed on Haiku result: ${pipeErr.message}`)
@@ -159,7 +162,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
-      data: result.data,
+      data: haikuData,
       pipeline: pipelineReport,
       fileKind: result.kind,
       parsedLocally: false,
