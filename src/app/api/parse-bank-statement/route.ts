@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
     if (fileKind === 'pdf') {
       try {
         const { parseLocalPdf } = await import('@/lib/localPdfParser')
-        const localResult = await parseLocalPdf(buffer, password)
+        const localResult = await parseLocalPdf(buffer)
         if (localResult && localResult.transactions.length >= 2) {
           log(`local PDF parse done — ${localResult.transactions.length} txns`)
           const v = localResult.validation
