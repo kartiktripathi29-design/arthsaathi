@@ -476,6 +476,8 @@ function ProfileContent() {
       rebuildMergedTransactions(updated)
       setUploadingAccountId(null)
       toast.success(`${bd.bank || 'Bank'} · ${bd.transactions?.length||0} transactions across ${period.months} month${period.months>1?'s':''}`, { id:tid, duration:5000 })
+      // Auto-navigate to Review tab after upload
+      setTimeout(() => setMainTab('review'), 500)
     } catch (e:any) {
       const errStr=(e.message||'').toLowerCase()
       if (errStr.includes('password')||errStr.includes('encrypted')) { setPwdModal({ open:true, type:'bank', file, error:'' }); setPwd(''); toast.dismiss(tid); return }
@@ -696,7 +698,7 @@ function ProfileContent() {
                   </>
                 )}
               </div>
-              <input ref={bankRef} type="file" accept=".pdf,.xls,.xlsx,.csv,image/*" style={{ display:'none' }} onChange={e => { if(e.target.files?.[0]) { const f=e.target.files[0]; if(f.name.endsWith('.pdf')) { setPwdModal({ open:true, type:'bank', file:f, error:'' }); setPwd('') } else handleBankFile(f) }; e.target.value='' }} />
+              <input ref={bankRef} type="file" accept=".pdf,.xls,.xlsx,.csv,image/*" style={{ display:'none' }} onChange={e => { if(e.target.files?.[0]) { handleBankFile(e.target.files[0]) }; e.target.value='' }} />
               <p onClick={() => { setUploadingAccountId(null); bankRef.current?.click() }} style={{ fontSize:12, color:C.fg, margin:'8px 0 18px', cursor:'pointer' }}>+ Add more accounts <span style={{ fontSize:11, color:C.muted }}>(salary, expenses, spouse, joint, etc.)</span></p>
 
               <p style={{ fontSize:9, fontWeight:700, color:C.muted, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:8 }}>Credit cards</p>
