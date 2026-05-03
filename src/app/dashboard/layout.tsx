@@ -1,7 +1,7 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useAppStore } from '@/store/AppStore'
 
 const C = { fg:'#3A4B41', wheat:'#E6CFA7', wl:'#F5ECD8', wm:'#D4B98A' }
@@ -54,20 +54,15 @@ function Sidebar() {
       setUnlocked({
         docs: true,
         review: hasBanks,
-        reports: hasBanks && (hasOverrides || hasConfirmed),
-        analytics: hasBanks && (hasOverrides || hasConfirmed),
+        reports: hasBanks,
+        analytics: hasBanks,
       })
     } catch {}
   }, [pathname]) // Re-check on every navigation
 
   // Read current tab from URL search params
-  const [currentTab, setCurrentTab] = useState('docs')
-  useEffect(() => {
-    if (typeof window !== 'undefined' && isProfile) {
-      const params = new URLSearchParams(window.location.search)
-      setCurrentTab(params.get('tab') || 'docs')
-    }
-  }, [pathname, isProfile])
+  const searchParams = useSearchParams()
+  const currentTab = isProfile ? (searchParams.get('tab') || 'docs') : ''
 
   // Load DNA for sidebar badge
   let dnaEmoji = null
@@ -238,7 +233,9 @@ export default function DashboardLayout({ children }: { children:React.ReactNode
     <AuthGate>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap');`}</style>
       <div style={{ display:'flex', minHeight:'100vh', background:'#FDFAF6', fontFamily:'"Sora",-apple-system,sans-serif' }}>
-        <Sidebar />
+        <Suspense fallback={<aside style={{ width:216, minHeight:'100vh', background:C.fg }} />}>
+          <Sidebar />
+        </Suspense>
         <div style={{ marginLeft:216, flex:1, display:'flex', flexDirection:'column' }}>
           <TopBar />
           <main style={{ flex:1, padding:'24px 28px', maxWidth:1100, width:'100%' }}>
