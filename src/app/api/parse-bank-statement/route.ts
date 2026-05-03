@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { parseStatement, detectFileKind } from '@/lib/statementParser'
 import { parseExcelFileLocally } from '@/lib/localExcelParser'
+import { parseLocalPdf } from '@/lib/localPdfParser'
 
 export const maxDuration = 120
 
@@ -106,7 +107,28 @@ export async function POST(req: NextRequest) {
         log(`local parse failed: ${e.message} — falling through to Haiku`)
       }
     }
-    // ─── END FAST PATH ──────────────────────────────────────────────────
+
+    // ─── FAST PATH: PDF → try local template parser for known banks ─────
+    if (fileKind === 'pdf') {
+      log('trying local PDF parser (template-based)')
+      try {
+        const localResult = await parseLocalPdf(buffer)
+        if (localResult && localResult.transactions.length >= 2) {
+          const v = localResult.validation
+          log(`local PDF parse done — ${localResult.transactions.length} txns, bank=${localResult.bank}, balance ${v.matches ? 'MATCHES ✓' : 'MISMATCH ✗ ('+v.computedClosing+' vs '+v.actualClosing+')'}`)
+          return NextResponse.json({ data: localResult, fileKind: 'pdf', parsedLocally: true })
+        }
+        log('local PDF parse: unknown bank or too few transactions — falling through to Haiku')
+      } catch (e: any) {
+        if (e.message === 'requires_password') {
+          // Don't return error — let statementParser handle password flow
+          log('local PDF parse: password required — falling through to statementParser')
+        } else {
+          log(`local PDF parse failed: ${e.message} — falling through to Haiku`)
+        }
+      }
+    }
+    // ─── END FAST PATHS ─────────────────────────────────────────────────
 
     const result = await parseStatement(buffer, file.name, file.type, password)
     log(`parseStatement done — ok=${result.ok}, kind=${result.kind}`)
