@@ -4,6 +4,8 @@ import { parseStatement, detectFileKind } from '@/lib/statementParser'
 import { parseExcelFileLocally } from '@/lib/localExcelParser'
 import { runPipeline, stage2_normalize, stage3_categorize, stage4_analyze, stage5_report } from '@/lib/pipeline'
 import type { ParseResult, RawTransaction, PipelineReport } from '@/lib/pipeline'
+import { analyzeStatement } from '@/lib/txn-intelligence'
+import type { IntelligenceReport } from '@/lib/txn-intelligence'
 
 export const maxDuration = 120
 
@@ -68,11 +70,12 @@ export async function POST(req: NextRequest) {
 
           // ─── RUN PIPELINE on locally parsed data ──────────────────────
           try {
-            const pipelineReport = runPipelineFromLocalResult(localResult)
+            const { pipelineReport, intelligence } = runPipelineFromLocalResult(localResult)
             log(`pipeline done — ${pipelineReport.total_transactions} txns, ${pipelineReport.categorization_summary.auto_classified} auto-classified`)
             return NextResponse.json({
               data: localResult,
               pipeline: pipelineReport,
+              intelligence,
               fileKind,
               parsedLocally: true,
             })
@@ -111,11 +114,12 @@ export async function POST(req: NextRequest) {
 
           // Run pipeline on PDF result too
           try {
-            const pipelineReport = runPipelineFromLocalResult(localResult)
+            const { pipelineReport, intelligence } = runPipelineFromLocalResult(localResult)
             log(`pipeline done — ${pipelineReport.total_transactions} txns`)
             return NextResponse.json({
               data: localResult,
               pipeline: pipelineReport,
+              intelligence,
               fileKind: 'pdf',
               parsedLocally: true,
             })
@@ -151,10 +155,13 @@ export async function POST(req: NextRequest) {
     // (fields: transactions, bank, accountHolder, etc.)
     // Try to run pipeline if we have transactions
     let pipelineReport: PipelineReport | null = null
+    let intelligence: IntelligenceReport | null = null
     const haikuData = result.data ?? result
     if (haikuData.transactions?.length >= 2) {
       try {
-        pipelineReport = runPipelineFromLocalResult(haikuData)
+        const pipeResult = runPipelineFromLocalResult(haikuData)
+        pipelineReport = pipeResult.pipelineReport
+        intelligence = pipeResult.intelligence
         log(`pipeline on Haiku result — ${pipelineReport.total_transactions} txns`)
       } catch (pipeErr: any) {
         log(`pipeline failed on Haiku result: ${pipeErr.message}`)
@@ -164,6 +171,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       data: haikuData,
       pipeline: pipelineReport,
+      intelligence,
       fileKind: result.kind,
       parsedLocally: false,
     })
@@ -182,7 +190,7 @@ export async function POST(req: NextRequest) {
 // then runs stages 2-5 (skipping stage 1's row parsing since it's done).
 // ────────────────────────────────────────────────────────────────────────────
 
-function runPipelineFromLocalResult(localResult: any): PipelineReport {
+function runPipelineFromLocalResult(localResult: any): { pipelineReport: PipelineReport; intelligence: IntelligenceReport } {
   // Convert localResult.transactions → RawTransaction[]
   const rawTxns: RawTransaction[] = (localResult.transactions || []).map((t: any, idx: number) => {
     // Handle both field naming conventions
@@ -235,11 +243,23 @@ function runPipelineFromLocalResult(localResult: any): PipelineReport {
     },
   }
 
-  // Run stages 2-5
+  // Run stages 2-5 (pipeline)
   const normalizedTxns = stage2_normalize(parseResult)
   const categorizedTxns = stage3_categorize(normalizedTxns)
   const analysis = stage4_analyze(categorizedTxns)
-  return stage5_report(parseResult, categorizedTxns, analysis)
+  const pipelineReport = stage5_report(parseResult, categorizedTxns, analysis)
+
+  // Run v3 intelligence engine (WHAT→WHY→WHO→CLASSIFY)
+  const intelligenceInput = rawTxns.map(t => ({
+    narration: t.narration_raw,
+    debit: t.debit,
+    credit: t.credit,
+    balance: t.balance,
+    date: t.txn_date,
+  }))
+  const intelligence = analyzeStatement(intelligenceInput, parseResult.account_holder)
+
+  return { pipelineReport, intelligence }
 }
 
 
