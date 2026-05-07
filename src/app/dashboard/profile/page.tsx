@@ -227,6 +227,7 @@ function ProfileContent() {
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
   const [taggedTxns, setTaggedTxns] = useState<any[]>([])
   const [intelligenceData, setIntelligenceData] = useState<any>(null)
+  const [openPersonGroups, setOpenPersonGroups] = useState<Set<string>>(new Set())
   const [bankPeriod, setBankPeriod] = useState<{from:string; to:string}|null>(null)
   const [bankMonths, setBankMonths] = useState(1)
   const [uploadingAccountId, setUploadingAccountId] = useState<string|null>(null)
@@ -403,7 +404,6 @@ function ProfileContent() {
         setBankAccounts(accounts)
         rebuildMergedTransactions(accounts)
       }
-      // Load saved intelligence data
       const savedIntel = localStorage.getItem('av_intelligence')
       if (savedIntel) { try { setIntelligenceData(JSON.parse(savedIntel)) } catch {} }
     } catch {}
@@ -451,83 +451,62 @@ function ProfileContent() {
     [taggedTxns, bankMonths, confirmedDetections, manualOverrides, confirmedSalaryIds, parkedIds])
 
   // ══════════════════════════════════════════════════════════════════════
-  // CLASSIFICATION — powered by v3 intelligence engine
+  // CLASSIFICATION — reads from v3 intelligence engine when available
   //
-  // Reads from intelligenceData (returned by API route.ts → txn-intelligence.ts)
-  // Falls back to keyword matching only if intelligence data isn't available.
-  //
-  // LOCKED PRINCIPLES (from Kartik's training):
-  // 1. NEVER guess relationships (no "domestic help", "spouse", "vendor" guesses)
+  // LOCKED PRINCIPLES:
+  // 1. NEVER guess relationships
   // 2. ONE P&L category per transaction, no double counting
-  // 3. Tags are separate (person, channel) — for reconciliation views
-  // 4. "Transfer to Persons" is a holding category, grouped by person name
-  // 5. Purpose note > Person for P&L (GROCERY EXPENSE → Groceries, not Family)
-  // 6. UPIRET = Refund (not dividend). BILLPAY HDFCSI = CC payment. ETMONEY = Investment.
-  // 7. When unclear → ask user at person-group level, never guess
+  // 3. Transfer to Persons = holding category, grouped by person name (expandable)
+  // 4. Purpose note > Person for P&L
+  // 5. WHAT > WHY > WHO
+  // 6. Channel is a tag, never a category
+  // 7. Significant persons at top, small one-offs compact at bottom
+  // 8. Self-transfers auto-detected by account holder name — never shown as question
   // ══════════════════════════════════════════════════════════════════════
 
-  // Map intelligence category → bucket id
-  function categoryToBucket(category: string, subcategory: string): string {
-    const cat = category.toUpperCase()
-    const sub = subcategory.toUpperCase()
-    if (cat === 'INCOME') {
-      if (sub.includes('SALARY')) return 'salary'
-      if (sub.includes('BONUS')) return 'bonus'
-      if (sub.includes('FREELANCE')) return 'freelance'
-      if (sub.includes('INTEREST') || sub.includes('CASHBACK')) return 'dividends'
-      if (sub.includes('BUSINESS')) return 'freelance' // unconfirmed company credits
-      return 'dividends'
-    }
-    if (cat === 'SELF TRANSFER') return 'self_transfer'
-    if (cat === 'TRANSFER TO PERSONS') return 'transfers'
-    if (cat === 'TRANSFER TO ACCOUNT') return 'transfers'
-    if (cat === 'REFUND') return 'dividends_refund' // we'll create this or use dividends
-    if (cat === 'EMI') return 'emi'
-    if (cat === 'HOUSING') return 'rent'
-    if (cat === 'CREDIT CARD') return 'cc_payment'
-    if (cat === 'INSURANCE') return 'insurance'
-    if (cat === 'TAX') return 'tax'
-    if (cat === 'CASH') return 'misc'
-    if (cat === 'INVESTMENT') return sub.includes('RD') || sub.includes('RECURRING') ? 'fd_rd' : sub.includes('PPF') || sub.includes('NPS') ? 'ppf_nps' : sub.includes('STOCK') ? 'stocks' : 'sip'
-    if (cat === 'FOOD & DINING') return 'food'
-    if (cat === 'TRANSPORT') return 'fuel'
-    if (cat === 'SHOPPING') return 'shopping'
-    if (cat === 'HEALTH') return 'healthcare'
-    if (cat === 'HEALTH & FITNESS') return 'healthcare'
-    if (cat === 'ENTERTAINMENT') return 'entertainment'
-    if (cat === 'UTILITIES') return 'utilities'
-    if (cat === 'HOME SERVICES') return 'home_services'
-    if (cat === 'HOUSEHOLD') return 'home_services'
-    if (cat === 'PROFESSIONAL') return 'misc'
-    if (cat === 'LIFESTYLE') return 'shopping'
-    if (cat === 'TRAVEL') return 'entertainment'
-    if (cat === 'AUTO-DEBIT') return 'misc'
-    return 'misc'
+  function getPatternKey(t: any): string {
+    const desc = (t.description || '').toUpperCase()
+    if (t.personName) return `PERSON:${t.personName.toUpperCase()}`
+    const nachMatch = desc.match(/NACH[-/]([A-Z0-9 ]{3,30})/)
+    if (nachMatch) return `NACH:${nachMatch[1].trim()}`
+    if (t.brand && t.brand !== 'Salary' && t.brand !== 'EMI/Loan') return `BRAND:${t.brand.toUpperCase()}`
+    const words = desc.replace(/^(UPI|NEFT|IMPS|RTGS)[-/\s]*/i, '').substring(0, 30).trim()
+    return `DESC:${words}`
   }
-
-  // Build person groups for the "Transfer to Persons" bucket
-  interface PersonGroup {
-    name: string
-    transactions: any[]
-    totalDebit: number
-    totalCredit: number
-    count: number
-    isOpen: boolean
-  }
-
-  const [openPersonGroups, setOpenPersonGroups] = useState<Set<string>>(new Set())
 
   interface Question {
-    id: string
-    patternKey: string
-    description: string
-    amount: number
-    date: string
-    occurrences: number
-    monthlyAmount: number
-    question: string
-    options: Array<{ bucketId: string; label: string }>
-    txnIds: string[]
+    id: string; patternKey: string; description: string; amount: number; date: string
+    occurrences: number; monthlyAmount: number; question: string
+    options: Array<{ bucketId: string; label: string }>; txnIds: string[]
+  }
+
+  interface PersonGroup {
+    name: string; transactions: any[]; totalDebit: number; totalCredit: number; count: number
+  }
+
+  // Intelligence engine category → bucket id mapping
+  function intelCatToBucket(cat: string, sub: string, direction: string): string {
+    const c = cat.toUpperCase(), s = sub.toUpperCase()
+    if (c === 'INCOME') { if (s.includes('SALARY')) return 'salary'; if (s.includes('BONUS')) return 'bonus'; if (s.includes('FREELANCE') || s.includes('BUSINESS')) return 'freelance'; return 'dividends' }
+    if (c === 'SELF TRANSFER') return 'self_transfer'
+    if (c === 'REFUND') return 'dividends'
+    if (c === 'EMI') return 'emi'
+    if (c === 'HOUSING') return 'rent'
+    if (c === 'CREDIT CARD') return 'cc_payment'
+    if (c === 'INSURANCE') return 'insurance'
+    if (c === 'TAX') return 'tax'
+    if (c === 'CASH') return 'misc'
+    if (c === 'INVESTMENT') return s.includes('RD') || s.includes('RECURRING') ? 'fd_rd' : s.includes('PPF') || s.includes('NPS') ? 'ppf_nps' : s.includes('STOCK') ? 'stocks' : 'sip'
+    if (c === 'FOOD & DINING') return 'food'
+    if (c === 'TRANSPORT') return 'fuel'
+    if (c === 'SHOPPING' || c === 'LIFESTYLE') return 'shopping'
+    if (c === 'HEALTH' || c === 'HEALTH & FITNESS') return 'healthcare'
+    if (c === 'ENTERTAINMENT' || c === 'TRAVEL') return 'entertainment'
+    if (c === 'UTILITIES') return 'utilities'
+    if (c === 'HOME SERVICES' || c === 'HOUSEHOLD') return 'home_services'
+    if (c === 'PROFESSIONAL') return 'misc'
+    if (c === 'TRANSFER TO PERSONS' || c === 'TRANSFER TO ACCOUNT') return 'transfers'
+    return 'misc'
   }
 
   const { txnBuckets, questions, personGroups } = useMemo(() => {
@@ -537,65 +516,60 @@ function ProfileContent() {
     const assignments: Record<string, string> = {}
     const personMap: Record<string, any[]> = {}
 
-    // Build a lookup from intelligence data (narration → classification)
+    // Build intelligence lookup (narration → classification)
     const intelLookup: Record<string, any> = {}
     if (intelligenceData?.transactions) {
-      intelligenceData.transactions.forEach((it: any) => {
-        intelLookup[it.raw] = it
-      })
+      intelligenceData.transactions.forEach((it: any) => { intelLookup[it.raw] = it })
     }
+
+    // Account holder name for self-transfer detection
+    const holderName = (bankAccounts[0]?.data?.accountHolder || '').toUpperCase()
+    const holderWords = holderName.split(/\s+/).filter((w: string) => w.length > 2)
 
     taggedTxns.forEach(t => {
       // User override always wins
       if (bucketOverrides[t.id]) { assignments[t.id] = bucketOverrides[t.id]; return }
-
-      // Check if user previously answered for this person/pattern
-      const personName = (t.personName || '').toUpperCase()
-      if (personName && userClassifications[`PERSON:${personName}`]) {
-        assignments[t.id] = userClassifications[`PERSON:${personName}`]; return
-      }
+      const pk = getPatternKey(t)
+      if (userClassifications[pk]) { assignments[t.id] = userClassifications[pk]; return }
 
       const desc = (t.description || '').toUpperCase()
+      const personName = (t.personName || '').toUpperCase()
 
-      // Check intelligence engine result
-      const intel = intelLookup[t.description || '']
-      if (intel && intel.clarity === 'certain') {
-        const bucket = categoryToBucket(intel.category, intel.subcategory)
-        assignments[t.id] = bucket
-
-        // If category is Transfer to Persons, also group by person
-        if (intel.category === 'Transfer to Persons' && intel.who) {
-          const pName = intel.who.toUpperCase()
-          if (!personMap[pName]) personMap[pName] = []
-          personMap[pName].push(t)
-        }
-        return
+      // ── SELF-TRANSFER: account holder name match (LOCKED — never question) ──
+      if (holderWords.length >= 2 && personName && holderWords.every((w: string) => personName.includes(w))) {
+        assignments[t.id] = 'self_transfer'; return
       }
 
-      // Intelligence says ask_user — put in Transfer to Persons, group by person
-      if (intel && intel.clarity === 'ask_user') {
-        // But check: is the category NOT "Transfer to Persons"?
-        // e.g., Income/Business (unconfirmed) — still has a specific bucket
-        if (intel.category !== 'Transfer to Persons' && intel.category !== 'Transfer to Account') {
-          const bucket = categoryToBucket(intel.category, intel.subcategory)
+      // ── Check intelligence engine result ──
+      const intel = intelLookup[t.description || '']
+      if (intel) {
+        if (intel.clarity === 'certain') {
+          const bucket = intelCatToBucket(intel.category, intel.subcategory, t.type)
           assignments[t.id] = bucket
+          // If it's Transfer to Persons, group by person
+          if (bucket === 'transfers' && intel.who) {
+            const pName = intel.who.toUpperCase()
+            if (!personMap[pName]) personMap[pName] = []
+            personMap[pName].push(t)
+          }
           return
         }
-
-        // Group by person for Transfer to Persons
-        const who = (intel.who || personName || '').toUpperCase()
-        if (who) {
-          if (!personMap[who]) personMap[who] = []
-          personMap[who].push(t)
+        if (intel.clarity === 'ask_user') {
+          // If intelligence assigned a specific non-transfer category, use it
+          if (intel.category !== 'Transfer to Persons' && intel.category !== 'Transfer to Account') {
+            assignments[t.id] = intelCatToBucket(intel.category, intel.subcategory, t.type)
+            return
+          }
+          // Otherwise → Transfer to Persons, grouped by person
+          const who = (intel.who || personName || '').toUpperCase()
+          if (who) { if (!personMap[who]) personMap[who] = []; personMap[who].push(t) }
+          assignments[t.id] = 'transfers'
+          return
         }
-        assignments[t.id] = 'transfers'
-        return
       }
 
-      // ── FALLBACK: No intelligence data — use keyword matching ──
-      // (This runs only if the API didn't return intelligence data)
-
-      // CERTAIN: explicit self-declarations
+      // ── FALLBACK: No intelligence data — keyword matching ──
+      // WHAT-based (self-declarations)
       if (desc.startsWith('UPIRET')) { assignments[t.id] = 'dividends'; return }
       if (desc.includes('SALARY') || desc.includes('SAL CR') || desc.includes('PAYROLL')) { assignments[t.id] = 'salary'; return }
       if (desc.includes('BONUS') || desc.includes('BONU')) { assignments[t.id] = 'bonus'; return }
@@ -603,20 +577,33 @@ function ProfileContent() {
       if (desc.includes('SELF TRANSFER') || desc.includes('SELF TRF') || desc.includes('OWN A/C')) { assignments[t.id] = 'self_transfer'; return }
       if (desc.match(/\bEMI[-\s]/) || desc.includes('HOME LOAN') || desc.includes('CAR LOAN') || desc.includes('PERSONAL LOAN') || desc.includes('EDUCATION LOAN') || desc.includes('GOLD LOAN') || desc.includes('LAPTOP LOAN') || desc.includes('CONSUMER DURABLE') || desc.includes('LOAN REPAY')) { assignments[t.id] = 'emi'; return }
       if (desc.includes('RENT PAYMENT') || desc.includes('HOUSE RENT')) { assignments[t.id] = 'rent'; return }
-      if (desc.includes('CC AUTOPAY') || desc.includes('CC PAYMENT') || desc.includes('CREDIT CARD') || desc.includes('TOWARDS CC') || (desc.includes('BILLPAY') && (desc.includes('HDFCSI') || /\d{6}X{4,}\d{4}/.test(desc)))) { assignments[t.id] = 'cc_payment'; return }
+      // CC: BILLPAY HDFCSI, TOWARDS CC, CC AUTOPAY (LOCKED)
+      if (desc.includes('CC AUTOPAY') || desc.includes('CC PAYMENT') || desc.includes('CREDIT CARD') || desc.includes('CRED MINT') || desc.includes('CRED PAY') || desc.includes('TOWARDS CC') || (desc.includes('BILLPAY') && (desc.includes('HDFCSI') || /\d{6}X{4,}\d{4}/.test(desc)))) { assignments[t.id] = 'cc_payment'; return }
       if (desc.includes('INTEREST CREDIT') || desc.includes('INT.PD') || desc.includes('INT CR') || desc.includes('FD INTEREST')) { assignments[t.id] = 'dividends'; return }
-      if (desc.includes('CASHBACK') || desc.includes('REFUND') || desc.includes('REVERSAL')) { assignments[t.id] = 'dividends'; return }
-      if (desc.includes('INSURANCE') || desc.includes('LIC PREMIUM') || desc.match(/\bLIC[-\s]/)) { assignments[t.id] = 'insurance'; return }
-      if (desc.includes('PPF') || desc.includes('NPS CONTRIBUTION')) { assignments[t.id] = 'ppf_nps'; return }
+      if (desc.includes('CASHBACK') || desc.includes('CASH BACK') || desc.includes('REFUND') || desc.includes('REVERSAL')) { assignments[t.id] = 'dividends'; return }
+      if (desc.includes('INSURANCE') || desc.includes('MEDICLAIM') || desc.includes('LIC PREMIUM') || desc.match(/\bLIC[-\s]/) || desc.includes('PREMIUM-POL')) { assignments[t.id] = 'insurance'; return }
+      if (desc.includes('PPF') || desc.includes('NPS CONTRIBUTION') || desc.includes('NPS TIER')) { assignments[t.id] = 'ppf_nps'; return }
       if (desc.includes('ADVANCE TAX') || desc.includes('INCOME TAX') || desc.includes('TAX PAYMENT') || desc.includes('CHALLAN')) { assignments[t.id] = 'tax'; return }
       if (desc.includes('ATM')) { assignments[t.id] = 'misc'; return }
+      // Investment entities (LOCKED — ETMONEY is investment, not telecom)
       if (desc.includes('ETMONEY') || desc.includes('ET MONEY')) { assignments[t.id] = 'sip'; return }
       if (desc.startsWith('RD THROUGH') || desc.includes('RECURRING DEPOSIT')) { assignments[t.id] = 'fd_rd'; return }
       if (desc.includes('MUTUAL FUND') || desc.includes('BLUECHIP') || desc.includes('MID CAP') || desc.includes('PARAG PARIKH')) { assignments[t.id] = 'sip'; return }
       if (desc.includes('ZERODHA') || desc.includes('STOCK PURCHASE') || desc.includes('GROWW')) { assignments[t.id] = 'stocks'; return }
       if (desc.includes('URBAN COMPANY') || desc.includes('URBANCLAP')) { assignments[t.id] = 'home_services'; return }
+      if (desc.includes('BOOKMYSHOW') || desc.includes('PVR') || desc.includes('INOX')) { assignments[t.id] = 'entertainment'; return }
 
-      // Known merchants from mega categories
+      // WHY-based (purpose note in UPI narration overrides person)
+      const parts = desc.startsWith('UPI-') ? desc.substring(4).split('-') : []
+      const note = parts.length >= 5 ? parts.slice(4).join('-').replace(/^\d{10,}[-]?/, '').replace(/PAYMENT FROM PHONE?/gi,'').replace(/PAY BY WHATSAPP/gi,'').trim() : ''
+      if (note.includes('GROCERY') || note.includes('GROCERIES')) { assignments[t.id] = 'food'; return }
+      if (note.includes('MEDICINE') || note.includes('FACEWASH')) { assignments[t.id] = 'healthcare'; return }
+      if (note.includes('METRO EXPENSE')) { assignments[t.id] = 'fuel'; return }
+      if (note.includes('TOWARDS CC')) { assignments[t.id] = 'cc_payment'; return }
+      if (note.includes('HOUSEHOLD')) { assignments[t.id] = 'home_services'; return }
+      if (note.includes('TRANSACTION REFUND') || note.includes('REFUND')) { assignments[t.id] = 'dividends'; return }
+
+      // Mega category from categories.ts
       const mega = t.mega as string
       if (mega === 'food') { assignments[t.id] = 'food'; return }
       if (mega === 'shopping') { assignments[t.id] = 'shopping'; return }
@@ -628,14 +615,7 @@ function ProfileContent() {
       if (mega === 'insurance') { assignments[t.id] = 'insurance'; return }
       if (mega === 'salary' && t.type === 'credit') { assignments[t.id] = 'salary'; return }
 
-      // Self-transfer by account holder name match
-      const holderName = bankAccounts[0]?.data?.accountHolder || ''
-      if (holderName && personName) {
-        const hw = holderName.toUpperCase().split(/\s+/).filter((w: string) => w.length > 2)
-        if (hw.length >= 2 && hw.every((w: string) => personName.includes(w))) { assignments[t.id] = 'self_transfer'; return }
-      }
-
-      // Everything else: Transfer to Persons (no guessing)
+      // Everything else → Transfer to Persons (no guessing, group by person)
       if (personName) {
         if (!personMap[personName]) personMap[personName] = []
         personMap[personName].push(t)
@@ -650,59 +630,24 @@ function ProfileContent() {
       else if (map['misc']) map['misc'].push(t)
     })
 
-    // Build questions grouped by person (for Transfer to Persons)
-    const questionedPersons = new Set<string>()
-    for (const [person, txns] of Object.entries(personMap)) {
-      if (questionedPersons.has(person)) continue
-      // Check if user already classified this person
-      if (userClassifications[`PERSON:${person}`]) continue
-
-      questionedPersons.add(person)
-      const totalAmt = txns.reduce((s: number, t: any) => s + t.amount, 0)
-      const monthly = Math.round(totalAmt / Math.max(1, bankMonths))
-
-      qList.push({
-        id: `PERSON:${person}`,
-        patternKey: `PERSON:${person}`,
-        description: txns[0]?.description || person,
-        amount: txns[0]?.amount || 0,
-        date: txns[0]?.date || '',
-        occurrences: txns.length,
-        monthlyAmount: monthly,
-        question: txns.length > 1
-          ? `You have ${txns.length} transactions with ${person} (total ${fmt(totalAmt)}). Who is this?`
-          : `Payment of ${fmt(txns[0]?.amount || 0)} to ${person}. Who is this?`,
-        options: [
-          { bucketId: 'rent', label: '🏠 Rent' },
-          { bucketId: 'home_services', label: '🏠 Domestic help / services' },
-          { bucketId: 'food', label: '🍽 Food / dining' },
-          { bucketId: 'shopping', label: '🛍 Shopping' },
-          { bucketId: 'fuel', label: '⛽ Transport' },
-          { bucketId: 'healthcare', label: '💊 Healthcare' },
-          { bucketId: 'transfers', label: '👤 Keep as personal transfer' },
-          { bucketId: 'misc', label: '📦 Something else' },
-        ],
-        txnIds: txns.map((t: any) => t.id),
-      })
-    }
-
-    // Sort questions: largest amounts first
-    qList.sort((a, b) => (b.monthlyAmount * b.occurrences) - (a.monthlyAmount * a.occurrences))
-
-    // Build person groups for the transfers bucket
+    // Build person groups sorted by significance (high amount × frequency first)
     const pGroups: PersonGroup[] = Object.entries(personMap).map(([name, txns]) => ({
       name,
       transactions: txns,
       totalDebit: txns.filter((t: any) => t.type === 'debit').reduce((s: number, t: any) => s + t.amount, 0),
       totalCredit: txns.filter((t: any) => t.type === 'credit').reduce((s: number, t: any) => s + t.amount, 0),
       count: txns.length,
-      isOpen: false,
-    })).sort((a, b) => b.count - a.count)
+    })).sort((a, b) => {
+      // Significant first: score = count × total amount
+      const scoreA = a.count * (a.totalDebit + a.totalCredit)
+      const scoreB = b.count * (b.totalDebit + b.totalCredit)
+      return scoreB - scoreA
+    })
 
     return { txnBuckets: map, questions: qList, personGroups: pGroups }
   }, [taggedTxns, bucketOverrides, userClassifications, bankMonths, intelligenceData, bankAccounts])
 
-  // Answer a question — store classification forever, apply to all matching transactions
+  // Answer a question — store classification forever
   const answerQuestion = (q: Question, bucketId: string) => {
     setUserClassifications(prev => ({ ...prev, [q.patternKey]: bucketId }))
     setBucketOverrides(prev => {
@@ -711,7 +656,7 @@ function ProfileContent() {
       return updated
     })
     const bucketInfo = ALL_BUCKET_LIST.find(b => b.id === bucketId)
-    toast.success(`Got it — classified as ${bucketInfo?.label}. Remembered for next time.`)
+    toast.success(`Classified as ${bucketInfo?.label}. Remembered for next time.`)
   }
 
   // ── File handlers (unchanged) ──
@@ -752,7 +697,6 @@ function ProfileContent() {
         toast.error(json.message || json.error || 'Failed to parse statement'); return
       }
       const bd = json.data
-      // Store v3 intelligence data if available
       if (json.intelligence) {
         setIntelligenceData(json.intelligence)
         try { localStorage.setItem('av_intelligence', JSON.stringify(json.intelligence)) } catch {}
@@ -1148,61 +1092,78 @@ function ProfileContent() {
                                   {items.length === 0 ? (
                                     <div style={{ padding:'16px 12px', textAlign:'center' as const, fontSize:11, color:C.muted }}>Drop transactions here</div>
                                   ) : bucket.id === 'transfers' && personGroups.length > 0 ? (
-                                    /* ── PERSON-GROUPED VIEW for Transfer to Persons ── */
+                                    /* ── PERSON-GROUPED LEDGER (Kartik's wireframe) ── */
                                     <div>
-                                      {personGroups.map(pg => {
+                                      {/* Significant persons: ≥2 txns or total > ₹5000 — expandable sub-head with ledger */}
+                                      {personGroups.filter(pg => pg.count >= 2 || (pg.totalDebit + pg.totalCredit) > 5000).map(pg => {
                                         const pgOpen = openPersonGroups.has(pg.name)
-                                        const pgTotal = pg.totalDebit + pg.totalCredit
+                                        const pgNet = pg.totalCredit - pg.totalDebit
                                         return (
                                           <div key={pg.name} style={{ borderBottom:`0.5px solid ${C.border}` }}>
-                                            <div
-                                              onClick={() => { const s = new Set(openPersonGroups); s.has(pg.name) ? s.delete(pg.name) : s.add(pg.name); setOpenPersonGroups(s) }}
-                                              style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 12px', cursor:'pointer', background: pgOpen ? '#FAFAF8' : 'transparent' }}
-                                            >
+                                            <div onClick={() => { const s = new Set(openPersonGroups); s.has(pg.name) ? s.delete(pg.name) : s.add(pg.name); setOpenPersonGroups(s) }}
+                                              style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 12px', cursor:'pointer', background: pgOpen ? '#FAFAF8' : 'transparent' }}>
                                               <span style={{ display:'flex', alignItems:'center', gap:6, fontSize:12 }}>
                                                 <span style={{ fontSize:11, color:C.muted }}>{pgOpen ? '▾' : '▸'}</span>
                                                 <span style={{ fontWeight:500, color:C.text }}>{pg.name}</span>
                                                 <span style={{ fontSize:10, color:C.muted, background:C.wl, padding:'1px 6px', borderRadius:8 }}>{pg.count}</span>
                                               </span>
-                                              <span style={{ fontSize:11.5, fontWeight:500, color:C.muted }}>{fmt(pgTotal)}</span>
+                                              <span style={{ fontSize:11.5, fontWeight:500, color: pgNet >= 0 ? '#1D9E75' : '#D85A30' }}>{fmt(pg.totalDebit + pg.totalCredit)}</span>
                                             </div>
-                                            {pgOpen && pg.transactions.map((t: any) => (
-                                              <div key={t.id} draggable
-                                                onDragStart={() => setDragTxnId(t.id)}
-                                                onDragEnd={() => setDragTxnId(null)}
-                                                onClick={() => setSelectedTxn(prev => ({ ...prev, [bucket.id]: prev[bucket.id] === t.id ? '' : t.id }))}
-                                                style={{ ...S.txnRow, paddingLeft:28, background: selectedTxn[bucket.id] === t.id ? C.wl : 'transparent', opacity: dragTxnId === t.id ? 0.35 : 1 }}
-                                              >
-                                                <div>
-                                                  <div style={{ color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const, fontSize:11.5 }}>{t.description}</div>
-                                                  <div style={{ fontSize:10, color:C.muted, marginTop:1 }}>{t.date}</div>
+                                            {pgOpen && (
+                                              <div style={{ background:'#FAFAF8' }}>
+                                                {/* Mini-ledger: S.No, Date, Nature, Amount */}
+                                                <div style={{ display:'grid', gridTemplateColumns:'30px 65px 1fr 80px 28px', padding:'4px 12px 4px 24px', fontSize:9, color:C.muted, fontWeight:600, letterSpacing:'0.05em', textTransform:'uppercase' as const, borderBottom:`0.5px solid ${C.border}` }}>
+                                                  <span>#</span><span>Date</span><span>Nature</span><span style={{ textAlign:'right' as const }}>Amount</span><span></span>
                                                 </div>
-                                                <div style={{ textAlign:'right' as const, fontWeight:500, color: t.type==='credit' ? '#1D9E75' : '#D85A30', fontSize:12 }}>
-                                                  {t.type==='credit'?'+':'−'}{fmt(t.amount)}
-                                                </div>
-                                                <button onClick={e => { e.stopPropagation(); setSingleCategoryModal({ open:true, transaction:t }) }} style={{ width:22, height:22, borderRadius:3, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted, display:'flex', alignItems:'center', justifyContent:'center' }}>✎</button>
+                                                {pg.transactions.map((t: any, i: number) => {
+                                                  // Nature: purpose note if available, else channel
+                                                  const desc = (t.description || '').toUpperCase()
+                                                  let nature = ''
+                                                  if (desc.startsWith('UPI-')) {
+                                                    const parts = desc.substring(4).split('-')
+                                                    if (parts.length >= 5) { const n = parts.slice(4).join('-').replace(/^\d{10,}[-]?/,'').replace(/PAYMENT FROM PHONE?/gi,'').replace(/PAY BY WHATSAPP/gi,'').trim(); if (n.length > 2) nature = n }
+                                                  }
+                                                  if (!nature) {
+                                                    if (desc.startsWith('UPI')) nature = 'UPI'
+                                                    else if (desc.startsWith('IMPS')) nature = 'IMPS'
+                                                    else if (desc.startsWith('NEFT')) nature = 'NEFT'
+                                                    else if (desc.startsWith('RTGS')) nature = 'RTGS'
+                                                    else nature = 'Transfer'
+                                                  }
+                                                  return (
+                                                    <div key={t.id} draggable onDragStart={() => setDragTxnId(t.id)} onDragEnd={() => setDragTxnId(null)}
+                                                      style={{ display:'grid', gridTemplateColumns:'30px 65px 1fr 80px 28px', padding:'5px 12px 5px 24px', fontSize:11, alignItems:'center', borderBottom:`0.5px solid #FAF7F2`, cursor:'grab', opacity: dragTxnId === t.id ? 0.35 : 1 }}>
+                                                      <span style={{ color:C.muted }}>{i+1}</span>
+                                                      <span style={{ color:C.muted }}>{t.date}</span>
+                                                      <span style={{ color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>{nature}</span>
+                                                      <span style={{ textAlign:'right' as const, fontWeight:500, color: t.type==='credit' ? '#1D9E75' : '#D85A30' }}>{t.type==='credit'?'+':'−'}{fmt(t.amount)}</span>
+                                                      <button onClick={e => { e.stopPropagation(); setSingleCategoryModal({ open:true, transaction:t }) }} style={{ width:22, height:22, borderRadius:3, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted, display:'flex', alignItems:'center', justifyContent:'center' }}>✎</button>
+                                                    </div>
+                                                  )
+                                                })}
                                               </div>
-                                            ))}
+                                            )}
                                           </div>
                                         )
                                       })}
-                                      {/* Ungrouped transfers (no person name) */}
-                                      {items.filter((t: any) => !personGroups.some(pg => pg.transactions.includes(t))).map((t: any) => (
-                                        <div key={t.id} draggable
-                                          onDragStart={() => setDragTxnId(t.id)}
-                                          onDragEnd={() => setDragTxnId(null)}
-                                          style={{ ...S.txnRow, opacity: dragTxnId === t.id ? 0.35 : 1 }}
-                                        >
-                                          <div>
-                                            <div style={{ color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>{t.description}</div>
-                                            <div style={{ fontSize:10, color:C.muted, marginTop:1 }}>{t.date}</div>
-                                          </div>
-                                          <div style={{ textAlign:'right' as const, fontWeight:500, color: t.type==='credit' ? '#1D9E75' : '#D85A30' }}>
-                                            {t.type==='credit'?'+':'−'}{fmt(t.amount)}
-                                          </div>
-                                          <button onClick={e => { e.stopPropagation(); setSingleCategoryModal({ open:true, transaction:t }) }} style={{ width:22, height:22, borderRadius:3, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted, display:'flex', alignItems:'center', justifyContent:'center' }}>✎</button>
+                                      {/* Small one-offs: 1 txn AND total ≤ ₹5000 — compact rows */}
+                                      {personGroups.filter(pg => pg.count === 1 && (pg.totalDebit + pg.totalCredit) <= 5000).length > 0 && (
+                                        <div style={{ borderTop:`0.5px solid ${C.border}`, padding:'6px 0' }}>
+                                          <div style={{ padding:'4px 12px', fontSize:9, color:C.muted, fontWeight:600, letterSpacing:'0.05em', textTransform:'uppercase' as const }}>Small transfers</div>
+                                          {personGroups.filter(pg => pg.count === 1 && (pg.totalDebit + pg.totalCredit) <= 5000).map(pg => {
+                                            const t = pg.transactions[0]
+                                            return (
+                                              <div key={pg.name} draggable onDragStart={() => setDragTxnId(t.id)} onDragEnd={() => setDragTxnId(null)}
+                                                style={{ display:'grid', gridTemplateColumns:'1fr 65px 80px 28px', padding:'4px 12px', fontSize:11, alignItems:'center', borderBottom:`0.5px solid #FAF7F2`, cursor:'grab', opacity: dragTxnId === t.id ? 0.35 : 1 }}>
+                                                <span style={{ color:C.text }}>{pg.name}</span>
+                                                <span style={{ color:C.muted }}>{t.date}</span>
+                                                <span style={{ textAlign:'right' as const, fontWeight:500, color: t.type==='credit' ? '#1D9E75' : '#D85A30' }}>{t.type==='credit'?'+':'−'}{fmt(t.amount)}</span>
+                                                <button onClick={e => { e.stopPropagation(); setSingleCategoryModal({ open:true, transaction:t }) }} style={{ width:22, height:22, borderRadius:3, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted, display:'flex', alignItems:'center', justifyContent:'center' }}>✎</button>
+                                              </div>
+                                            )
+                                          })}
                                         </div>
-                                      ))}
+                                      )}
                                     </div>
                                   ) : (
                                     <>
