@@ -7,6 +7,7 @@ import DematHoldings from '@/components/DematHoldings'
 import { useAppStore } from '@/store/AppStore'
 import { MEGA_CATEGORIES, MegaCategory, tagTransactions, detectSalaryCandidates, detectSalary, SalaryCandidate, SalaryDetectionResult, generateExpenseSuggestions, ExpenseSuggestion, loadMerchantMemory, saveMerchantMemory, extractMerchantKey } from '@/lib/categories'
 import type { IntelligenceReport, ClassifiedTransaction } from '@/lib/txn-intelligence'
+import type { ParsedSalaryData } from '@/types'
 
 const C = { fg:'#3A4B41', wheat:'#E6CFA7', wl:'#F5ECD8', wm:'#D4B98A', bg:'#FDFAF6', card:'#fff', border:'#E4DDD1', text:'#1C2B22', muted:'#7A8A7E', danger:'#B94040' }
 const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`
@@ -267,7 +268,284 @@ function assignToBucket(t: any): string {
   return t.type === 'credit' ? 'freelance' : 'misc'
 }
 
-type MainTab = 'docs' | 'review' | 'reports' | 'analytics'
+type MainTab = 'docs' | 'salary' | 'review' | 'reports' | 'analytics'
+
+// ─── Salary Timeline types & helpers ──────────────────────────────────────
+
+interface SlipComponent {
+  label: string
+  amount: number
+  type: 'earning' | 'deduction'
+  flag: 'recurring' | 'one_time'
+}
+
+interface SlipData {
+  id: string
+  monthKey: string                  // "2026-04"
+  parsed: ParsedSalaryData
+  components: SlipComponent[]
+  uploadedAt: string
+  fileName: string
+}
+
+interface Employment {
+  id: string
+  employerName: string
+  fromMonth: string                  // "2026-04"
+  toMonth: string | null             // null = current
+  slips: SlipData[]
+}
+
+interface MonthOverride {
+  monthKey: string
+  components: { label: string; amount: number; type: 'earning' | 'deduction' }[]
+}
+
+interface SalaryTimeline {
+  fy: string                         // "FY 2026-27"
+  fyStartYear: number                // 2026 (means Apr 2026 – Mar 2027)
+  employments: Employment[]
+  overrides: MonthOverride[]         // user-edited projected months
+}
+
+// Default classification of components — recurring unless name suggests one-time
+const ONE_TIME_KEYWORDS = ['BONUS', 'INCENTIVE', 'ARREAR', 'LTA', 'LEAVE TRAVEL', 'LEAVE ENCASH', 'GRATUITY', 'JOINING', 'RETENTION', 'VARIABLE', 'PERFORMANCE', 'AWARD', 'EX-GRATIA', 'EX GRATIA', 'REIMBURSEM']
+function classifyComponent(label: string): 'recurring' | 'one_time' {
+  const u = (label || '').toUpperCase()
+  return ONE_TIME_KEYWORDS.some(kw => u.includes(kw)) ? 'one_time' : 'recurring'
+}
+
+// Parse "Apr 2026" / "April 2026" / "04/2026" / "2026-04" → "2026-04"
+function parseMonthKey(month: string, year: string): string {
+  const m = (month || '').trim()
+  const y = (year || '').trim()
+  const monthNames: Record<string, string> = { jan:'01', january:'01', feb:'02', february:'02', mar:'03', march:'03', apr:'04', april:'04', may:'05', jun:'06', june:'06', jul:'07', july:'07', aug:'08', august:'08', sep:'09', september:'09', oct:'10', october:'10', nov:'11', november:'11', dec:'12', december:'12' }
+  let monthNum = ''
+  if (/^\d{1,2}$/.test(m)) monthNum = m.padStart(2, '0')
+  else if (monthNames[m.toLowerCase()]) monthNum = monthNames[m.toLowerCase()]
+  let yearNum = y
+  if (/^\d{2}$/.test(y)) yearNum = `20${y}`
+  if (!monthNum || !/^\d{4}$/.test(yearNum)) {
+    // fallback to current month
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  }
+  return `${yearNum}-${monthNum}`
+}
+
+// Indian FY: Apr 1 → Mar 31. monthKey "2026-04" → fyStartYear 2026; "2026-03" → 2025
+function fyStartYearForMonthKey(monthKey: string): number {
+  const [y, m] = monthKey.split('-').map(Number)
+  return m >= 4 ? y : y - 1
+}
+function fyLabel(startYear: number): string {
+  const endShort = String((startYear + 1) % 100).padStart(2, '0')
+  return `FY ${startYear}-${endShort}`
+}
+function fyMonths(startYear: number): string[] {
+  const out: string[] = []
+  for (let i = 0; i < 12; i++) {
+    const m = ((i + 3) % 12) + 1   // Apr=4, May=5, ..., Mar=3
+    const y = m >= 4 ? startYear : startYear + 1
+    out.push(`${y}-${String(m).padStart(2, '0')}`)
+  }
+  return out
+}
+function monthLabel(monthKey: string): string {
+  const [y, m] = monthKey.split('-')
+  const names = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+  return `${names[Number(m)]} ${y.slice(2)}`
+}
+
+// Build a SlipData from API result
+function slipFromParsed(parsed: ParsedSalaryData, fileName: string): SlipData {
+  const monthKey = parseMonthKey(parsed.month, parsed.year)
+  const components: SlipComponent[] = []
+  const earnings: Array<[string, number]> = [
+    ['Basic Salary', parsed.basicSalary],
+    ['HRA', parsed.hra],
+    ['Dearness Allowance', parsed.da],
+    ['Travel Allowance', parsed.ta],
+    ['LTA', parsed.lta],
+    ['Medical Allowance', parsed.medicalAllowance],
+    ['Special Allowance', parsed.specialAllowance],
+    ['Other Allowances', parsed.otherAllowances],
+  ]
+  earnings.forEach(([label, amount]) => {
+    if (amount && amount > 0) components.push({ label, amount, type: 'earning', flag: classifyComponent(label) })
+  })
+  const deductions: Array<[string, number]> = [
+    ['Employee PF', parsed.employeePF],
+    ['ESIC', parsed.esic],
+    ['Professional Tax', parsed.professionalTax],
+    ['TDS', parsed.tdsDeducted],
+    ['Loan Deduction', parsed.loanDeduction],
+    ['Other Deductions', parsed.otherDeductions],
+  ]
+  deductions.forEach(([label, amount]) => {
+    if (amount && amount > 0) components.push({ label, amount, type: 'deduction', flag: classifyComponent(label) })
+  })
+  // If parser returned a richer components array, prefer those (preserves any custom labels)
+  if (Array.isArray(parsed.components) && parsed.components.length > 0) {
+    const fromParsed = parsed.components
+      .filter(c => c.type === 'earning' || c.type === 'deduction')
+      .map(c => ({ label: c.label, amount: c.amount, type: c.type as 'earning' | 'deduction', flag: classifyComponent(c.label) }))
+    if (fromParsed.length >= components.length) {
+      return { id: uid(), monthKey, parsed, components: fromParsed, uploadedAt: new Date().toISOString(), fileName }
+    }
+  }
+  return { id: uid(), monthKey, parsed, components, uploadedAt: new Date().toISOString(), fileName }
+}
+
+// For an employment, get the most recent slip strictly before or at a target monthKey
+function latestSlipBefore(employment: Employment, monthKey: string): SlipData | null {
+  const eligible = employment.slips.filter(s => s.monthKey <= monthKey).sort((a, b) => b.monthKey.localeCompare(a.monthKey))
+  return eligible[0] || null
+}
+function employmentForMonth(timeline: SalaryTimeline, monthKey: string): Employment | null {
+  for (const emp of timeline.employments) {
+    if (monthKey >= emp.fromMonth && (emp.toMonth === null || monthKey <= emp.toMonth)) return emp
+  }
+  // fallback to latest employment if month is past it
+  return timeline.employments[timeline.employments.length - 1] || null
+}
+
+interface MonthRollup { earnings: number; deductions: number; net: number; isActual: boolean; isOverride: boolean }
+function rollupMonth(timeline: SalaryTimeline, monthKey: string): MonthRollup {
+  const override = timeline.overrides.find(o => o.monthKey === monthKey)
+  if (override) {
+    const earnings = override.components.filter(c => c.type === 'earning').reduce((s, c) => s + c.amount, 0)
+    const deductions = override.components.filter(c => c.type === 'deduction').reduce((s, c) => s + c.amount, 0)
+    return { earnings, deductions, net: earnings - deductions, isActual: false, isOverride: true }
+  }
+  const emp = employmentForMonth(timeline, monthKey)
+  if (!emp) return { earnings: 0, deductions: 0, net: 0, isActual: false, isOverride: false }
+  const exact = emp.slips.find(s => s.monthKey === monthKey)
+  if (exact) {
+    const earnings = exact.components.filter(c => c.type === 'earning').reduce((s, c) => s + c.amount, 0)
+    const deductions = exact.components.filter(c => c.type === 'deduction').reduce((s, c) => s + c.amount, 0)
+    return { earnings, deductions, net: earnings - deductions, isActual: true, isOverride: false }
+  }
+  // Project from latest slip in this employment, RECURRING components only
+  const base = latestSlipBefore(emp, monthKey) || emp.slips[0]
+  if (!base) return { earnings: 0, deductions: 0, net: 0, isActual: false, isOverride: false }
+  const earnings = base.components.filter(c => c.type === 'earning' && c.flag === 'recurring').reduce((s, c) => s + c.amount, 0)
+  const deductions = base.components.filter(c => c.type === 'deduction' && c.flag === 'recurring').reduce((s, c) => s + c.amount, 0)
+  return { earnings, deductions, net: earnings - deductions, isActual: false, isOverride: false }
+}
+
+interface AnnualSummary {
+  annualGross: number
+  annualDeductions: number
+  annualNet: number
+  actualsCount: number
+  projectedCount: number
+  monthlyAvgGross: number
+  monthlyAvgNet: number
+  recurringMonthlyGross: number      // for store contract
+  recurringMonthlyEPF: number
+  recurringMonthlyEmployerPF: number
+  latestEmployerName: string
+}
+function computeAnnual(timeline: SalaryTimeline | null): AnnualSummary | null {
+  if (!timeline || timeline.employments.length === 0) return null
+  const months = fyMonths(timeline.fyStartYear)
+  let annualGross = 0, annualDeductions = 0, actuals = 0, projected = 0
+  for (const mk of months) {
+    const r = rollupMonth(timeline, mk)
+    annualGross += r.earnings
+    annualDeductions += r.deductions
+    if (r.isActual) actuals++
+    else projected++
+  }
+  const annualNet = annualGross - annualDeductions
+  // Recurring monthly figures for store contract — use latest employment's latest slip
+  const latestEmp = timeline.employments[timeline.employments.length - 1]
+  const latestSlip = latestEmp ? latestEmp.slips.sort((a,b) => b.monthKey.localeCompare(a.monthKey))[0] : null
+  const recurringEarnings = latestSlip ? latestSlip.components.filter(c => c.type === 'earning' && c.flag === 'recurring').reduce((s, c) => s + c.amount, 0) : 0
+  const epfComp = latestSlip?.components.find(c => /EMPLOYEE PF|EPF/i.test(c.label) && c.type === 'deduction')
+  const employerPF = latestSlip?.parsed.employerPF || 0
+  return {
+    annualGross,
+    annualDeductions,
+    annualNet,
+    actualsCount: actuals,
+    projectedCount: projected,
+    monthlyAvgGross: Math.round(annualGross / 12),
+    monthlyAvgNet: Math.round(annualNet / 12),
+    recurringMonthlyGross: recurringEarnings,
+    recurringMonthlyEPF: epfComp?.amount || 0,
+    recurringMonthlyEmployerPF: employerPF,
+    latestEmployerName: latestEmp?.employerName || '',
+  }
+}
+
+// ─── Salary Month Editor (modal body) ─────────────────────────────────────
+function SalaryMonthEditor({ monthKey, isActual, isOverride, initialRows, onClose, onSave, onClearOverride, onUploadHere }: {
+  monthKey: string
+  isActual: boolean
+  isOverride: boolean
+  initialRows: Array<{ label: string; amount: number; type: 'earning' | 'deduction' }>
+  onClose: () => void
+  onSave: (rows: Array<{ label: string; amount: number; type: 'earning' | 'deduction' }>) => void
+  onClearOverride: (() => void) | null
+  onUploadHere: () => void
+}) {
+  const [rows, setRows] = useState(initialRows)
+  const totalEarning = rows.filter(r => r.type === 'earning').reduce((s, r) => s + r.amount, 0)
+  const totalDeduction = rows.filter(r => r.type === 'deduction').reduce((s, r) => s + r.amount, 0)
+  const updateRow = (i: number, patch: Partial<typeof rows[number]>) => setRows(prev => prev.map((r, idx) => idx === i ? { ...r, ...patch } : r))
+  const removeRow = (i: number) => setRows(prev => prev.filter((_, idx) => idx !== i))
+  const addRow = (type: 'earning' | 'deduction') => setRows(prev => [...prev, { label: '', amount: 0, type }])
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(28,43,34,0.5)', zIndex:99, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:'#fff', borderRadius:10, padding:20, maxWidth:560, width:'100%', boxShadow:'0 12px 40px rgba(0,0,0,0.18)', maxHeight:'85vh', overflowY:'auto' as const }}>
+        <p style={{ fontSize:16, fontWeight:700, color:C.text, margin:'0 0 4px' }}>{(() => { const [y,m] = monthKey.split('-'); const names = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${names[Number(m)]} ${y}` })()}</p>
+        <p style={{ fontSize:11, color:C.muted, margin:'0 0 12px' }}>
+          {isActual ? 'Actual slip — values from uploaded slip. Upload a new slip to replace these.' :
+           isOverride ? 'Edited projection. Adjust any line below.' :
+           'Auto-projected from your latest slip. Edit to override for this month only.'}
+        </p>
+        <div style={{ border:`1px solid ${C.border}`, borderRadius:5, overflow:'hidden' }}>
+          <div style={{ padding:'7px 12px', background:'#FAFAF8', fontSize:10, fontWeight:700, color:C.muted, letterSpacing:'0.05em', textTransform:'uppercase' as const }}>Earnings</div>
+          {rows.filter(r => r.type === 'earning').length === 0 && <div style={{ padding:'10px 12px', fontSize:12, color:C.muted, fontStyle:'italic' as const }}>No earnings</div>}
+          {rows.map((r, i) => r.type !== 'earning' ? null : (
+            <div key={`e-${i}`} style={{ display:'grid', gridTemplateColumns:'1fr 110px 24px', gap:6, padding:'6px 12px', borderBottom:`0.5px solid #FAF7F2`, alignItems:'center' }}>
+              <input type="text" value={r.label} onChange={e => updateRow(i, { label: e.target.value })} placeholder="Component name" disabled={isActual} style={{ fontSize:12, padding:'5px 8px', border:`1px solid ${C.border}`, borderRadius:3, fontFamily:'inherit', outline:'none', color:C.text, background: isActual ? '#FAFAF8' : '#fff' }} />
+              <input type="text" inputMode="numeric" value={r.amount > 0 ? String(r.amount) : ''} onChange={e => updateRow(i, { amount: parseInt(e.target.value.replace(/[^0-9]/g,'')) || 0 })} placeholder="0" disabled={isActual} style={{ fontSize:12, padding:'5px 8px', border:`1px solid ${C.border}`, borderRadius:3, fontFamily:'inherit', outline:'none', color:C.text, textAlign:'right' as const, background: isActual ? '#FAFAF8' : '#fff' }} />
+              {!isActual && <button onClick={() => removeRow(i)} style={{ background:'none', border:'none', color:C.danger, fontSize:14, cursor:'pointer' }}>×</button>}
+              {isActual && <span />}
+            </div>
+          ))}
+          {!isActual && <button onClick={() => addRow('earning')} style={{ width:'100%', padding:'6px 12px', background:'#FAFAF8', border:'none', borderTop:`0.5px solid ${C.border}`, fontSize:11, color:C.fg, cursor:'pointer', fontFamily:'inherit' }}>+ Add earning</button>}
+
+          <div style={{ padding:'7px 12px', background:'#FAFAF8', fontSize:10, fontWeight:700, color:C.muted, letterSpacing:'0.05em', textTransform:'uppercase' as const, borderTop:`1px solid ${C.border}` }}>Deductions</div>
+          {rows.filter(r => r.type === 'deduction').length === 0 && <div style={{ padding:'10px 12px', fontSize:12, color:C.muted, fontStyle:'italic' as const }}>No deductions</div>}
+          {rows.map((r, i) => r.type !== 'deduction' ? null : (
+            <div key={`d-${i}`} style={{ display:'grid', gridTemplateColumns:'1fr 110px 24px', gap:6, padding:'6px 12px', borderBottom:`0.5px solid #FAF7F2`, alignItems:'center' }}>
+              <input type="text" value={r.label} onChange={e => updateRow(i, { label: e.target.value })} placeholder="Component name" disabled={isActual} style={{ fontSize:12, padding:'5px 8px', border:`1px solid ${C.border}`, borderRadius:3, fontFamily:'inherit', outline:'none', color:C.text, background: isActual ? '#FAFAF8' : '#fff' }} />
+              <input type="text" inputMode="numeric" value={r.amount > 0 ? String(r.amount) : ''} onChange={e => updateRow(i, { amount: parseInt(e.target.value.replace(/[^0-9]/g,'')) || 0 })} placeholder="0" disabled={isActual} style={{ fontSize:12, padding:'5px 8px', border:`1px solid ${C.border}`, borderRadius:3, fontFamily:'inherit', outline:'none', color:C.danger, textAlign:'right' as const, background: isActual ? '#FAFAF8' : '#fff' }} />
+              {!isActual && <button onClick={() => removeRow(i)} style={{ background:'none', border:'none', color:C.danger, fontSize:14, cursor:'pointer' }}>×</button>}
+              {isActual && <span />}
+            </div>
+          ))}
+          {!isActual && <button onClick={() => addRow('deduction')} style={{ width:'100%', padding:'6px 12px', background:'#FAFAF8', border:'none', borderTop:`0.5px solid ${C.border}`, fontSize:11, color:C.fg, cursor:'pointer', fontFamily:'inherit' }}>+ Add deduction</button>}
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginTop:10, fontSize:11.5 }}>
+          <div style={{ padding:'8px 10px', background:C.wl, borderRadius:4 }}><p style={{ fontSize:10, color:C.muted, margin:0 }}>Earnings</p><p style={{ fontWeight:600, color:C.text, margin:0 }}>₹{totalEarning.toLocaleString('en-IN')}</p></div>
+          <div style={{ padding:'8px 10px', background:'#FBEFEF', borderRadius:4 }}><p style={{ fontSize:10, color:C.muted, margin:0 }}>Deductions</p><p style={{ fontWeight:600, color:C.danger, margin:0 }}>−₹{totalDeduction.toLocaleString('en-IN')}</p></div>
+          <div style={{ padding:'8px 10px', background:'#EEF2EE', borderRadius:4 }}><p style={{ fontSize:10, color:C.muted, margin:0 }}>Net</p><p style={{ fontWeight:600, color:'#2A7A4A', margin:0 }}>₹{(totalEarning - totalDeduction).toLocaleString('en-IN')}</p></div>
+        </div>
+        <div style={{ display:'flex', gap:8, marginTop:14, flexWrap:'wrap' as const }}>
+          {!isActual && <button onClick={() => onSave(rows)} style={{ flex:2, minWidth:140, padding:10, background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Save override</button>}
+          <button onClick={onUploadHere} style={{ flex:1, minWidth:120, padding:10, background:C.card, color:C.fg, border:`1px solid ${C.border}`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit' }}>Upload slip for this month</button>
+          {onClearOverride && <button onClick={onClearOverride} style={{ flex:1, minWidth:120, padding:10, background:C.card, color:C.danger, border:`1px solid ${C.border}`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit' }}>Clear override</button>}
+          <button onClick={onClose} style={{ flex:1, minWidth:90, padding:10, background:C.card, color:C.muted, border:`1px solid ${C.border}`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit' }}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function ProfilePage() {
   return <Suspense fallback={<div style={{ padding:40, textAlign:'center', color:'#7A8A7E', fontFamily:'"Sora",sans-serif' }}>Loading…</div>}><ProfileContent /></Suspense>
@@ -282,6 +560,11 @@ function ProfileContent() {
   const [loadingDoc, setLoadingDoc] = useState<string|null>(null)
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
   const [intelligence, setIntelligence] = useState<IntelligenceReport | null>(null)
+  const [salaryTimeline, setSalaryTimeline] = useState<SalaryTimeline | null>(null)
+  const [salaryComponentsExpanded, setSalaryComponentsExpanded] = useState(false)
+  const [salaryMonthEditor, setSalaryMonthEditor] = useState<{ open: boolean; monthKey: string | null }>({ open: false, monthKey: null })
+  const [employmentPrompt, setEmploymentPrompt] = useState<{ open: boolean; pendingSlip: SlipData | null; reason: 'employer_changed' | 'basic_jumped' | null; oldEmployerName?: string; newEmployerName?: string }>({ open: false, pendingSlip: null, reason: null })
+  const [salaryFlagsModal, setSalaryFlagsModal] = useState<{ open: boolean; slipId: string | null; employmentId: string | null }>({ open: false, slipId: null, employmentId: null })
   const [taggedTxns, setTaggedTxns] = useState<any[]>([])
   const [bankPeriod, setBankPeriod] = useState<{from:string; to:string}|null>(null)
   const [bankMonths, setBankMonths] = useState(1)
@@ -316,6 +599,7 @@ function ProfileContent() {
   const [pwdModal, setPwdModal] = useState<{ open:boolean; type:string|null; file:File|null; error:string }>({ open:false, type:null, file:null, error:'' })
   const [pwd, setPwd] = useState('')
   const bankRef = useRef<HTMLInputElement>(null)
+  const salaryRef = useRef<HTMLInputElement>(null)
   const aisRef = useRef<HTMLInputElement>(null)
   const taxRef = useRef<HTMLInputElement>(null)
   const slipRef = useRef<HTMLInputElement>(null)
@@ -375,6 +659,8 @@ function ProfileContent() {
       if (bo) setBucketOverrides(JSON.parse(bo))
       const uc = localStorage.getItem('av_user_classifications')
       if (uc) setUserClassifications(JSON.parse(uc))
+      const stl = localStorage.getItem('av_salary_timeline')
+      if (stl) setSalaryTimeline(JSON.parse(stl))
       loadSavedBankAccounts()
     } catch {}
   }, [])
@@ -495,6 +781,25 @@ function ProfileContent() {
   useEffect(() => { try { localStorage.setItem('av_parked_ids', JSON.stringify(Array.from(parkedIds))) } catch {} }, [parkedIds])
   useEffect(() => { try { localStorage.setItem('av_bucket_overrides', JSON.stringify(bucketOverrides)) } catch {} }, [bucketOverrides])
   useEffect(() => { try { localStorage.setItem('av_user_classifications', JSON.stringify(userClassifications)) } catch {} }, [userClassifications])
+  useEffect(() => {
+    try {
+      if (salaryTimeline) localStorage.setItem('av_salary_timeline', JSON.stringify(salaryTimeline))
+      else localStorage.removeItem('av_salary_timeline')
+    } catch {}
+  }, [salaryTimeline])
+  // When salary timeline changes, push annual figures into AppStore using the existing contract
+  // (Tax Optimizer reads salary.grossSalary * 12, so we store annualGross/12 here)
+  useEffect(() => {
+    const a = computeAnnual(salaryTimeline)
+    if (!a) return
+    setSalary({
+      netSalary: a.monthlyAvgNet,
+      grossSalary: Math.round(a.annualGross / 12),
+      employerName: a.latestEmployerName || 'Your employer',
+      employeePF: a.recurringMonthlyEPF,
+      employerPF: a.recurringMonthlyEmployerPF,
+    } as any)
+  }, [salaryTimeline])
   useEffect(() => { if (bankAccounts.length === 0) rebuildMergedTransactions(bankAccounts) }, [creditCards.length])
 
   const saveProfile = useCallback((exp=expenses, sav=savings, vari=variable) => {
@@ -832,6 +1137,191 @@ function ProfileContent() {
     } finally { setLoadingDoc(null) }
   }
 
+  // ─── Salary Slip Upload ────────────────────────────────────────────────
+  const handleSalaryFile = async (file: File) => {
+    if (file.size > 50 * 1024 * 1024) { toast.error('File too large (max 50MB)'); return }
+    setLoadingDoc('salary')
+    const tid = toast.loading('Reading your salary slip…')
+    try {
+      const base64Data = await fileToBase64(file)
+      const mediaType = file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream')
+      const res = await fetch('/api/parse-salary-slip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base64Data, mediaType, fileName: file.name }),
+      })
+      const json = await res.json()
+      if (!res.ok || json.error) {
+        toast.error(json.error || 'Failed to parse salary slip', { id: tid })
+        return
+      }
+      const parsed: ParsedSalaryData = json.data
+      const slip = slipFromParsed(parsed, file.name)
+      addSlipToTimeline(slip, tid)
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to read salary slip', { id: tid })
+    } finally { setLoadingDoc(null) }
+  }
+
+  // Add slip to timeline — auto-detects same employer / hike / new employer
+  // Prompts user only when ambiguous (employer name change OR basic salary jump >5%)
+  const addSlipToTimeline = (slip: SlipData, toastId?: string) => {
+    setSalaryTimeline(prev => {
+      // First slip ever — create timeline
+      if (!prev) {
+        const fyStart = fyStartYearForMonthKey(slip.monthKey)
+        const newTimeline: SalaryTimeline = {
+          fy: fyLabel(fyStart),
+          fyStartYear: fyStart,
+          employments: [{
+            id: uid(),
+            employerName: slip.parsed.employerName || 'Employer',
+            fromMonth: slip.monthKey,
+            toMonth: null,
+            slips: [slip],
+          }],
+          overrides: [],
+        }
+        if (toastId) toast.success(`Salary slip added · ${monthLabel(slip.monthKey)}`, { id: toastId })
+        return newTimeline
+      }
+      // Compare with latest slip in latest employment
+      const latestEmp = prev.employments[prev.employments.length - 1]
+      const latestSlip = latestEmp.slips.sort((a, b) => b.monthKey.localeCompare(a.monthKey))[0]
+      const newEmployerName = (slip.parsed.employerName || '').trim()
+      const oldEmployerName = (latestSlip.parsed.employerName || latestEmp.employerName || '').trim()
+      const employerSame = newEmployerName.toLowerCase() === oldEmployerName.toLowerCase() || (newEmployerName === '' || oldEmployerName === '')
+      const oldBasic = latestSlip.parsed.basicSalary || 0
+      const newBasic = slip.parsed.basicSalary || 0
+      const basicJumped = oldBasic > 0 && Math.abs(newBasic - oldBasic) / oldBasic > 0.05
+
+      // Same month already exists in any employment — ask to replace
+      const existingEmp = prev.employments.find(e => e.slips.some(s => s.monthKey === slip.monthKey))
+      if (existingEmp) {
+        const ok = typeof window !== 'undefined' && window.confirm(`A slip for ${monthLabel(slip.monthKey)} already exists. Replace it?`)
+        if (!ok) {
+          if (toastId) toast.dismiss(toastId)
+          return prev
+        }
+        const updated = {
+          ...prev,
+          employments: prev.employments.map(e => e.id === existingEmp.id
+            ? { ...e, slips: e.slips.filter(s => s.monthKey !== slip.monthKey).concat(slip).sort((a,b) => a.monthKey.localeCompare(b.monthKey)) }
+            : e),
+          overrides: prev.overrides.filter(o => o.monthKey !== slip.monthKey),
+        }
+        if (toastId) toast.success(`Replaced ${monthLabel(slip.monthKey)} slip`, { id: toastId })
+        return updated
+      }
+
+      // Ambiguous case — prompt the user
+      if (!employerSame || basicJumped) {
+        setEmploymentPrompt({
+          open: true,
+          pendingSlip: slip,
+          reason: !employerSame ? 'employer_changed' : 'basic_jumped',
+          oldEmployerName: oldEmployerName,
+          newEmployerName: newEmployerName,
+        })
+        if (toastId) toast.dismiss(toastId)
+        return prev
+      }
+
+      // Silent path: same employer, stable basic — just add to latest employment
+      const updated = {
+        ...prev,
+        employments: prev.employments.map((e, i) => i === prev.employments.length - 1
+          ? { ...e, slips: [...e.slips, slip].sort((a,b) => a.monthKey.localeCompare(b.monthKey)) }
+          : e),
+      }
+      if (toastId) toast.success(`Salary slip added · ${monthLabel(slip.monthKey)}`, { id: toastId })
+      return updated
+    })
+  }
+
+  // Resolve the employment prompt — user picked one of three options
+  const resolveEmploymentPrompt = (choice: 'same_employer' | 'hike' | 'new_employer') => {
+    const slip = employmentPrompt.pendingSlip
+    if (!slip) { setEmploymentPrompt({ open: false, pendingSlip: null, reason: null }); return }
+    setSalaryTimeline(prev => {
+      if (!prev) return prev
+      if (choice === 'new_employer') {
+        // Close out the current employment at the month before this slip; start a new employment
+        const prevMonth = (() => {
+          const [y, m] = slip.monthKey.split('-').map(Number)
+          const pm = m === 1 ? 12 : m - 1
+          const py = m === 1 ? y - 1 : y
+          return `${py}-${String(pm).padStart(2, '0')}`
+        })()
+        const closed = prev.employments.map((e, i) => i === prev.employments.length - 1 ? { ...e, toMonth: prevMonth } : e)
+        const newEmp: Employment = {
+          id: uid(),
+          employerName: slip.parsed.employerName || 'New Employer',
+          fromMonth: slip.monthKey,
+          toMonth: null,
+          slips: [slip],
+        }
+        toast.success(`New employer added · ${newEmp.employerName}`)
+        return { ...prev, employments: [...closed, newEmp] }
+      }
+      // same_employer or hike — both attach to latest employment.
+      // For 'hike', the new slip's components naturally have higher recurring values, projection adjusts forward
+      const updated = {
+        ...prev,
+        employments: prev.employments.map((e, i) => i === prev.employments.length - 1
+          ? { ...e, slips: [...e.slips, slip].sort((a,b) => a.monthKey.localeCompare(b.monthKey)) }
+          : e),
+      }
+      toast.success(choice === 'hike' ? `Hike recorded from ${monthLabel(slip.monthKey)}` : `Slip added · ${monthLabel(slip.monthKey)}`)
+      return updated
+    })
+    setEmploymentPrompt({ open: false, pendingSlip: null, reason: null })
+  }
+
+  const removeSlip = (slipId: string) => {
+    if (!confirm('Remove this slip?')) return
+    setSalaryTimeline(prev => {
+      if (!prev) return prev
+      const updated = {
+        ...prev,
+        employments: prev.employments.map(e => ({ ...e, slips: e.slips.filter(s => s.id !== slipId) })).filter(e => e.slips.length > 0),
+      }
+      return updated.employments.length === 0 ? null : updated
+    })
+  }
+
+  const updateComponentFlag = (employmentId: string, slipId: string, componentLabel: string, newFlag: 'recurring' | 'one_time') => {
+    setSalaryTimeline(prev => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        employments: prev.employments.map(e => e.id !== employmentId ? e : {
+          ...e,
+          slips: e.slips.map(s => s.id !== slipId ? s : {
+            ...s,
+            components: s.components.map(c => c.label === componentLabel ? { ...c, flag: newFlag } : c),
+          }),
+        }),
+      }
+    })
+  }
+
+  const setMonthOverride = (monthKey: string, components: { label: string; amount: number; type: 'earning' | 'deduction' }[]) => {
+    setSalaryTimeline(prev => {
+      if (!prev) return prev
+      const others = prev.overrides.filter(o => o.monthKey !== monthKey)
+      return { ...prev, overrides: [...others, { monthKey, components }] }
+    })
+  }
+  const clearMonthOverride = (monthKey: string) => {
+    setSalaryTimeline(prev => prev ? { ...prev, overrides: prev.overrides.filter(o => o.monthKey !== monthKey) } : prev)
+  }
+  const resetSalaryTimeline = () => {
+    if (!confirm('Reset entire salary timeline? This will remove all uploaded slips and overrides.')) return
+    setSalaryTimeline(null)
+    toast.success('Salary timeline reset')
+  }
+
   const removeAccount = (accId: string) => {
     const updated = bankAccounts.filter(a => a.id !== accId)
     setBankAccounts(updated)
@@ -1019,37 +1509,83 @@ function ProfileContent() {
           {/* ════════════ DOCUMENTS TAB ════════════ */}
           {mainTab==='docs' && (
             <div>
-              <p style={{ fontSize:9, fontWeight:700, color:C.muted, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:6 }}>Bank statements</p>
-
-              {bankAccounts.map((acc, idx) => (
-                <div key={acc.id} style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8, padding:14, marginBottom:10, display:'flex', gap:12, alignItems:'center' }}>
-                  <div style={{ width:40, height:40, borderRadius:8, background:C.wl, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0 }}>🏦</div>
-                  <div style={{ flex:1 }}>
-                    <p style={{ fontSize:13, fontWeight:600, color:C.text, margin:'0 0 2px' }}>{acc.bank}{acc.last4 ? ` ···${acc.last4}` : ''}</p>
-                    <p style={{ fontSize:11, color:C.muted, margin:0 }}>{acc.txnCount} transactions · {acc.period.months} month{acc.period.months>1?'s':''}</p>
-                    <input type="text" placeholder="Label (e.g. Salary account)" value={acc.label} onChange={e => updateAccountLabel(acc.id, e.target.value)} style={{ fontSize:11, border:'none', outline:'none', color:C.fg, padding:0, marginTop:4, width:'100%', fontFamily:'inherit', background:'transparent' }} />
+              {/* ── Salary slip + Bank statement uploaders side by side ── */}
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
+                {/* Salary uploader (left) */}
+                <div>
+                  <p style={{ fontSize:9, fontWeight:700, color:C.muted, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:6 }}>Salary slips</p>
+                  <div style={{ ...S.upload(!!salaryTimeline), minHeight:108 }} onClick={() => !loadingDoc && salaryRef.current?.click()}>
+                    {loadingDoc==='salary' ? <p style={{ fontSize:13, color:C.fg }}>Reading…</p> : salaryTimeline ? (
+                      <>
+                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', width:'100%', marginBottom:4 }}>
+                          <div>
+                            <p style={{ fontSize:13, fontWeight:600, color:C.fg, margin:0 }}>{salaryTimeline.fy}</p>
+                            <p style={{ fontSize:11, color:C.muted, margin:0 }}>
+                              {(() => { const a = computeAnnual(salaryTimeline); return a ? `${a.actualsCount} actual + ${a.projectedCount} projected` : '' })()}
+                            </p>
+                          </div>
+                          <span style={{ fontSize:10, background:'#EEF2EE', color:C.fg, padding:'2px 7px', borderRadius:3, border:'1px solid #C8D8C8', fontWeight:500 }}>✓</span>
+                        </div>
+                        <p style={{ fontSize:11.5, color:C.text, margin:0, fontWeight:500 }}>{(() => { const a = computeAnnual(salaryTimeline); return a ? `${fmt(a.annualGross)} annual gross` : '' })()}</p>
+                        <p onClick={e => { e.stopPropagation(); setMainTab('salary') }} style={{ fontSize:11, color:C.fg, margin:'4px 0 0', cursor:'pointer', textDecoration:'underline' }}>View timeline →</p>
+                      </>
+                    ) : (
+                      <>
+                        <span style={{ fontSize:22 }}>💼</span>
+                        <p style={{ fontSize:13, fontWeight:600, color:C.text, margin:0 }}>Upload salary slip</p>
+                        <p style={{ fontSize:10.5, color:C.muted, margin:0 }}>PDF, image, any format · any month of FY</p>
+                      </>
+                    )}
                   </div>
-                  <div style={{ display:'flex', gap:6, flexShrink:0 }}>
-                    <button onClick={() => { setUploadingAccountId(acc.id); bankRef.current?.click() }} style={{ fontSize:11, color:C.fg, background:C.wl, border:`1px solid ${C.wm}`, borderRadius:4, padding:'4px 10px', cursor:'pointer', fontFamily:'inherit' }}>Re-upload</button>
-                    <button onClick={() => removeAccount(acc.id)} style={{ fontSize:11, color:C.danger, background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', textDecoration:'underline' }}>Remove</button>
-                  </div>
+                  <input ref={salaryRef} type="file" accept=".pdf,.xls,.xlsx,.csv,image/*" style={{ display:'none' }} onChange={e => { if(e.target.files?.[0]) { handleSalaryFile(e.target.files[0]) }; e.target.value='' }} />
+                  {salaryTimeline && (
+                    <p onClick={() => salaryRef.current?.click()} style={{ fontSize:12, color:C.fg, margin:'8px 0 0', cursor:'pointer' }}>+ Upload another month's slip</p>
+                  )}
                 </div>
-              ))}
 
-              <div style={S.upload(false)} onClick={() => { setUploadingAccountId(null); bankRef.current?.click() }}>
-                {loadingDoc==='bank' ? <p style={{ fontSize:13, color:C.fg }}>Reading…</p> : (
-                  <>
-                    <span style={{ fontSize:24 }}>🏦</span>
-                    <p style={{ fontSize:13, fontWeight:600, color:C.text, margin:0 }}>
-                      {bankAccounts.length > 0 ? '+ Add more accounts' : 'Upload bank statement'}
-                    </p>
-                    <p style={{ fontSize:10.5, color:C.muted, margin:0 }}>Any Indian bank · PDF, Excel, CSV or photo · password supported</p>
-                  </>
-                )}
+                {/* Bank uploader (right) */}
+                <div>
+                  <p style={{ fontSize:9, fontWeight:700, color:C.muted, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:6 }}>Bank statements</p>
+                  <div style={{ ...S.upload(false), minHeight:108 }} onClick={() => { setUploadingAccountId(null); bankRef.current?.click() }}>
+                    {loadingDoc==='bank' ? <p style={{ fontSize:13, color:C.fg }}>Reading…</p> : (
+                      <>
+                        <span style={{ fontSize:22 }}>🏦</span>
+                        <p style={{ fontSize:13, fontWeight:600, color:C.text, margin:0 }}>
+                          {bankAccounts.length > 0 ? '+ Add another account' : 'Upload bank statement'}
+                        </p>
+                        <p style={{ fontSize:10.5, color:C.muted, margin:0, textAlign:'center' as const }}>Any Indian bank · PDF, Excel, CSV or photo</p>
+                      </>
+                    )}
+                  </div>
+                  <input ref={bankRef} type="file" accept=".pdf,.xls,.xlsx,.csv,image/*" style={{ display:'none' }} onChange={e => { if(e.target.files?.[0]) { handleBankFile(e.target.files[0]) }; e.target.value='' }} />
+                  {bankAccounts.length > 0 && (
+                    <p onClick={() => { setUploadingAccountId(null); bankRef.current?.click() }} style={{ fontSize:12, color:C.fg, margin:'8px 0 0', cursor:'pointer' }}>+ Add more accounts <span style={{ fontSize:11, color:C.muted }}>(spouse, joint, etc.)</span></p>
+                  )}
+                </div>
               </div>
-              <input ref={bankRef} type="file" accept=".pdf,.xls,.xlsx,.csv,image/*" style={{ display:'none' }} onChange={e => { if(e.target.files?.[0]) { handleBankFile(e.target.files[0]) }; e.target.value='' }} />
-              <p onClick={() => { setUploadingAccountId(null); bankRef.current?.click() }} style={{ fontSize:12, color:C.fg, margin:'8px 0 18px', cursor:'pointer' }}>+ Add more accounts <span style={{ fontSize:11, color:C.muted }}>(salary, expenses, spouse, joint, etc.)</span></p>
 
+              {/* ── Bank accounts list (kept as-is below the uploaders) ── */}
+              {bankAccounts.length > 0 && (
+                <>
+                  <p style={{ fontSize:9, fontWeight:700, color:C.muted, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:6 }}>Your bank accounts</p>
+                  {bankAccounts.map((acc, idx) => (
+                    <div key={acc.id} style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8, padding:14, marginBottom:10, display:'flex', gap:12, alignItems:'center' }}>
+                      <div style={{ width:40, height:40, borderRadius:8, background:C.wl, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0 }}>🏦</div>
+                      <div style={{ flex:1 }}>
+                        <p style={{ fontSize:13, fontWeight:600, color:C.text, margin:'0 0 2px' }}>{acc.bank}{acc.last4 ? ` ···${acc.last4}` : ''}</p>
+                        <p style={{ fontSize:11, color:C.muted, margin:0 }}>{acc.txnCount} transactions · {acc.period.months} month{acc.period.months>1?'s':''}</p>
+                        <input type="text" placeholder="Label (e.g. Salary account)" value={acc.label} onChange={e => updateAccountLabel(acc.id, e.target.value)} style={{ fontSize:11, border:'none', outline:'none', color:C.fg, padding:0, marginTop:4, width:'100%', fontFamily:'inherit', background:'transparent' }} />
+                      </div>
+                      <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+                        <button onClick={() => { setUploadingAccountId(acc.id); bankRef.current?.click() }} style={{ fontSize:11, color:C.fg, background:C.wl, border:`1px solid ${C.wm}`, borderRadius:4, padding:'4px 10px', cursor:'pointer', fontFamily:'inherit' }}>Re-upload</button>
+                        <button onClick={() => removeAccount(acc.id)} style={{ fontSize:11, color:C.danger, background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', textDecoration:'underline' }}>Remove</button>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+
+              <div style={{ marginBottom:12 }}></div>
               <p style={{ fontSize:9, fontWeight:700, color:C.muted, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:8 }}>Credit cards</p>
               <div style={S.card}>
                 <div style={S.cardHead}>Your credit cards</div>
@@ -1115,6 +1651,171 @@ function ProfileContent() {
                   Proceed to Review →
                 </button>
               )}
+            </div>
+          )}
+
+          {/* ════════════ SALARY TAB — timeline, employments, components ════════════ */}
+          {mainTab==='salary' && (
+            <div>
+              {!salaryTimeline ? (
+                <div style={S.insight}>Upload a salary slip in Documents first to see your annual salary timeline.</div>
+              ) : (() => {
+                const annual = computeAnnual(salaryTimeline)!
+                const months = fyMonths(salaryTimeline.fyStartYear)
+                const allComps = (() => {
+                  const latestEmp = salaryTimeline.employments[salaryTimeline.employments.length - 1]
+                  const latestSlip = latestEmp?.slips.sort((a,b) => b.monthKey.localeCompare(a.monthKey))[0]
+                  return latestSlip?.components || []
+                })()
+                const recurringEarnings = allComps.filter(c => c.type === 'earning' && c.flag === 'recurring')
+                const recurringDeductions = allComps.filter(c => c.type === 'deduction' && c.flag === 'recurring')
+                const oneTimeEarnings = (() => {
+                  const out: Array<{ label: string; amount: number; monthKey: string }> = []
+                  salaryTimeline.employments.forEach(e => e.slips.forEach(s => {
+                    s.components.filter(c => c.type === 'earning' && c.flag === 'one_time').forEach(c => out.push({ label: c.label, amount: c.amount, monthKey: s.monthKey }))
+                  }))
+                  return out
+                })()
+                return (
+                  <>
+                    {/* Annual income card */}
+                    <div style={{ ...S.card, padding:0 }}>
+                      <div style={{ ...S.cardHead, justifyContent:'space-between' }}>
+                        <span>{salaryTimeline.fy} · Salary</span>
+                        <span style={{ fontSize:9, color:C.muted, fontWeight:500, textTransform:'none' as const, letterSpacing:0 }}>{annual.actualsCount} actual + {annual.projectedCount} projected</span>
+                      </div>
+                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', borderBottom:`1px solid ${C.border}` }}>
+                        <div style={{ padding:'14px 16px', borderRight:`1px solid ${C.border}` }}>
+                          <p style={{ fontSize:10, color:C.muted, margin:'0 0 4px', textTransform:'uppercase' as const, letterSpacing:'0.05em' }}>Annual gross</p>
+                          <p style={{ fontSize:20, fontWeight:700, color:C.text, margin:0 }}>{fmt(annual.annualGross)}</p>
+                          <p style={{ fontSize:11, color:C.muted, margin:'2px 0 0' }}>{fmt(annual.monthlyAvgGross)}/mo avg</p>
+                        </div>
+                        <div style={{ padding:'14px 16px' }}>
+                          <p style={{ fontSize:10, color:C.muted, margin:'0 0 4px', textTransform:'uppercase' as const, letterSpacing:'0.05em' }}>Annual net (take-home)</p>
+                          <p style={{ fontSize:20, fontWeight:700, color:'#2A7A4A', margin:0 }}>{fmt(annual.annualNet)}</p>
+                          <p style={{ fontSize:11, color:C.muted, margin:'2px 0 0' }}>{fmt(annual.monthlyAvgNet)}/mo avg</p>
+                        </div>
+                      </div>
+                      <div style={{ padding:'10px 16px', fontSize:11, color:C.muted, background:'#FAFAF8' }}>
+                        Annual figure feeds Tax Optimiser. Click any projected month below to override its values.
+                      </div>
+                    </div>
+
+                    {/* Timeline */}
+                    <div style={S.card}>
+                      <div style={S.cardHead}>Timeline · click a month to upload or edit</div>
+                      <div style={{ padding:'12px 14px' }}>
+                        <div style={{ display:'grid', gridTemplateColumns:'repeat(12, 1fr)', gap:4 }}>
+                          {months.map(mk => {
+                            const r = rollupMonth(salaryTimeline, mk)
+                            const status = r.isActual ? 'actual' : r.isOverride ? 'override' : 'projected'
+                            const bg = status === 'actual' ? '#3A4B41' : status === 'override' ? '#C9A84C' : '#E4DDD1'
+                            const fg = status === 'actual' ? '#fff' : status === 'override' ? '#fff' : '#7A8A7E'
+                            return (
+                              <button key={mk} onClick={() => {
+                                if (r.isActual) {
+                                  // Actual slip — open editor to view/edit components
+                                  setSalaryMonthEditor({ open: true, monthKey: mk })
+                                } else {
+                                  // Projected — open override editor
+                                  setSalaryMonthEditor({ open: true, monthKey: mk })
+                                }
+                              }} style={{ background:bg, color:fg, border:'none', borderRadius:4, padding:'10px 4px', fontSize:10, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+                                <div style={{ fontSize:9.5, opacity:0.85 }}>{monthLabel(mk).split(' ')[0]}</div>
+                                <div style={{ fontSize:11, marginTop:2 }}>{status === 'actual' ? '●' : status === 'override' ? '✎' : '○'}</div>
+                              </button>
+                            )
+                          })}
+                        </div>
+                        <div style={{ display:'flex', gap:14, marginTop:10, fontSize:10.5, color:C.muted }}>
+                          <span><span style={{ display:'inline-block', width:8, height:8, borderRadius:2, background:'#3A4B41', marginRight:4 }} /> Slip uploaded</span>
+                          <span><span style={{ display:'inline-block', width:8, height:8, borderRadius:2, background:'#C9A84C', marginRight:4 }} /> Edited projection</span>
+                          <span><span style={{ display:'inline-block', width:8, height:8, borderRadius:2, background:'#E4DDD1', marginRight:4 }} /> Auto-projected</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Employments */}
+                    <div style={S.card}>
+                      <div style={S.cardHead}>Employment{salaryTimeline.employments.length > 1 ? 's' : ''}</div>
+                      {salaryTimeline.employments.map(emp => {
+                        const empSlips = emp.slips.length
+                        const fromLabel = monthLabel(emp.fromMonth)
+                        const toLabel = emp.toMonth ? monthLabel(emp.toMonth) : 'present'
+                        const empAvg = emp.slips.reduce((s, sl) => s + sl.components.filter(c => c.type === 'earning').reduce((x, c) => x + c.amount, 0), 0) / Math.max(1, empSlips)
+                        return (
+                          <div key={emp.id} style={{ padding:'12px 16px', borderBottom:`1px solid ${C.border}` }}>
+                            <p style={{ fontSize:13, fontWeight:600, color:C.text, margin:'0 0 2px' }}>{emp.employerName}</p>
+                            <p style={{ fontSize:11, color:C.muted, margin:0 }}>{fromLabel} – {toLabel} · {empSlips} slip{empSlips !== 1 ? 's' : ''} uploaded · {fmt(Math.round(empAvg))}/mo avg gross</p>
+                            <div style={{ marginTop:8, display:'flex', gap:6, flexWrap:'wrap' as const }}>
+                              {emp.slips.sort((a,b) => a.monthKey.localeCompare(b.monthKey)).map(s => (
+                                <span key={s.id} style={{ fontSize:10.5, background:C.wl, border:`1px solid ${C.wm}`, padding:'3px 8px', borderRadius:3, color:C.fg, display:'inline-flex', alignItems:'center', gap:6 }}>
+                                  {monthLabel(s.monthKey)}
+                                  <button onClick={() => removeSlip(s.id)} title="Remove slip" style={{ fontSize:10, color:C.danger, background:'none', border:'none', cursor:'pointer', padding:0, fontFamily:'inherit' }}>×</button>
+                                </span>
+                              ))}
+                              <button onClick={() => setSalaryFlagsModal({ open: true, slipId: null, employmentId: emp.id })} style={{ fontSize:10.5, padding:'3px 8px', borderRadius:3, border:`1px solid ${C.border}`, background:C.card, color:C.fg, cursor:'pointer', fontFamily:'inherit' }}>Edit components</button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {/* Components — collapsed summary by default */}
+                    <div style={S.card}>
+                      <div style={{ ...S.cardHead, cursor:'pointer', justifyContent:'space-between' }} onClick={() => setSalaryComponentsExpanded(v => !v)}>
+                        <span>Components · {recurringEarnings.length + recurringDeductions.length} recurring, {oneTimeEarnings.length} one-time</span>
+                        <span style={{ fontSize:10, color:C.muted, transition:'transform 0.2s', transform: salaryComponentsExpanded ? 'rotate(180deg)' : 'none' }}>▼</span>
+                      </div>
+                      {salaryComponentsExpanded && (
+                        <div>
+                          <div style={{ padding:'8px 16px 4px', background:'#FAFAF8', fontSize:10, fontWeight:700, color:C.muted, letterSpacing:'0.05em', textTransform:'uppercase' as const }}>Recurring · projected forward</div>
+                          {recurringEarnings.length === 0 && recurringDeductions.length === 0 && (
+                            <div style={{ padding:'10px 16px', fontSize:12, color:C.muted, fontStyle:'italic' as const }}>No recurring components detected</div>
+                          )}
+                          {recurringEarnings.map(c => (
+                            <div key={`re-${c.label}`} style={{ ...S.row, padding:'7px 16px' }}>
+                              <span>{c.label}</span>
+                              <span style={{ fontWeight:500 }}>{fmt(c.amount)}/mo</span>
+                            </div>
+                          ))}
+                          {recurringDeductions.map(c => (
+                            <div key={`rd-${c.label}`} style={{ ...S.row, padding:'7px 16px', color:C.danger }}>
+                              <span>− {c.label}</span>
+                              <span style={{ fontWeight:500 }}>{fmt(c.amount)}/mo</span>
+                            </div>
+                          ))}
+                          <div style={{ padding:'8px 16px 4px', background:'#FAFAF8', fontSize:10, fontWeight:700, color:C.muted, letterSpacing:'0.05em', textTransform:'uppercase' as const, borderTop:`1px solid ${C.border}` }}>One-time · counted only when received</div>
+                          {oneTimeEarnings.length === 0 ? (
+                            <div style={{ padding:'10px 16px', fontSize:12, color:C.muted, fontStyle:'italic' as const }}>No one-time components</div>
+                          ) : oneTimeEarnings.map((c, i) => (
+                            <div key={`ot-${i}`} style={{ ...S.row, padding:'7px 16px' }}>
+                              <span>{c.label} <span style={{ fontSize:10, color:C.muted }}>· {monthLabel(c.monthKey)}</span></span>
+                              <span style={{ fontWeight:500 }}>{fmt(c.amount)}</span>
+                            </div>
+                          ))}
+                          <div style={{ padding:'10px 16px', fontSize:11, color:C.muted, background:'#FAFAF8' }}>
+                            To change a component's classification, open <strong>Edit components</strong> on an employment.
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Annual breakdown */}
+                    <div style={S.card}>
+                      <div style={S.cardHead}>Annual breakdown</div>
+                      <div style={S.row}><span>Total earnings</span><span style={{ fontWeight:600 }}>{fmt(annual.annualGross)}</span></div>
+                      <div style={S.row}><span>Total deductions</span><span style={{ fontWeight:600, color:C.danger }}>−{fmt(annual.annualDeductions)}</span></div>
+                      <div style={{ ...S.row, background:C.wl, fontWeight:700 }}><span>Net annual</span><span style={{ color:'#2A7A4A' }}>{fmt(annual.annualNet)}</span></div>
+                    </div>
+
+                    <div style={{ display:'flex', gap:8, marginTop:12 }}>
+                      <button onClick={() => salaryRef.current?.click()} style={{ ...S.btn(true), flex:2 }}>+ Upload another slip</button>
+                      <button onClick={resetSalaryTimeline} style={{ ...S.btn(false), flex:1 }}>Reset timeline</button>
+                    </div>
+                  </>
+                )
+              })()}
             </div>
           )}
 
@@ -1550,6 +2251,102 @@ function ProfileContent() {
           </div>
         </div>
       )}
+
+      {/* ── EMPLOYMENT PROMPT MODAL ── */}
+      {employmentPrompt.open && employmentPrompt.pendingSlip && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(28,43,34,0.5)', zIndex:99, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }} onClick={() => setEmploymentPrompt({ open: false, pendingSlip: null, reason: null })}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:'#fff', borderRadius:10, padding:20, maxWidth:480, width:'100%', boxShadow:'0 12px 40px rgba(0,0,0,0.18)' }}>
+            <p style={{ fontSize:16, fontWeight:700, color:C.text, margin:'0 0 4px' }}>{employmentPrompt.reason === 'employer_changed' ? 'Different employer detected' : 'Salary changed'}</p>
+            <p style={{ fontSize:12, color:C.muted, margin:'0 0 14px', lineHeight:1.5 }}>
+              {employmentPrompt.reason === 'employer_changed'
+                ? <>The new slip names <strong>{employmentPrompt.newEmployerName || 'a different employer'}</strong> instead of <strong>{employmentPrompt.oldEmployerName || 'the previous one'}</strong>. Did you switch jobs?</>
+                : <>The basic salary on this slip differs significantly from the previous slip. What happened?</>}
+            </p>
+            <div style={{ display:'flex', flexDirection:'column' as const, gap:8 }}>
+              <button onClick={() => resolveEmploymentPrompt('hike')} style={{ padding:'10px 14px', background:C.card, border:`1px solid ${C.border}`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit', textAlign:'left' as const, color:C.text }}>
+                <strong>Same employer · I got a hike</strong>
+                <p style={{ fontSize:11, color:C.muted, margin:'2px 0 0' }}>New basic projects forward from this month</p>
+              </button>
+              <button onClick={() => resolveEmploymentPrompt('same_employer')} style={{ padding:'10px 14px', background:C.card, border:`1px solid ${C.border}`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit', textAlign:'left' as const, color:C.text }}>
+                <strong>Same employer · just one-time component</strong>
+                <p style={{ fontSize:11, color:C.muted, margin:'2px 0 0' }}>Bonus / arrears in this month, no real change</p>
+              </button>
+              <button onClick={() => resolveEmploymentPrompt('new_employer')} style={{ padding:'10px 14px', background:C.card, border:`1px solid ${C.border}`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit', textAlign:'left' as const, color:C.text }}>
+                <strong>New employer (job switch)</strong>
+                <p style={{ fontSize:11, color:C.muted, margin:'2px 0 0' }}>Tracked as a separate employment for this FY</p>
+              </button>
+            </div>
+            <button onClick={() => setEmploymentPrompt({ open: false, pendingSlip: null, reason: null })} style={{ marginTop:12, width:'100%', padding:9, background:'#fff', color:C.muted, border:`1px solid ${C.border}`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit' }}>Cancel · don't add this slip</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── SALARY MONTH EDITOR MODAL ── */}
+      {salaryMonthEditor.open && salaryMonthEditor.monthKey && salaryTimeline && (() => {
+        const mk = salaryMonthEditor.monthKey
+        const r = rollupMonth(salaryTimeline, mk)
+        const emp = employmentForMonth(salaryTimeline, mk)
+        const exact = emp?.slips.find(s => s.monthKey === mk) || null
+        const override = salaryTimeline.overrides.find(o => o.monthKey === mk)
+        // Build editable rows
+        const baseRows: Array<{ label: string; amount: number; type: 'earning' | 'deduction' }> =
+          override ? override.components.map(c => ({ ...c })) :
+          exact ? exact.components.map(c => ({ label: c.label, amount: c.amount, type: c.type })) :
+          (() => {
+            const base = emp ? latestSlipBefore(emp, mk) || emp.slips[0] : null
+            if (!base) return []
+            return base.components.filter(c => c.flag === 'recurring').map(c => ({ label: c.label, amount: c.amount, type: c.type }))
+          })()
+        return (
+          <SalaryMonthEditor
+            monthKey={mk}
+            isActual={r.isActual}
+            isOverride={r.isOverride}
+            initialRows={baseRows}
+            onClose={() => setSalaryMonthEditor({ open: false, monthKey: null })}
+            onSave={(rows) => { setMonthOverride(mk, rows); setSalaryMonthEditor({ open: false, monthKey: null }); toast.success(`${monthLabel(mk)} updated`) }}
+            onClearOverride={r.isOverride ? () => { clearMonthOverride(mk); setSalaryMonthEditor({ open: false, monthKey: null }); toast.success('Override cleared') } : null}
+            onUploadHere={() => { setSalaryMonthEditor({ open: false, monthKey: null }); salaryRef.current?.click() }}
+          />
+        )
+      })()}
+
+      {/* ── SALARY COMPONENT FLAGS MODAL ── */}
+      {salaryFlagsModal.open && salaryTimeline && salaryFlagsModal.employmentId && (() => {
+        const emp = salaryTimeline.employments.find(e => e.id === salaryFlagsModal.employmentId)
+        if (!emp) return null
+        const slip = salaryFlagsModal.slipId ? emp.slips.find(s => s.id === salaryFlagsModal.slipId) : emp.slips[emp.slips.length - 1]
+        if (!slip) return null
+        return (
+          <div style={{ position:'fixed', inset:0, background:'rgba(28,43,34,0.5)', zIndex:99, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }} onClick={() => setSalaryFlagsModal({ open: false, slipId: null, employmentId: null })}>
+            <div onClick={e=>e.stopPropagation()} style={{ background:'#fff', borderRadius:10, padding:20, maxWidth:520, width:'100%', boxShadow:'0 12px 40px rgba(0,0,0,0.18)', maxHeight:'80vh', overflowY:'auto' as const }}>
+              <p style={{ fontSize:16, fontWeight:700, color:C.text, margin:'0 0 4px' }}>Edit components · {monthLabel(slip.monthKey)}</p>
+              <p style={{ fontSize:11, color:C.muted, margin:'0 0 12px' }}>Flag each line as recurring (projected forward) or one-time (counted only this month).</p>
+              <div style={{ border:`1px solid ${C.border}`, borderRadius:5, overflow:'hidden' }}>
+                {slip.components.map((c, i) => (
+                  <div key={`${c.label}-${i}`} style={{ display:'grid', gridTemplateColumns:'1fr 90px 80px 80px', gap:8, padding:'8px 12px', borderBottom: i < slip.components.length - 1 ? `1px solid ${C.border}` : 'none', alignItems:'center', fontSize:12 }}>
+                    <span style={{ color: c.type === 'deduction' ? C.danger : C.text }}>{c.type === 'deduction' ? '− ' : ''}{c.label}</span>
+                    <span style={{ textAlign:'right' as const, fontWeight:500, color:C.text }}>{fmt(c.amount)}</span>
+                    <button onClick={() => updateComponentFlag(emp.id, slip.id, c.label, 'recurring')} style={{ padding:'5px 8px', borderRadius:4, fontSize:11, fontFamily:'inherit', cursor:'pointer', border: c.flag === 'recurring' ? `1px solid ${C.fg}` : `1px solid ${C.border}`, background: c.flag === 'recurring' ? C.fg : C.card, color: c.flag === 'recurring' ? C.wheat : C.muted, fontWeight: c.flag === 'recurring' ? 600 : 400 }}>Recurring</button>
+                    <button onClick={() => updateComponentFlag(emp.id, slip.id, c.label, 'one_time')} style={{ padding:'5px 8px', borderRadius:4, fontSize:11, fontFamily:'inherit', cursor:'pointer', border: c.flag === 'one_time' ? `1px solid ${C.wm}` : `1px solid ${C.border}`, background: c.flag === 'one_time' ? '#C9A84C' : C.card, color: c.flag === 'one_time' ? '#fff' : C.muted, fontWeight: c.flag === 'one_time' ? 600 : 400 }}>One-time</button>
+                  </div>
+                ))}
+              </div>
+              {emp.slips.length > 1 && (
+                <div style={{ marginTop:12 }}>
+                  <p style={{ fontSize:11, color:C.muted, margin:'0 0 6px' }}>Switch to another month's slip:</p>
+                  <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const }}>
+                    {emp.slips.sort((a,b) => a.monthKey.localeCompare(b.monthKey)).map(s => (
+                      <button key={s.id} onClick={() => setSalaryFlagsModal({ open: true, slipId: s.id, employmentId: emp.id })} style={{ padding:'4px 10px', borderRadius:3, fontSize:11, fontFamily:'inherit', cursor:'pointer', border:`1px solid ${s.id === slip.id ? C.fg : C.border}`, background: s.id === slip.id ? C.wl : C.card, color: s.id === slip.id ? C.fg : C.muted, fontWeight: s.id === slip.id ? 600 : 400 }}>{monthLabel(s.monthKey)}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <button onClick={() => setSalaryFlagsModal({ open: false, slipId: null, employmentId: null })} style={{ marginTop:14, width:'100%', padding:9, background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Done</button>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── PASSWORD MODAL ── */}
       {pwdModal.open && (

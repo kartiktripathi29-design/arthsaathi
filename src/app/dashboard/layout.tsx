@@ -14,6 +14,7 @@ const FREE_NAV = [
 
 const PROFILE_SUBNAV = [
   { key:'docs', icon:'📁', label:'Documents', query:'' },
+  { key:'salary', icon:'💼', label:'Salary', query:'?tab=salary' },
   { key:'review', icon:'🔍', label:'Review', query:'?tab=review' },
   { key:'reports', icon:'📊', label:'Reports', query:'?tab=reports' },
   { key:'analytics', icon:'📈', label:'Analytics', query:'?tab=analytics' },
@@ -44,15 +45,17 @@ function Sidebar() {
   const isProfile = pathname.startsWith('/dashboard/profile')
 
   // Progressive unlock: check localStorage for what's been completed
-  const [unlocked, setUnlocked] = useState<Record<string,boolean>>({ docs:true, review:false, reports:false, analytics:false })
+  const [unlocked, setUnlocked] = useState<Record<string,boolean>>({ docs:true, salary:false, review:false, reports:false, analytics:false })
   useEffect(() => {
     try {
       const banks = localStorage.getItem('av_banks')
       const hasBanks = banks ? JSON.parse(banks).length > 0 : false
+      const hasSalary = !!localStorage.getItem('av_salary_timeline')
       const hasOverrides = !!localStorage.getItem('av_bucket_overrides')
       const hasConfirmed = !!localStorage.getItem('av_confirmed_salary_ids')
       setUnlocked({
         docs: true,
+        salary: hasSalary,
         review: hasBanks,
         reports: hasBanks,
         analytics: hasBanks,
