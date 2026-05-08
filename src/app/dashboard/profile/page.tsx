@@ -1145,7 +1145,7 @@ function ProfileContent() {
     try {
       const base64Data = await fileToBase64(file)
       const mediaType = file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream')
-      const res = await fetch('/api/parse-salary-slip', {
+      const res = await fetch('/api/parse-salary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ base64Data, mediaType, fileName: file.name }),
