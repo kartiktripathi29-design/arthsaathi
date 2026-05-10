@@ -203,8 +203,16 @@ function Sidebar() {
 
 function TopBar() {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const page = ALL_NAV.find(n => n.href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(n.href))
   const isPremium = PREMIUM_NAV.some(n => pathname.startsWith(n.href))
+
+  // When on My Profile, show the active sub-tab label (Documents / Salary / Review / etc.)
+  const isProfile = pathname.startsWith('/dashboard/profile')
+  const currentTab = isProfile ? (searchParams.get('tab') || 'docs') : ''
+  const subTab = isProfile ? PROFILE_SUBNAV.find(s => s.key === currentTab) : null
+  const headingLabel = subTab ? subTab.label : (page?.label || 'Dashboard')
+  const headingIcon = subTab ? subTab.icon : page?.icon
 
   // Compute the active FY: prefer salary timeline FY (what the user is working on),
   // fall back to current date (Indian FY: Apr-Mar)
@@ -228,8 +236,16 @@ function TopBar() {
 
   return (
     <header style={{ height:46, borderBottom:'1px solid #E4DDD1', background:'#fff', display:'flex', alignItems:'center', padding:'0 24px', gap:10, position:'sticky', top:0, zIndex:40, fontFamily:'"Sora",-apple-system,sans-serif' }}>
-      <span style={{ fontSize:15 }}>{page?.icon}</span>
-      <h1 style={{ fontSize:13, fontWeight:600, color:'#1C2B22', margin:0 }}>{page?.label||'Dashboard'}</h1>
+      <span style={{ fontSize:15 }}>{headingIcon}</span>
+      <h1 style={{ fontSize:13, fontWeight:600, color:'#1C2B22', margin:0 }}>
+        {isProfile && subTab ? (
+          <>
+            <span style={{ color:'#A09080', fontWeight:400 }}>My Profile</span>
+            <span style={{ color:'#A09080', margin:'0 6px' }}>·</span>
+            {subTab.label}
+          </>
+        ) : headingLabel}
+      </h1>
       {isPremium && <span style={{ fontSize:10, background:'#1E293B', color:C.wheat, padding:'2px 8px', borderRadius:20, fontWeight:600 }}>🔒 Premium</span>}
       <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:8 }}>
         {fyLabel && <span style={{ fontSize:11, color:'#A09080' }}>FY {fyLabel}</span>}
@@ -261,7 +277,9 @@ export default function DashboardLayout({ children }: { children:React.ReactNode
           <Sidebar />
         </Suspense>
         <div style={{ marginLeft:216, flex:1, display:'flex', flexDirection:'column' }}>
-          <TopBar />
+          <Suspense fallback={<header style={{ height:46, borderBottom:'1px solid #E4DDD1', background:'#fff', position:'sticky', top:0, zIndex:40 }} />}>
+            <TopBar />
+          </Suspense>
           <main style={{ flex:1, padding:'24px 28px', maxWidth:1100, width:'100%' }}>
             {children}
           </main>
