@@ -205,13 +205,34 @@ function TopBar() {
   const pathname = usePathname()
   const page = ALL_NAV.find(n => n.href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(n.href))
   const isPremium = PREMIUM_NAV.some(n => pathname.startsWith(n.href))
+
+  // Compute the active FY: prefer salary timeline FY (what the user is working on),
+  // fall back to current date (Indian FY: Apr-Mar)
+  const [fyLabel, setFyLabel] = useState('')
+  useEffect(() => {
+    try {
+      const stl = localStorage.getItem('av_salary_timeline')
+      if (stl) {
+        const t = JSON.parse(stl)
+        if (t?.fy) { setFyLabel(t.fy.replace('FY ', '').replace('-', '–')); return }
+      }
+    } catch {}
+    // Fallback: derive from today
+    const d = new Date()
+    const y = d.getFullYear()
+    const m = d.getMonth() + 1   // 1-12
+    const startYear = m >= 4 ? y : y - 1
+    const endShort = String((startYear + 1) % 100).padStart(2, '0')
+    setFyLabel(`${startYear}–${endShort}`)
+  }, [pathname])
+
   return (
     <header style={{ height:46, borderBottom:'1px solid #E4DDD1', background:'#fff', display:'flex', alignItems:'center', padding:'0 24px', gap:10, position:'sticky', top:0, zIndex:40, fontFamily:'"Sora",-apple-system,sans-serif' }}>
       <span style={{ fontSize:15 }}>{page?.icon}</span>
       <h1 style={{ fontSize:13, fontWeight:600, color:'#1C2B22', margin:0 }}>{page?.label||'Dashboard'}</h1>
       {isPremium && <span style={{ fontSize:10, background:'#1E293B', color:C.wheat, padding:'2px 8px', borderRadius:20, fontWeight:600 }}>🔒 Premium</span>}
       <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:8 }}>
-        <span style={{ fontSize:11, color:'#A09080' }}>FY 2024–25</span>
+        {fyLabel && <span style={{ fontSize:11, color:'#A09080' }}>FY {fyLabel}</span>}
         <span style={{ fontSize:11, background:'#F5ECD8', color:'#3A4B41', padding:'2px 9px', borderRadius:3, fontWeight:500, border:'1px solid #D4B98A' }}>ArthVo</span>
       </div>
     </header>
