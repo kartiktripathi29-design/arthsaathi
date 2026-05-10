@@ -208,7 +208,7 @@ export default function TaxPage() {
       if (saved) {
         const d = JSON.parse(saved)
         if (d.step !== undefined) setSavedStep(d.step)
-        if (d.ded) setDed(d.ded)
+        if (d.ded) setDed({ ...defaultDed, ...d.ded })
         return
       }
       // Auto-fill on first visit from salary slip + profile savings
