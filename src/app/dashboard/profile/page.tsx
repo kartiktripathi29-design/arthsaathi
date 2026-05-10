@@ -1139,8 +1139,6 @@ function ProfileContent() {
       rebuildMergedTransactions(updated)
       setUploadingAccountId(null)
       toast.success(`${bd.bank || 'Bank'} · ${bd.transactions?.length||0} transactions across ${period.months} month${period.months>1?'s':''}`, { id:tid, duration:5000 })
-      // Auto-navigate to Review tab after upload
-      setMainTab('review')
     } catch (e:any) {
       const errStr=(e.message||'').toLowerCase()
       if (errStr.includes('password')||errStr.includes('encrypted')) { setPwdModal({ open:true, type:'bank', file, error:'' }); setPwd(''); toast.dismiss(tid); return }
@@ -1335,11 +1333,12 @@ function ProfileContent() {
 
   // Path 3: merge user's CTA inputs + auto-derived values from latest slip into av_tax_progress
   // Tax Optimiser reads from this key and pre-fills its Smart/HRA/80C/80D steps
+  // CRITICAL: write a fully-initialized Deductions object so Tax Optimiser's sums never hit `undefined` (which produces NaN)
   const syncToTaxOptimiser = (skip: boolean) => {
     try {
       const existing = localStorage.getItem('av_tax_progress')
       const current = existing ? JSON.parse(existing) : { step: 0, ded: {} }
-      const ded = current.ded || {}
+      const prior = current.ded || {}
 
       // Auto-derive from latest slip in latest employment
       let hraReceived = 0, epfMonthly = 0
@@ -1354,21 +1353,48 @@ function ProfileContent() {
         }
       }
 
-      const merged = {
-        ...ded,
-        // Always derive these from slip
-        hraReceived: hraReceived || ded.hraReceived || 0,
-        epf: (epfMonthly * 12) || ded.epf || 0,
+      // Build a complete Deductions object with every field defaulted to 0 (or correct boolean)
+      // This is the exact shape Tax Optimiser's calcTax() expects — see tax page lines 122-128
+      const num = (v: any) => (typeof v === 'number' && !isNaN(v) ? v : 0)
+      const bool = (v: any, def: boolean) => (typeof v === 'boolean' ? v : def)
+      const merged: any = {
+        // HRA
+        rentPaid: num(prior.rentPaid),
+        hraReceived: num(prior.hraReceived) || hraReceived,
+        isMetro: bool(prior.isMetro, true),
+        // 80C bucket
+        ppf: num(prior.ppf),
+        elss: num(prior.elss),
+        lic: num(prior.lic),
+        homeLoanPrincipal: num(prior.homeLoanPrincipal),
+        tuition: num(prior.tuition),
+        nsc: num(prior.nsc),
+        epf: num(prior.epf) || (epfMonthly * 12),
+        // 80D
+        selfFamily: num(prior.selfFamily),
+        parents: num(prior.parents),
+        parentsSenior: bool(prior.parentsSenior, false),
+        selfSenior: bool(prior.selfSenior, false),
+        // 80CCD(1B)
+        nps: num(prior.nps),
+        // 80TTA / TTB
+        savingsInterest: num(prior.savingsInterest),
+        // 80G
+        donations100: num(prior.donations100),
+        donations50: num(prior.donations50),
+        // 24B / 80E
+        homeLoanInterest: num(prior.homeLoanInterest),
+        eduLoanInterest: num(prior.eduLoanInterest),
       }
 
       if (!skip) {
-        // User-filled values — only overwrite if user gave a non-zero value
+        // User-filled values overwrite priors when non-zero
         if (taxCta.rentPaid > 0) merged.rentPaid = taxCta.rentPaid
         merged.isMetro = taxCta.isMetro
         if (taxCta.selfFamily > 0) merged.selfFamily = taxCta.selfFamily
         if (taxCta.otherC80Amount > 0) {
-          // Route to the bucket the user picked
-          merged[taxCta.otherC80Type] = (merged[taxCta.otherC80Type] || 0) + taxCta.otherC80Amount
+          // Replace, don't add — user told us what their other-80C is, not "additional to existing"
+          merged[taxCta.otherC80Type] = taxCta.otherC80Amount
         }
         setTaxCta(prev => ({ ...prev, submittedAt: new Date().toISOString() }))
         setTaxCtaExpanded(false)
@@ -1598,7 +1624,10 @@ function ProfileContent() {
                     )}
                   </div>
                   {salaryTimeline && (
-                    <p onClick={() => salaryRef.current?.click()} style={{ fontSize:12, color:C.fg, margin:'8px 0 0', cursor:'pointer' }}>+ Upload another month's slip</p>
+                    <>
+                      <p onClick={() => salaryRef.current?.click()} style={{ fontSize:12, color:C.fg, margin:'8px 0 0', cursor:'pointer' }}>+ Upload another month's slip</p>
+                      <button onClick={() => setMainTab('salary')} style={{ marginTop:10, width:'100%', padding:'9px 14px', background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>View salary timeline →</button>
+                    </>
                   )}
                 </div>
 
@@ -1618,7 +1647,10 @@ function ProfileContent() {
                   </div>
                   <input ref={bankRef} type="file" accept=".pdf,.xls,.xlsx,.csv,image/*" style={{ display:'none' }} onChange={e => { if(e.target.files?.[0]) { handleBankFile(e.target.files[0]) }; e.target.value='' }} />
                   {bankAccounts.length > 0 && (
-                    <p onClick={() => { setUploadingAccountId(null); bankRef.current?.click() }} style={{ fontSize:12, color:C.fg, margin:'8px 0 0', cursor:'pointer' }}>+ Add more accounts <span style={{ fontSize:11, color:C.muted }}>(spouse, joint, etc.)</span></p>
+                    <>
+                      <p onClick={() => { setUploadingAccountId(null); bankRef.current?.click() }} style={{ fontSize:12, color:C.fg, margin:'8px 0 0', cursor:'pointer' }}>+ Add more accounts <span style={{ fontSize:11, color:C.muted }}>(spouse, joint, etc.)</span></p>
+                      <button onClick={() => setMainTab('review')} style={{ marginTop:10, width:'100%', padding:'9px 14px', background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Proceed to Review →</button>
+                    </>
                   )}
                 </div>
               </div>
@@ -1704,12 +1736,6 @@ function ProfileContent() {
                 existingHoldings={casData ? { investor: casData.investor?.name || '', pan: casData.investor?.pan || '', total_value: casData.summary?.totalValue || 0, fetched_at: casData.fetchedAt || new Date().toISOString() } : null}
                 onSuccess={(holdings) => { setCasData(holdings); try { localStorage.setItem('av_cas_holdings', JSON.stringify(holdings)) } catch {} }}
               />
-
-              {bankAccounts.length > 0 && (
-                <button onClick={() => setMainTab('review')} style={{ ...S.btn(true), width:'100%', padding:'11px', marginTop:12 }}>
-                  Proceed to Review →
-                </button>
-              )}
             </div>
           )}
 
