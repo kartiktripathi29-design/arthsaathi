@@ -1537,7 +1537,6 @@ function ProfileContent() {
                       </>
                     )}
                   </div>
-                  <input ref={salaryRef} type="file" accept=".pdf,.xls,.xlsx,.csv,image/*" style={{ display:'none' }} onChange={e => { if(e.target.files?.[0]) { handleSalaryFile(e.target.files[0]) }; e.target.value='' }} />
                   {salaryTimeline && (
                     <p onClick={() => salaryRef.current?.click()} style={{ fontSize:12, color:C.fg, margin:'8px 0 0', cursor:'pointer' }}>+ Upload another month's slip</p>
                   )}
@@ -1732,6 +1731,12 @@ function ProfileContent() {
                           <span><span style={{ display:'inline-block', width:8, height:8, borderRadius:2, background:'#C9A84C', marginRight:4 }} /> Edited projection</span>
                           <span><span style={{ display:'inline-block', width:8, height:8, borderRadius:2, background:'#E4DDD1', marginRight:4 }} /> Auto-projected</span>
                         </div>
+                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, marginTop:14, paddingTop:12, borderTop:`1px solid ${C.border}` }}>
+                          <button onClick={() => salaryRef.current?.click()} disabled={loadingDoc==='salary'} style={{ padding:'8px 14px', background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12, fontWeight:600, cursor: loadingDoc==='salary' ? 'wait' : 'pointer', fontFamily:'inherit', opacity: loadingDoc==='salary' ? 0.6 : 1 }}>
+                            {loadingDoc==='salary' ? 'Reading…' : '+ Upload a salary slip'}
+                          </button>
+                          <span style={{ fontSize:11, color:C.muted }}>{annual.actualsCount} actual · {annual.projectedCount} projected</span>
+                        </div>
                       </div>
                     </div>
 
@@ -1809,9 +1814,8 @@ function ProfileContent() {
                       <div style={{ ...S.row, background:C.wl, fontWeight:700 }}><span>Net annual</span><span style={{ color:'#2A7A4A' }}>{fmt(annual.annualNet)}</span></div>
                     </div>
 
-                    <div style={{ display:'flex', gap:8, marginTop:12 }}>
-                      <button onClick={() => salaryRef.current?.click()} style={{ ...S.btn(true), flex:2 }}>+ Upload another slip</button>
-                      <button onClick={resetSalaryTimeline} style={{ ...S.btn(false), flex:1 }}>Reset timeline</button>
+                    <div style={{ display:'flex', justifyContent:'flex-end', marginTop:12 }}>
+                      <button onClick={resetSalaryTimeline} style={{ padding:'7px 14px', background:'transparent', color:C.muted, border:`1px solid ${C.border}`, borderRadius:5, fontSize:11.5, cursor:'pointer', fontFamily:'inherit' }}>Reset timeline</button>
                     </div>
                   </>
                 )
@@ -2251,6 +2255,10 @@ function ProfileContent() {
           </div>
         </div>
       )}
+
+      {/* ── ALWAYS-MOUNTED HIDDEN SALARY INPUT ── */}
+      {/* Lives outside any tab block so salaryRef.current is always valid, no matter which tab the user is on */}
+      <input ref={salaryRef} type="file" accept=".pdf,.xls,.xlsx,.csv,image/*" style={{ display:'none' }} onChange={e => { if(e.target.files?.[0]) { handleSalaryFile(e.target.files[0]) }; e.target.value='' }} />
 
       {/* ── EMPLOYMENT PROMPT MODAL ── */}
       {employmentPrompt.open && employmentPrompt.pendingSlip && (
