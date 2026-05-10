@@ -561,12 +561,11 @@ function ProfileContent() {
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
   const [intelligence, setIntelligence] = useState<IntelligenceReport | null>(null)
   const [salaryTimeline, setSalaryTimeline] = useState<SalaryTimeline | null>(null)
-  const [salaryComponentsExpanded, setSalaryComponentsExpanded] = useState(false)
+  const [salaryComponentsExpanded, setSalaryComponentsExpanded] = useState(true)
   const [salaryMonthEditor, setSalaryMonthEditor] = useState<{ open: boolean; monthKey: string | null }>({ open: false, monthKey: null })
   const [employmentPrompt, setEmploymentPrompt] = useState<{ open: boolean; pendingSlip: SlipData | null; reason: 'employer_changed' | 'basic_jumped' | null; oldEmployerName?: string; newEmployerName?: string }>({ open: false, pendingSlip: null, reason: null })
   const [salaryFlagsModal, setSalaryFlagsModal] = useState<{ open: boolean; slipId: string | null; employmentId: string | null }>({ open: false, slipId: null, employmentId: null })
-  const [taxCta, setTaxCta] = useState<{ rentPaid: number; isMetro: boolean; selfFamily: number; otherC80Type: 'ppf' | 'elss' | 'lic' | 'nsc' | 'tuition'; otherC80Amount: number; submittedAt: string | null }>({ rentPaid: 0, isMetro: true, selfFamily: 0, otherC80Type: 'ppf', otherC80Amount: 0, submittedAt: null })
-  const [taxCtaExpanded, setTaxCtaExpanded] = useState(true)
+  const [taxCta, setTaxCta] = useState<{ submittedAt: string | null }>({ submittedAt: null })
   const [taggedTxns, setTaggedTxns] = useState<any[]>([])
   const [bankPeriod, setBankPeriod] = useState<{from:string; to:string}|null>(null)
   const [bankMonths, setBankMonths] = useState(1)
@@ -665,9 +664,10 @@ function ProfileContent() {
       if (stl) setSalaryTimeline(JSON.parse(stl))
       const sct = localStorage.getItem('av_salary_cta')
       if (sct) {
-        const parsed = JSON.parse(sct)
-        setTaxCta(parsed)
-        if (parsed.submittedAt) setTaxCtaExpanded(false)
+        try {
+          const parsed = JSON.parse(sct)
+          setTaxCta({ submittedAt: parsed?.submittedAt || null })
+        } catch {}
       }
       loadSavedBankAccounts()
     } catch {}
@@ -1332,9 +1332,10 @@ function ProfileContent() {
   }
 
   // Path 3: merge user's CTA inputs + auto-derived values from latest slip into av_tax_progress
-  // Tax Optimiser reads from this key and pre-fills its Smart/HRA/80C/80D steps
-  // CRITICAL: write a fully-initialized Deductions object so Tax Optimiser's sums never hit `undefined` (which produces NaN)
-  const syncToTaxOptimiser = (skip: boolean) => {
+  // Auto-syncs salary-derived deductions (HRA monthly, EPF annual) into av_tax_progress
+  // and navigates user to Tax Optimiser, where they enter rent/80D/80C themselves.
+  // CRITICAL: write a complete Deductions object so Tax Optimiser's sums never hit `undefined` (which produces NaN).
+  const syncToTaxOptimiser = () => {
     try {
       const existing = localStorage.getItem('av_tax_progress')
       const current = existing ? JSON.parse(existing) : { step: 0, ded: {} }
@@ -1353,16 +1354,16 @@ function ProfileContent() {
         }
       }
 
-      // Build a complete Deductions object with every field defaulted to 0 (or correct boolean)
-      // This is the exact shape Tax Optimiser's calcTax() expects — see tax page lines 122-128
+      // Build a complete Deductions object — every field defaulted, then auto-derived where applicable
+      // Tax Optimiser's calcTax() expects exact shape — see tax page lines 122-128
       const num = (v: any) => (typeof v === 'number' && !isNaN(v) ? v : 0)
       const bool = (v: any, def: boolean) => (typeof v === 'boolean' ? v : def)
       const merged: any = {
-        // HRA
+        // HRA — hraReceived auto-derived (rentPaid is asked in Tax Optimiser's HRA step)
         rentPaid: num(prior.rentPaid),
         hraReceived: num(prior.hraReceived) || hraReceived,
         isMetro: bool(prior.isMetro, true),
-        // 80C bucket
+        // 80C — EPF auto-derived from slip (other buckets asked in Tax Optimiser)
         ppf: num(prior.ppf),
         elss: num(prior.elss),
         lic: num(prior.lic),
@@ -1370,41 +1371,25 @@ function ProfileContent() {
         tuition: num(prior.tuition),
         nsc: num(prior.nsc),
         epf: num(prior.epf) || (epfMonthly * 12),
-        // 80D
+        // 80D — user fills in Tax Optimiser
         selfFamily: num(prior.selfFamily),
         parents: num(prior.parents),
         parentsSenior: bool(prior.parentsSenior, false),
         selfSenior: bool(prior.selfSenior, false),
-        // 80CCD(1B)
+        // Other deductions — user fills in Tax Optimiser
         nps: num(prior.nps),
-        // 80TTA / TTB
         savingsInterest: num(prior.savingsInterest),
-        // 80G
         donations100: num(prior.donations100),
         donations50: num(prior.donations50),
-        // 24B / 80E
         homeLoanInterest: num(prior.homeLoanInterest),
         eduLoanInterest: num(prior.eduLoanInterest),
       }
 
-      if (!skip) {
-        // User-filled values overwrite priors when non-zero
-        if (taxCta.rentPaid > 0) merged.rentPaid = taxCta.rentPaid
-        merged.isMetro = taxCta.isMetro
-        if (taxCta.selfFamily > 0) merged.selfFamily = taxCta.selfFamily
-        if (taxCta.otherC80Amount > 0) {
-          // Replace, don't add — user told us what their other-80C is, not "additional to existing"
-          merged[taxCta.otherC80Type] = taxCta.otherC80Amount
-        }
-        setTaxCta(prev => ({ ...prev, submittedAt: new Date().toISOString() }))
-        setTaxCtaExpanded(false)
-        toast.success('Sent to Tax Optimiser')
-      }
-
       localStorage.setItem('av_tax_progress', JSON.stringify({ step: current.step || 0, ded: merged }))
+      setTaxCta({ submittedAt: new Date().toISOString() })
       router.push('/dashboard/tax')
     } catch (e: any) {
-      toast.error('Could not sync to Tax Optimiser')
+      toast.error('Could not open Tax Optimiser')
     }
   }
 
@@ -1900,83 +1885,20 @@ function ProfileContent() {
                       <div style={{ ...S.row, background:C.wl, fontWeight:700 }}><span>Net annual</span><span style={{ color:'#2A7A4A' }}>{fmt(annual.annualNet)}</span></div>
                     </div>
 
-                    {/* ── Path 3: CTA to Tax Optimiser ── */}
+                    {/* ── CTA: continue to Tax Optimiser ── */}
                     <div style={{ ...S.card, border:`1.5px solid ${C.wm}` }}>
                       <div style={{ ...S.cardHead, background:C.wl, color:C.fg }}>Next step · see your tax picture</div>
-                      {!taxCtaExpanded && taxCta.submittedAt ? (
-                        <div style={{ padding:'12px 16px' }}>
-                          <p style={{ fontSize:12, color:C.text, margin:'0 0 6px' }}>
-                            ✓ Synced to Tax Optimiser
-                            <span style={{ fontSize:11, color:C.muted, marginLeft:8 }}>
-                              {taxCta.rentPaid > 0 && `Rent ₹${(taxCta.rentPaid/1000).toFixed(0)}k/mo · `}
-                              {taxCta.selfFamily > 0 && `80D ₹${(taxCta.selfFamily/1000).toFixed(0)}k · `}
-                              {taxCta.otherC80Amount > 0 && `${taxCta.otherC80Type.toUpperCase()} ₹${(taxCta.otherC80Amount/1000).toFixed(0)}k`}
-                            </span>
+                      <div style={{ padding:'14px 16px' }}>
+                        <p style={{ fontSize:12, color:C.muted, margin:'0 0 12px', lineHeight:1.55 }}>
+                          We've sent your salary data — annual gross <strong style={{ color:C.text }}>{fmt(annual.annualGross)}</strong>, HRA, EPF, and basic — to Tax Optimiser. Continue there to add rent, health insurance, and any other deductions to estimate your actual tax.
+                        </p>
+                        <button onClick={syncToTaxOptimiser} style={{ padding:'9px 18px', background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Continue to Tax Optimiser →</button>
+                        {taxCta.submittedAt && (
+                          <p style={{ fontSize:11, color:C.muted, margin:'10px 0 0' }}>
+                            ✓ Synced · last sent {new Date(taxCta.submittedAt).toLocaleDateString('en-IN', { day:'numeric', month:'short' })}
                           </p>
-                          <div style={{ display:'flex', gap:8 }}>
-                            <button onClick={() => router.push('/dashboard/tax')} style={{ padding:'7px 14px', background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Open Tax Optimiser →</button>
-                            <button onClick={() => setTaxCtaExpanded(true)} style={{ padding:'7px 14px', background:'transparent', color:C.fg, border:`1px solid ${C.border}`, borderRadius:5, fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>Edit</button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div style={{ padding:'14px 16px' }}>
-                          <p style={{ fontSize:12, color:C.muted, margin:'0 0 14px', lineHeight:1.5 }}>
-                            We have your annual gross of <strong style={{ color:C.text }}>{fmt(annual.annualGross)}</strong>. To estimate your actual tax, we need 3 quick details. Skip any you don't have.
-                          </p>
-
-                          {/* Q1: Rent + metro */}
-                          <div style={{ marginBottom:14 }}>
-                            <p style={{ fontSize:11.5, fontWeight:600, color:C.text, margin:'0 0 4px' }}>Monthly rent you pay</p>
-                            <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                              <div style={{ display:'flex', alignItems:'center', border:`1px solid ${C.border}`, borderRadius:4, padding:'0 8px', flex:'0 0 140px' }}>
-                                <span style={{ color:C.muted, fontSize:12 }}>₹</span>
-                                <input type="text" inputMode="numeric" value={taxCta.rentPaid > 0 ? String(taxCta.rentPaid) : ''} onChange={e => setTaxCta(p => ({ ...p, rentPaid: parseInt(e.target.value.replace(/[^0-9]/g,'')) || 0 }))} placeholder="0" style={{ flex:1, padding:'7px 6px', border:'none', outline:'none', fontSize:12.5, color:C.text, fontFamily:'inherit', background:'transparent' }} />
-                              </div>
-                              <label style={{ display:'flex', alignItems:'center', gap:5, fontSize:11.5, color:C.text, cursor:'pointer' }}>
-                                <input type="radio" checked={taxCta.isMetro} onChange={() => setTaxCta(p => ({ ...p, isMetro: true }))} /> Metro city
-                              </label>
-                              <label style={{ display:'flex', alignItems:'center', gap:5, fontSize:11.5, color:C.text, cursor:'pointer' }}>
-                                <input type="radio" checked={!taxCta.isMetro} onChange={() => setTaxCta(p => ({ ...p, isMetro: false }))} /> Non-metro
-                              </label>
-                            </div>
-                            <p style={{ fontSize:10.5, color:C.muted, margin:'4px 0 0' }}>For HRA exemption · metro = Mumbai, Delhi, Kolkata, Chennai (50% rule). Other cities = 40% rule.</p>
-                          </div>
-
-                          {/* Q2: 80D */}
-                          <div style={{ marginBottom:14 }}>
-                            <p style={{ fontSize:11.5, fontWeight:600, color:C.text, margin:'0 0 4px' }}>Health insurance premium · annual</p>
-                            <div style={{ display:'flex', alignItems:'center', border:`1px solid ${C.border}`, borderRadius:4, padding:'0 8px', width:160 }}>
-                              <span style={{ color:C.muted, fontSize:12 }}>₹</span>
-                              <input type="text" inputMode="numeric" value={taxCta.selfFamily > 0 ? String(taxCta.selfFamily) : ''} onChange={e => setTaxCta(p => ({ ...p, selfFamily: parseInt(e.target.value.replace(/[^0-9]/g,'')) || 0 }))} placeholder="0" style={{ flex:1, padding:'7px 6px', border:'none', outline:'none', fontSize:12.5, color:C.text, fontFamily:'inherit', background:'transparent' }} />
-                            </div>
-                            <p style={{ fontSize:10.5, color:C.muted, margin:'4px 0 0' }}>Section 80D · max ₹25,000 (₹50,000 if you/parents are senior citizens)</p>
-                          </div>
-
-                          {/* Q3: Other 80C */}
-                          <div style={{ marginBottom:16 }}>
-                            <p style={{ fontSize:11.5, fontWeight:600, color:C.text, margin:'0 0 4px' }}>Other 80C investment beyond EPF · annual</p>
-                            <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                              <select value={taxCta.otherC80Type} onChange={e => setTaxCta(p => ({ ...p, otherC80Type: e.target.value as any }))} style={{ padding:'7px 8px', border:`1px solid ${C.border}`, borderRadius:4, fontSize:12, fontFamily:'inherit', background:'#fff', color:C.text, outline:'none' }}>
-                                <option value="ppf">PPF</option>
-                                <option value="elss">ELSS Mutual Fund</option>
-                                <option value="lic">LIC Premium</option>
-                                <option value="nsc">Tax-saver FD / NSC</option>
-                                <option value="tuition">Kids' Tuition</option>
-                              </select>
-                              <div style={{ display:'flex', alignItems:'center', border:`1px solid ${C.border}`, borderRadius:4, padding:'0 8px', flex:'0 0 140px' }}>
-                                <span style={{ color:C.muted, fontSize:12 }}>₹</span>
-                                <input type="text" inputMode="numeric" value={taxCta.otherC80Amount > 0 ? String(taxCta.otherC80Amount) : ''} onChange={e => setTaxCta(p => ({ ...p, otherC80Amount: parseInt(e.target.value.replace(/[^0-9]/g,'')) || 0 }))} placeholder="0" style={{ flex:1, padding:'7px 6px', border:'none', outline:'none', fontSize:12.5, color:C.text, fontFamily:'inherit', background:'transparent' }} />
-                              </div>
-                            </div>
-                            <p style={{ fontSize:10.5, color:C.muted, margin:'4px 0 0' }}>Section 80C · combined limit ₹1,50,000 (your EPF already counts toward this)</p>
-                          </div>
-
-                          <div style={{ display:'flex', gap:8, flexWrap:'wrap' as const }}>
-                            <button onClick={() => syncToTaxOptimiser(false)} style={{ padding:'9px 18px', background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Continue to Tax Optimiser →</button>
-                            <button onClick={() => syncToTaxOptimiser(true)} style={{ padding:'9px 14px', background:'transparent', color:C.muted, border:`1px solid ${C.border}`, borderRadius:5, fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>Skip for now</button>
-                          </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
 
                     <div style={{ display:'flex', justifyContent:'flex-end', marginTop:12 }}>
