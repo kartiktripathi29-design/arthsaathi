@@ -8,6 +8,7 @@ import { useAppStore } from '@/store/AppStore'
 import { MEGA_CATEGORIES, MegaCategory, tagTransactions, detectSalaryCandidates, detectSalary, SalaryCandidate, SalaryDetectionResult, generateExpenseSuggestions, ExpenseSuggestion, loadMerchantMemory, saveMerchantMemory, extractMerchantKey } from '@/lib/categories'
 import type { IntelligenceReport, ClassifiedTransaction } from '@/lib/txn-intelligence'
 import type { ParsedSalaryData } from '@/types'
+import { calcOldRegime, calcNewRegime, calcHRAExemption } from '@/lib/tax-engine'
 
 const C = { fg:'#3A4B41', wheat:'#E6CFA7', wl:'#F5ECD8', wm:'#D4B98A', bg:'#FDFAF6', card:'#fff', border:'#E4DDD1', text:'#1C2B22', muted:'#7A8A7E', danger:'#B94040' }
 const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`
@@ -477,6 +478,80 @@ function computeAnnual(timeline: SalaryTimeline | null): AnnualSummary | null {
     recurringMonthlyEPF: epfComp?.amount || 0,
     recurringMonthlyEmployerPF: employerPF,
     latestEmployerName: latestEmp?.employerName || '',
+  }
+}
+
+// ─── Multi-employer TDS shortfall (Build 2c) ──────────────────────────────
+// Detects when ≥2 employments in same FY → computes expected tax (both regimes)
+// against TDS actually deducted across all slips, surfaces shortfall.
+// Returns null when not applicable (single employer / no data / computation error).
+interface MultiEmployerTDS {
+  employmentsList: Array<{ name: string; from: string; to: string | null; slipCount: number; tdsDeducted: number; grossSum: number }>
+  combinedAnnualGross: number
+  totalTdsDeducted: number
+  expectedTaxOld: number
+  expectedTaxNew: number
+  shortfallOld: number    // positive = owe more; negative = surplus / refund
+  shortfallNew: number
+  hraExemption: number    // derived from latest slip's basic + HRA
+  epfAnnual: number       // EPF deducted annually
+}
+function computeMultiEmployerTDS(timeline: SalaryTimeline | null, annual: AnnualSummary | null): MultiEmployerTDS | null {
+  if (!timeline || !annual) return null
+  // Only count employments with at least 1 slip uploaded
+  const realEmployments = timeline.employments.filter(e => e.slips.length > 0)
+  if (realEmployments.length < 2) return null
+  try {
+    const employmentsList = realEmployments.map(emp => ({
+      name: emp.employerName,
+      from: emp.fromMonth,
+      to: emp.toMonth,
+      slipCount: emp.slips.length,
+      tdsDeducted: emp.slips.reduce((s, sl) => s + (sl.parsed.tdsDeducted || 0), 0),
+      grossSum: emp.slips.reduce((s, sl) => s + (sl.parsed.grossSalary || 0), 0),
+    }))
+    const totalTdsDeducted = employmentsList.reduce((s, e) => s + e.tdsDeducted, 0)
+    const combinedAnnualGross = annual.annualGross
+    if (combinedAnnualGross <= 0) return null
+
+    // Use latest employment's latest slip for HRA + basic auto-derive
+    const latestEmp = realEmployments[realEmployments.length - 1]
+    const latestSlip = latestEmp.slips.sort((a, b) => b.monthKey.localeCompare(a.monthKey))[0]
+    const basic = latestSlip?.parsed.basicSalary || 0
+    const hraReceived = latestSlip?.parsed.hra || 0
+    const epfMonthly = latestSlip?.parsed.employeePF || 0
+    const epfAnnual = epfMonthly * 12
+
+    // HRA exemption — assume rent = 0 (not entered yet on Salary tab); banner notes this
+    // (When user fills rent in Tax Optimiser, that page does the real HRA math.)
+    const hraExemption = calcHRAExemption(basic, hraReceived, 0, true)
+
+    // Build a minimal Deductions object — only what's known from slips
+    const dedFromSlip = {
+      section80C: epfAnnual,
+      section80CCD1B: 0,
+      section80D: 0,
+      section24b: 0,
+      hraExemption,
+      standardDeduction: 50000,
+      otherDeductions: 0,
+    }
+    const oldResult = calcOldRegime(combinedAnnualGross, dedFromSlip)
+    const newResult = calcNewRegime(combinedAnnualGross)
+    return {
+      employmentsList,
+      combinedAnnualGross,
+      totalTdsDeducted,
+      expectedTaxOld: oldResult.totalTax,
+      expectedTaxNew: newResult.totalTax,
+      shortfallOld: oldResult.totalTax - totalTdsDeducted,
+      shortfallNew: newResult.totalTax - totalTdsDeducted,
+      hraExemption,
+      epfAnnual,
+    }
+  } catch (e) {
+    if (typeof window !== 'undefined') console.warn('[multi-employer TDS] computation failed:', e)
+    return null
   }
 }
 
@@ -1786,6 +1861,58 @@ function ProfileContent() {
                         Annual figure feeds Tax Optimiser. Click any projected month below to override its values.
                       </div>
                     </div>
+
+                    {/* ── Multi-employer TDS shortfall banner (Build 2c) ── */}
+                    {(() => {
+                      const mte = computeMultiEmployerTDS(salaryTimeline, annual)
+                      if (!mte) return null
+                      const empNames = mte.employmentsList.map(e => e.name).join(' and ')
+                      const empRanges = mte.employmentsList.map(e => `${e.name} (${monthLabel(e.from)}${e.to ? `–${monthLabel(e.to)}` : ' onwards'})`).join(', ')
+                      const isSurplusOld = mte.shortfallOld < 0
+                      const isSurplusNew = mte.shortfallNew < 0
+                      return (
+                        <div style={{ ...S.card, border:`1.5px solid #D85A30`, background:'#FFF8F4' }}>
+                          <div style={{ padding:'10px 16px', background:'#FBEFEF', borderBottom:`1px solid ${C.border}`, display:'flex', alignItems:'center', gap:8 }}>
+                            <span style={{ fontSize:14 }}>⚠</span>
+                            <span style={{ fontSize:11.5, fontWeight:700, color:'#A04020', letterSpacing:'0.04em', textTransform:'uppercase' as const }}>Multi-employer FY · TDS may be short</span>
+                          </div>
+                          <div style={{ padding:'14px 16px' }}>
+                            <p style={{ fontSize:12, color:C.text, margin:'0 0 12px', lineHeight:1.55 }}>
+                              You worked at <strong>{empRanges}</strong>. Each employer deducts TDS based only on the income <em>they</em> pay you — not your total. Combined gross can push you into a higher tax slab, leaving TDS short.
+                            </p>
+                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, fontSize:11.5, marginBottom:10 }}>
+                              <div style={{ padding:'8px 10px', background:'#FAFAF8', borderRadius:4 }}>
+                                <p style={{ fontSize:10, color:C.muted, margin:0, textTransform:'uppercase' as const, letterSpacing:'0.04em' }}>Combined annual gross</p>
+                                <p style={{ fontWeight:700, color:C.text, margin:'2px 0 0' }}>{fmt(mte.combinedAnnualGross)}</p>
+                              </div>
+                              <div style={{ padding:'8px 10px', background:'#FAFAF8', borderRadius:4 }}>
+                                <p style={{ fontSize:10, color:C.muted, margin:0, textTransform:'uppercase' as const, letterSpacing:'0.04em' }}>TDS deducted to date</p>
+                                <p style={{ fontWeight:700, color:C.text, margin:'2px 0 0' }}>{fmt(mte.totalTdsDeducted)}</p>
+                              </div>
+                            </div>
+                            <div style={{ display:'grid', gridTemplateColumns:'1.2fr 1fr 1fr', gap:0, border:`1px solid ${C.border}`, borderRadius:5, overflow:'hidden', fontSize:11.5, marginBottom:10 }}>
+                              <div style={{ padding:'8px 10px', background:'#FAFAF8', fontWeight:600, color:C.muted, fontSize:10, letterSpacing:'0.04em', textTransform:'uppercase' as const }}>&nbsp;</div>
+                              <div style={{ padding:'8px 10px', background:'#FAFAF8', textAlign:'center' as const, fontWeight:700, color:C.fg, fontSize:10.5, letterSpacing:'0.04em', textTransform:'uppercase' as const, borderLeft:`1px solid ${C.border}` }}>Old Regime</div>
+                              <div style={{ padding:'8px 10px', background:'#FAFAF8', textAlign:'center' as const, fontWeight:700, color:C.fg, fontSize:10.5, letterSpacing:'0.04em', textTransform:'uppercase' as const, borderLeft:`1px solid ${C.border}` }}>New Regime</div>
+                              <div style={{ padding:'8px 10px', borderTop:`1px solid ${C.border}`, color:C.text }}>Expected tax</div>
+                              <div style={{ padding:'8px 10px', borderTop:`1px solid ${C.border}`, borderLeft:`1px solid ${C.border}`, textAlign:'right' as const, fontWeight:600, color:C.text }}>{fmt(mte.expectedTaxOld)}</div>
+                              <div style={{ padding:'8px 10px', borderTop:`1px solid ${C.border}`, borderLeft:`1px solid ${C.border}`, textAlign:'right' as const, fontWeight:600, color:C.text }}>{fmt(mte.expectedTaxNew)}</div>
+                              <div style={{ padding:'8px 10px', borderTop:`1px solid ${C.border}`, fontWeight:600, color:C.text, background:isSurplusOld || isSurplusNew ? '#EEF2EE' : '#FBEFEF' }}>{isSurplusOld && isSurplusNew ? 'TDS surplus' : 'Shortfall'}</div>
+                              <div style={{ padding:'8px 10px', borderTop:`1px solid ${C.border}`, borderLeft:`1px solid ${C.border}`, textAlign:'right' as const, fontWeight:700, color: isSurplusOld ? '#2A7A4A' : '#D85A30', background:isSurplusOld ? '#EEF2EE' : '#FBEFEF' }}>{isSurplusOld ? `+${fmt(Math.abs(mte.shortfallOld))}` : fmt(mte.shortfallOld)}</div>
+                              <div style={{ padding:'8px 10px', borderTop:`1px solid ${C.border}`, borderLeft:`1px solid ${C.border}`, textAlign:'right' as const, fontWeight:700, color: isSurplusNew ? '#2A7A4A' : '#D85A30', background:isSurplusNew ? '#EEF2EE' : '#FBEFEF' }}>{isSurplusNew ? `+${fmt(Math.abs(mte.shortfallNew))}` : fmt(mte.shortfallNew)}</div>
+                            </div>
+                            <p style={{ fontSize:10.5, color:C.muted, margin:'0 0 8px', lineHeight:1.5 }}>
+                              <strong style={{ color:C.text }}>Note:</strong> Expected tax assumes only what's on your slips (EPF + HRA exemption based on slip's basic/HRA, rent assumed ₹0). Once you finish in Tax Optimiser with rent, 80D, and other deductions, the real shortfall will be lower.
+                            </p>
+                            <p style={{ fontSize:10.5, color:C.muted, margin:0, lineHeight:1.5 }}>
+                              {isSurplusOld && isSurplusNew
+                                ? 'TDS appears over-deducted across employers — you may receive a refund after filing.'
+                                : 'To avoid Section 234B/234C interest: pay advance tax in installments (15 Jun · 15 Sep · 15 Dec · 15 Mar) or top up via self-assessment in March.'}
+                            </p>
+                          </div>
+                        </div>
+                      )
+                    })()}
 
                     {/* Timeline */}
                     <div style={S.card}>
