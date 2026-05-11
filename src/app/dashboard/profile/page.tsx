@@ -563,6 +563,7 @@ function ProfileContent() {
   const [salaryTimeline, setSalaryTimeline] = useState<SalaryTimeline | null>(null)
   const [salaryComponentsExpanded, setSalaryComponentsExpanded] = useState(true)
   const [salaryMonthEditor, setSalaryMonthEditor] = useState<{ open: boolean; monthKey: string | null }>({ open: false, monthKey: null })
+  const [pendingMonthIntent, setPendingMonthIntent] = useState<string | null>(null)
   const [employmentPrompt, setEmploymentPrompt] = useState<{ open: boolean; pendingSlip: SlipData | null; reason: 'employer_changed' | 'basic_jumped' | null; oldEmployerName?: string; newEmployerName?: string }>({ open: false, pendingSlip: null, reason: null })
   const [salaryFlagsModal, setSalaryFlagsModal] = useState<{ open: boolean; slipId: string | null; employmentId: string | null }>({ open: false, slipId: null, employmentId: null })
   const [taxCta, setTaxCta] = useState<{ submittedAt: string | null }>({ submittedAt: null })
@@ -1166,8 +1167,15 @@ function ProfileContent() {
       }
       const parsed: ParsedSalaryData = json.data
       const slip = slipFromParsed(parsed, file.name)
+      // If user clicked a projected month to upload, but the slip's month differs, surface that as a toast warning.
+      // Slip's own month still wins (auto-prefer) — user keeps the freedom to upload anyway.
+      if (pendingMonthIntent && pendingMonthIntent !== slip.monthKey) {
+        toast(`Slip is for ${monthLabel(slip.monthKey)} — added there instead of ${monthLabel(pendingMonthIntent)}`, { icon: 'ℹ️', duration: 5000 })
+      }
+      setPendingMonthIntent(null)
       addSlipToTimeline(slip, tid)
     } catch (e: any) {
+      setPendingMonthIntent(null)
       toast.error(e.message || 'Failed to read salary slip', { id: tid })
     } finally { setLoadingDoc(null) }
   }
@@ -2401,7 +2409,7 @@ function ProfileContent() {
             onClose={() => setSalaryMonthEditor({ open: false, monthKey: null })}
             onSave={(rows) => { setMonthOverride(mk, rows); setSalaryMonthEditor({ open: false, monthKey: null }); toast.success(`${monthLabel(mk)} updated`) }}
             onClearOverride={r.isOverride ? () => { clearMonthOverride(mk); setSalaryMonthEditor({ open: false, monthKey: null }); toast.success('Override cleared') } : null}
-            onUploadHere={() => { setSalaryMonthEditor({ open: false, monthKey: null }); salaryRef.current?.click() }}
+            onUploadHere={() => { setPendingMonthIntent(mk); setSalaryMonthEditor({ open: false, monthKey: null }); salaryRef.current?.click() }}
           />
         )
       })()}
