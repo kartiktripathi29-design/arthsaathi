@@ -1350,7 +1350,7 @@ function ProfileContent() {
       const prior = current.ded || {}
 
       // Auto-derive from latest slip in latest employment
-      let hraReceived = 0, epfMonthly = 0
+      let hraReceived = 0, epfMonthly = 0, basicMonthly = 0
       if (salaryTimeline && salaryTimeline.employments.length > 0) {
         const latestEmp = salaryTimeline.employments[salaryTimeline.employments.length - 1]
         const latestSlip = latestEmp.slips.sort((a, b) => b.monthKey.localeCompare(a.monthKey))[0]
@@ -1359,6 +1359,13 @@ function ProfileContent() {
           if (hraComp) hraReceived = hraComp.amount
           const epfComp = latestSlip.components.find(c => c.type === 'deduction' && /EMPLOYEE PF|^EPF$|PROVIDENT FUND/i.test(c.label))
           if (epfComp) epfMonthly = epfComp.amount
+          // Prefer the parsed.basicSalary field (clean number from API), fall back to component match
+          if (latestSlip.parsed.basicSalary && latestSlip.parsed.basicSalary > 0) {
+            basicMonthly = latestSlip.parsed.basicSalary
+          } else {
+            const basicComp = latestSlip.components.find(c => c.type === 'earning' && /^BASIC|BASIC\s*(SALARY|PAY)/i.test(c.label))
+            if (basicComp) basicMonthly = basicComp.amount
+          }
         }
       }
 
@@ -1367,10 +1374,11 @@ function ProfileContent() {
       const num = (v: any) => (typeof v === 'number' && !isNaN(v) ? v : 0)
       const bool = (v: any, def: boolean) => (typeof v === 'boolean' ? v : def)
       const merged: any = {
-        // HRA — hraReceived auto-derived (rentPaid is asked in Tax Optimiser's HRA step)
+        // HRA — hraReceived + basic auto-derived (rentPaid is asked in Tax Optimiser's HRA step)
         rentPaid: num(prior.rentPaid),
         hraReceived: num(prior.hraReceived) || hraReceived,
         isMetro: bool(prior.isMetro, true),
+        basic: num(prior.basic) || basicMonthly,
         // 80C — EPF auto-derived from slip (other buckets asked in Tax Optimiser)
         ppf: num(prior.ppf),
         elss: num(prior.elss),

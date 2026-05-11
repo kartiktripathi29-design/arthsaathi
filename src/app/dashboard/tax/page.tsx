@@ -121,6 +121,7 @@ function StepBar({ current }: { current:number }) {
 interface Deductions {
   // HRA
   rentPaid: number; hraReceived: number; isMetro: boolean
+  basic: number              // monthly basic from latest salary slip (0 = fallback to 40% proxy)
   // 80C
   ppf:number; elss:number; lic:number; homeLoanPrincipal:number; tuition:number; nsc:number; epf:number
   // 80D
@@ -139,7 +140,8 @@ interface Deductions {
 
 function calcHRAExempt(d: Deductions, salary: number): number {
   if (d.rentPaid === 0 || d.hraReceived === 0) return 0
-  const basicAnnual = salary * 0.4
+  // Use actual basic from salary slip if available; otherwise fall back to 40% of gross as a proxy
+  const basicAnnual = d.basic > 0 ? d.basic * 12 : salary * 0.4
   const hraAnnual   = d.hraReceived * 12   // monthly → annual
   const rentAnnual  = d.rentPaid * 12       // monthly → annual
   const rule1 = hraAnnual
@@ -188,7 +190,7 @@ function calcTax(income: number, deductions: Deductions, monthlyNet: number) {
 }
 
 // ─── Initial deductions state ─────────────────────────────────────────────────
-const defaultDed: Deductions = { rentPaid:0, hraReceived:0, isMetro:true, ppf:0, elss:0, lic:0, homeLoanPrincipal:0, tuition:0, nsc:0, epf:0, selfFamily:0, parents:0, parentsSenior:false, selfSenior:false, nps:0, savingsInterest:0, donations100:0, donations50:0, homeLoanInterest:0, eduLoanInterest:0 }
+const defaultDed: Deductions = { rentPaid:0, hraReceived:0, isMetro:true, basic:0, ppf:0, elss:0, lic:0, homeLoanPrincipal:0, tuition:0, nsc:0, epf:0, selfFamily:0, parents:0, parentsSenior:false, selfSenior:false, nps:0, savingsInterest:0, donations100:0, donations50:0, homeLoanInterest:0, eduLoanInterest:0 }
 
 const STEP_LABELS = ['Smart','Income','HRA','80C','80D','Other','Results']
 
@@ -527,20 +529,24 @@ export default function TaxPage() {
                 ))}
               </div>
             </Row>
-            {ded.rentPaid > 0 && ded.hraReceived > 0 && (
+            {ded.rentPaid > 0 && ded.hraReceived > 0 && (() => {
+              const basicAnnualDisplay = ded.basic > 0 ? ded.basic * 12 : annual * 0.4
+              const basicLabel = ded.basic > 0 ? 'basic salary (from your slip)' : 'basic salary (estimated as 40% of gross)'
+              return (
               <div style={{ padding:'12px 14px', background:C.wl, borderTop:`1px solid ${C.border}` }}>
                 <div style={{ fontSize:11, color:C.muted, marginBottom:8, lineHeight:1.6 }}>
                   <strong style={{ color:C.fg }}>How your HRA exemption is calculated:</strong><br/>
                   Rule 1 — Actual HRA received: <strong>{fmt(ded.hraReceived*12)}/yr</strong><br/>
-                  Rule 2 — Rent minus 10% of basic: <strong>{fmt(Math.max(0, ded.rentPaid*12 - 0.1*(annual*0.4)))}/yr</strong><br/>
-                  Rule 3 — {ded.isMetro?'50%':'40%'} of basic salary: <strong>{fmt(annual*0.4*(ded.isMetro?0.5:0.4))}/yr</strong>
+                  Rule 2 — Rent minus 10% of {basicLabel}: <strong>{fmt(Math.max(0, ded.rentPaid*12 - 0.1*basicAnnualDisplay))}/yr</strong><br/>
+                  Rule 3 — {ded.isMetro?'50%':'40%'} of {basicLabel}: <strong>{fmt(basicAnnualDisplay*(ded.isMetro?0.5:0.4))}/yr</strong>
                 </div>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                   <span style={{ fontSize:13, fontWeight:600, color:C.fg }}>Your HRA exemption (minimum of 3)</span>
                   <span style={{ fontSize:17, fontWeight:700, color:C.fg }}>{fmt(calcHRAExempt(ded, annual))}</span>
                 </div>
               </div>
-            )}
+              )
+            })()}
           </div>
           <NavButtons onBack={() => goStep(1)} onReset={reset} onProceed={() => goStep(3)} proceedLabel="Proceed to 80C →" />
         </div>
