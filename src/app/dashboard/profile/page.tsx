@@ -1974,6 +1974,9 @@ function ProfileContent() {
                                 </span>
                               ))}
                               <button onClick={() => setSalaryFlagsModal({ open: true, slipId: null, employmentId: emp.id })} style={{ fontSize:10.5, padding:'3px 8px', borderRadius:3, border:`1px solid ${C.border}`, background:C.card, color:C.fg, cursor:'pointer', fontFamily:'inherit' }}>Edit components</button>
+                              {emp.toMonth !== null && (
+                                <a href={`/dashboard/profile/form-12b?empId=${emp.id}`} target="_blank" rel="noopener noreferrer" style={{ fontSize:10.5, padding:'3px 8px', borderRadius:3, border:`1px solid ${C.fg}`, background:C.fg, color:C.wheat, cursor:'pointer', fontFamily:'inherit', textDecoration:'none', fontWeight:600 }}>📄 Generate Form 12B →</a>
+                              )}
                             </div>
                           </div>
                         )
