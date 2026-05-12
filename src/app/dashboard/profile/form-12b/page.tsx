@@ -305,7 +305,7 @@ function Blank({ children }: { children: React.ReactNode }) {
 }
 
 const tableStyle: React.CSSProperties = { width:'100%', borderCollapse:'collapse' as const, fontSize:12, marginTop:4 }
-function Th({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+function Th({ children, style }: { children?: React.ReactNode; style?: React.CSSProperties }) {
   return <th style={{ padding:'7px 10px', border:`1px solid ${C.border}`, textAlign:'left' as const, background:C.wl, color:C.fg, fontSize:10, textTransform:'uppercase' as const, letterSpacing:'0.06em', fontWeight:700, ...style }}>{children}</th>
 }
 function Tr({ children, subtotal, total }: { children: React.ReactNode; subtotal?: boolean; total?: boolean }) {
@@ -316,6 +316,6 @@ function Tr({ children, subtotal, total }: { children: React.ReactNode; subtotal
     : {}
   return <tr style={style}>{children}</tr>
 }
-function Td({ children, num, blank, style }: { children: React.ReactNode; num?: boolean; blank?: boolean; style?: React.CSSProperties }) {
+function Td({ children, num, blank, style }: { children?: React.ReactNode; num?: boolean; blank?: boolean; style?: React.CSSProperties }) {
   return <td style={{ padding:'7px 10px', border:`1px solid ${C.border}`, textAlign: num ? 'right' as const : 'left' as const, fontVariantNumeric:'tabular-nums', fontWeight: num ? 500 : 400, fontStyle: blank ? 'italic' as const : 'normal' as const, color: blank ? '#A09080' : 'inherit', ...style }}>{children}</td>
 }
