@@ -358,6 +358,27 @@ function monthLabel(monthKey: string): string {
   return `${names[Number(m)]} ${y.slice(2)}`
 }
 
+// Employee-name comparator — returns true if two names plausibly refer to the same person
+// Strips honorifics (Mr/Ms/Dr/Shri/Smt), normalizes whitespace, then checks token overlap.
+// Considered "same person" if ≥50% of tokens from the shorter name appear in the longer name.
+function normalizeEmployeeName(name: string): string[] {
+  if (!name) return []
+  return name.toUpperCase()
+    .replace(/^(MR\.?|MS\.?|MRS\.?|MISS|SHRI|SMT\.?|DR\.?)\s+/i, '')
+    .replace(/[^A-Z\s]/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length > 1)
+}
+function namesPlausiblyMatch(a: string, b: string): boolean {
+  const ta = normalizeEmployeeName(a)
+  const tb = normalizeEmployeeName(b)
+  if (ta.length === 0 || tb.length === 0) return true   // missing data → don't block
+  const shorter = ta.length <= tb.length ? ta : tb
+  const longer = ta.length <= tb.length ? tb : ta
+  const overlap = shorter.filter(t => longer.includes(t)).length
+  return overlap / shorter.length >= 0.5
+}
+
 // Build a SlipData from API result
 function slipFromParsed(parsed: ParsedSalaryData, fileName: string): SlipData {
   const monthKey = parseMonthKey(parsed.month, parsed.year)
@@ -407,7 +428,11 @@ function employmentForMonth(timeline: SalaryTimeline, monthKey: string): Employm
   for (const emp of timeline.employments) {
     if (monthKey >= emp.fromMonth && (emp.toMonth === null || monthKey <= emp.toMonth)) return emp
   }
-  // fallback to latest employment if month is past it
+  // If the month is BEFORE any employment's fromMonth → no income (return null)
+  // This prevents phantom income being projected onto months that pre-date the user's first job in the timeline.
+  const earliestFrom = timeline.employments.reduce((min, e) => e.fromMonth < min ? e.fromMonth : min, timeline.employments[0]?.fromMonth || '9999-99')
+  if (monthKey < earliestFrom) return null
+  // Otherwise (month is past the latest employment's toMonth) — fall through to latest employment for forward projection
   return timeline.employments[timeline.employments.length - 1] || null
 }
 
@@ -485,8 +510,12 @@ function computeAnnual(timeline: SalaryTimeline | null): AnnualSummary | null {
 // Detects when ≥2 employments in same FY → computes expected tax (both regimes)
 // against TDS actually deducted across all slips, surfaces shortfall.
 // Returns null when not applicable (single employer / no data / computation error).
+interface EmploymentMonth { monthKey: string; earnings: number; kind: 'actual' | 'override' | 'projected' }
+interface EmploymentBreakdown { name: string; from: string; to: string | null; slipCount: number; tdsDeducted: number; subtotal: number; months: EmploymentMonth[] }
 interface MultiEmployerTDS {
   employmentsList: Array<{ name: string; from: string; to: string | null; slipCount: number; tdsDeducted: number; grossSum: number }>
+  breakdown: EmploymentBreakdown[]
+  emptyMonths: string[]   // monthKeys with 0 earnings (no employment covered them)
   combinedAnnualGross: number
   totalTdsDeducted: number
   expectedTaxOld: number
@@ -502,6 +531,28 @@ function computeMultiEmployerTDS(timeline: SalaryTimeline | null, annual: Annual
   const realEmployments = timeline.employments.filter(e => e.slips.length > 0)
   if (realEmployments.length < 2) return null
   try {
+    // Per-employer breakdown: walk each FY month, attribute to the employment that owns it
+    const months = fyMonths(timeline.fyStartYear)
+    const breakdown: EmploymentBreakdown[] = realEmployments.map(emp => ({
+      name: emp.employerName, from: emp.fromMonth, to: emp.toMonth,
+      slipCount: emp.slips.length, tdsDeducted: emp.slips.reduce((s, sl) => s + (sl.parsed.tdsDeducted || 0), 0),
+      subtotal: 0, months: [],
+    }))
+    const emptyMonths: string[] = []
+    for (const mk of months) {
+      const r = rollupMonth(timeline, mk)
+      const emp = employmentForMonth(timeline, mk)
+      if (!emp || r.earnings === 0) {
+        emptyMonths.push(mk)
+        continue
+      }
+      const target = breakdown.find(b => b.name === emp.employerName && b.from === emp.fromMonth)
+      if (target) {
+        target.subtotal += r.earnings
+        target.months.push({ monthKey: mk, earnings: r.earnings, kind: r.isActual ? 'actual' : r.isOverride ? 'override' : 'projected' })
+      }
+    }
+
     const employmentsList = realEmployments.map(emp => ({
       name: emp.employerName,
       from: emp.fromMonth,
@@ -540,6 +591,8 @@ function computeMultiEmployerTDS(timeline: SalaryTimeline | null, annual: Annual
     const newResult = calcNewRegime(combinedAnnualGross)
     return {
       employmentsList,
+      breakdown,
+      emptyMonths,
       combinedAnnualGross,
       totalTdsDeducted,
       expectedTaxOld: oldResult.totalTax,
@@ -640,6 +693,9 @@ function ProfileContent() {
   const [salaryMonthEditor, setSalaryMonthEditor] = useState<{ open: boolean; monthKey: string | null }>({ open: false, monthKey: null })
   const [pendingMonthIntent, setPendingMonthIntent] = useState<string | null>(null)
   const [employmentPrompt, setEmploymentPrompt] = useState<{ open: boolean; pendingSlip: SlipData | null; reason: 'employer_changed' | 'basic_jumped' | null; oldEmployerName?: string; newEmployerName?: string }>({ open: false, pendingSlip: null, reason: null })
+  const [nameMismatchPrompt, setNameMismatchPrompt] = useState<{ open: boolean; pendingSlip: SlipData | null; existingName: string; newName: string }>({ open: false, pendingSlip: null, existingName: '', newName: '' })
+  const [emptyMonthsDismissed, setEmptyMonthsDismissed] = useState(false)
+  const [breakdownExpanded, setBreakdownExpanded] = useState(false)
   const [salaryFlagsModal, setSalaryFlagsModal] = useState<{ open: boolean; slipId: string | null; employmentId: string | null }>({ open: false, slipId: null, employmentId: null })
   const [taxCta, setTaxCta] = useState<{ submittedAt: string | null }>({ submittedAt: null })
   const [taggedTxns, setTaggedTxns] = useState<any[]>([])
@@ -745,6 +801,8 @@ function ProfileContent() {
           setTaxCta({ submittedAt: parsed?.submittedAt || null })
         } catch {}
       }
+      const emd = localStorage.getItem('av_empty_months_dismissed')
+      if (emd === '1') setEmptyMonthsDismissed(true)
       loadSavedBankAccounts()
     } catch {}
   }, [])
@@ -1248,6 +1306,21 @@ function ProfileContent() {
         toast(`Slip is for ${monthLabel(slip.monthKey)} — added there instead of ${monthLabel(pendingMonthIntent)}`, { icon: 'ℹ️', duration: 5000 })
       }
       setPendingMonthIntent(null)
+
+      // Fix A — Employee name guard. Compare slip's employee name against existing slips.
+      // If names don't plausibly match → soft warn, default to discard.
+      const newName = (parsed as any)?.employeeName || ''
+      if (newName && salaryTimeline && salaryTimeline.employments.some(e => e.slips.length > 0)) {
+        const lastEmp = salaryTimeline.employments[salaryTimeline.employments.length - 1]
+        const lastSlip = lastEmp.slips.sort((a, b) => b.monthKey.localeCompare(a.monthKey))[0]
+        const existingName = (lastSlip?.parsed as any)?.employeeName || ''
+        if (existingName && !namesPlausiblyMatch(existingName, newName)) {
+          toast.dismiss(tid)
+          setNameMismatchPrompt({ open: true, pendingSlip: slip, existingName, newName })
+          return
+        }
+      }
+
       addSlipToTimeline(slip, tid)
     } catch (e: any) {
       setPendingMonthIntent(null)
@@ -1258,6 +1331,9 @@ function ProfileContent() {
   // Add slip to timeline — auto-detects same employer / hike / new employer
   // Prompts user only when ambiguous (employer name change OR basic salary jump >5%)
   const addSlipToTimeline = (slip: SlipData, toastId?: string) => {
+    // Reset dismissed empty-months notice — uploading a new slip may have closed a gap
+    setEmptyMonthsDismissed(false)
+    try { localStorage.removeItem('av_empty_months_dismissed') } catch {}
     setSalaryTimeline(prev => {
       // First slip ever — create timeline
       if (!prev) {
@@ -1862,6 +1938,36 @@ function ProfileContent() {
                       </div>
                     </div>
 
+                    {/* ── Empty-months notice (Fix C) ── */}
+                    {!emptyMonthsDismissed && (() => {
+                      const months = fyMonths(salaryTimeline.fyStartYear)
+                      const empty = months.filter(mk => {
+                        const r = rollupMonth(salaryTimeline, mk)
+                        return r.earnings === 0
+                      })
+                      if (empty.length === 0) return null
+                      const rangeLabel = empty.length === 1
+                        ? monthLabel(empty[0])
+                        : `${monthLabel(empty[0])} – ${monthLabel(empty[empty.length - 1])}`
+                      return (
+                        <div style={{ ...S.card, border:`1px solid #E6CFA7`, background:'#FFF8E8' }}>
+                          <div style={{ padding:'12px 16px', display:'flex', gap:12, alignItems:'flex-start' }}>
+                            <span style={{ fontSize:14, lineHeight:1 }}>ℹ</span>
+                            <div style={{ flex:1 }}>
+                              <p style={{ fontSize:12, fontWeight:600, color:C.text, margin:'0 0 4px' }}>{empty.length} month{empty.length !== 1 ? 's' : ''} have no salary data ({rangeLabel})</p>
+                              <p style={{ fontSize:11.5, color:C.muted, margin:'0 0 10px', lineHeight:1.55 }}>
+                                These months are currently treated as <strong>₹0 income</strong>. If you were employed, upload those slips so your annual total and tax estimates reflect reality. If you were genuinely between jobs, this is correct.
+                              </p>
+                              <div style={{ display:'flex', gap:8, flexWrap:'wrap' as const }}>
+                                <button onClick={() => salaryRef.current?.click()} style={{ padding:'7px 12px', background:C.fg, color:C.wheat, border:'none', borderRadius:4, fontSize:11.5, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>I had income — upload slips</button>
+                                <button onClick={() => { setEmptyMonthsDismissed(true); try { localStorage.setItem('av_empty_months_dismissed', '1') } catch {} }} style={{ padding:'7px 12px', background:'transparent', color:C.muted, border:`1px solid ${C.border}`, borderRadius:4, fontSize:11.5, cursor:'pointer', fontFamily:'inherit' }}>These months were ₹0 — dismiss</button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })()}
+
                     {/* ── Multi-employer TDS shortfall banner (Build 2c) ── */}
                     {(() => {
                       const mte = computeMultiEmployerTDS(salaryTimeline, annual)
@@ -1890,6 +1996,42 @@ function ProfileContent() {
                                 <p style={{ fontWeight:700, color:C.text, margin:'2px 0 0' }}>{fmt(mte.totalTdsDeducted)}</p>
                               </div>
                             </div>
+                            <button onClick={() => setBreakdownExpanded(v => !v)} style={{ width:'100%', padding:'8px 10px', background:'transparent', border:`1px dashed ${C.border}`, borderRadius:4, fontSize:11, color:C.fg, cursor:'pointer', fontFamily:'inherit', marginBottom:10, textAlign:'left' as const, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                              <span>{breakdownExpanded ? '▼' : '▶'} How is {fmt(mte.combinedAnnualGross)} calculated?</span>
+                              <span style={{ fontSize:10, color:C.muted }}>{breakdownExpanded ? 'hide' : 'audit the math'}</span>
+                            </button>
+                            {breakdownExpanded && (
+                              <div style={{ background:'#FAFAF8', border:`1px solid ${C.border}`, borderRadius:5, padding:'10px 12px', marginBottom:10, fontSize:11 }}>
+                                {mte.breakdown.map((b, idx) => (
+                                  <div key={idx} style={{ marginBottom: idx === mte.breakdown.length - 1 ? 0 : 10, paddingBottom: idx === mte.breakdown.length - 1 ? 0 : 8, borderBottom: idx === mte.breakdown.length - 1 ? 'none' : `1px solid ${C.border}` }}>
+                                    <p style={{ fontSize:11.5, fontWeight:600, color:C.text, margin:'0 0 4px' }}>{b.name} <span style={{ fontSize:10, color:C.muted, fontWeight:400 }}>· {monthLabel(b.from)} {b.to ? `– ${monthLabel(b.to)}` : 'onwards'} · {b.slipCount} slip{b.slipCount !== 1 ? 's' : ''}</span></p>
+                                    <table style={{ width:'100%', fontSize:10.5, borderCollapse:'collapse' as const }}>
+                                      <tbody>
+                                        {b.months.map(m => (
+                                          <tr key={m.monthKey}>
+                                            <td style={{ padding:'2px 0', color:C.muted, width:60 }}>{monthLabel(m.monthKey)}</td>
+                                            <td style={{ padding:'2px 0', textAlign:'right' as const, fontVariantNumeric:'tabular-nums' as const, color:C.text }}>{fmt(m.earnings)}</td>
+                                            <td style={{ padding:'2px 0 2px 10px', color:C.muted, fontStyle:m.kind === 'projected' ? 'italic' as const : 'normal' as const }}>{m.kind === 'actual' ? 'actual' : m.kind === 'override' ? 'edited' : 'projected from recurring components'}</td>
+                                          </tr>
+                                        ))}
+                                        <tr><td colSpan={3} style={{ borderTop:`1px dashed ${C.border}`, padding:'4px 0 0', textAlign:'right' as const, fontWeight:700, color:C.text, fontVariantNumeric:'tabular-nums' as const }}>Subtotal &nbsp;&nbsp; {fmt(b.subtotal)}</td></tr>
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                ))}
+                                {mte.emptyMonths.length > 0 && (
+                                  <div style={{ marginTop:8, padding:'8px 10px', background:'#FFF3DD', border:`1px solid #E6CFA7`, borderRadius:4 }}>
+                                    <p style={{ fontSize:11, color:'#7A5A20', margin:0, lineHeight:1.5 }}>
+                                      <strong>⚠ {mte.emptyMonths.length} month{mte.emptyMonths.length !== 1 ? 's' : ''} have no income</strong> ({monthLabel(mte.emptyMonths[0])}{mte.emptyMonths.length > 1 ? ` – ${monthLabel(mte.emptyMonths[mte.emptyMonths.length - 1])}` : ''}). System assumed ₹0. If you were employed during this period, upload those slips for an accurate total.
+                                    </p>
+                                  </div>
+                                )}
+                                <div style={{ marginTop:10, paddingTop:8, borderTop:`2px solid ${C.fg}`, display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:12 }}>
+                                  <span style={{ fontWeight:700, color:C.text }}>Combined annual gross</span>
+                                  <span style={{ fontWeight:700, color:C.text, fontVariantNumeric:'tabular-nums' as const }}>{fmt(mte.combinedAnnualGross)}</span>
+                                </div>
+                              </div>
+                            )}
                             <div style={{ display:'grid', gridTemplateColumns:'1.2fr 1fr 1fr', gap:0, border:`1px solid ${C.border}`, borderRadius:5, overflow:'hidden', fontSize:11.5, marginBottom:10 }}>
                               <div style={{ padding:'8px 10px', background:'#FAFAF8', fontWeight:600, color:C.muted, fontSize:10, letterSpacing:'0.04em', textTransform:'uppercase' as const }}>&nbsp;</div>
                               <div style={{ padding:'8px 10px', background:'#FAFAF8', textAlign:'center' as const, fontWeight:700, color:C.fg, fontSize:10.5, letterSpacing:'0.04em', textTransform:'uppercase' as const, borderLeft:`1px solid ${C.border}` }}>Old Regime</div>
@@ -2518,6 +2660,30 @@ function ProfileContent() {
               </button>
             </div>
             <button onClick={() => setEmploymentPrompt({ open: false, pendingSlip: null, reason: null })} style={{ marginTop:12, width:'100%', padding:9, background:'#fff', color:C.muted, border:`1px solid ${C.border}`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit' }}>Cancel · don't add this slip</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── NAME MISMATCH PROMPT (Fix A) ── */}
+      {nameMismatchPrompt.open && nameMismatchPrompt.pendingSlip && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(28,43,34,0.5)', zIndex:99, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }} onClick={() => setNameMismatchPrompt({ open: false, pendingSlip: null, existingName: '', newName: '' })}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:'#fff', borderRadius:10, padding:20, maxWidth:500, width:'100%', boxShadow:'0 12px 40px rgba(0,0,0,0.18)' }}>
+            <p style={{ fontSize:16, fontWeight:700, color:C.text, margin:'0 0 4px' }}>Different employee detected</p>
+            <p style={{ fontSize:12, color:C.muted, margin:'0 0 14px', lineHeight:1.55 }}>
+              The name on this slip doesn't match your earlier slips. A typo or nickname is fine; a genuinely different person's slip will produce wrong tax math.
+            </p>
+            <div style={{ background:C.wl, border:`1px solid ${C.border}`, borderRadius:6, padding:'10px 12px', marginBottom:14, fontSize:12 }}>
+              <div style={{ display:'grid', gridTemplateColumns:'140px 1fr', gap:'4px 12px' }}>
+                <span style={{ color:C.muted }}>This slip is for:</span>
+                <span style={{ fontWeight:600, color:C.text }}>{nameMismatchPrompt.newName}</span>
+                <span style={{ color:C.muted }}>Existing slips are for:</span>
+                <span style={{ fontWeight:600, color:C.text }}>{nameMismatchPrompt.existingName}</span>
+              </div>
+            </div>
+            <div style={{ display:'flex', flexDirection:'column' as const, gap:8 }}>
+              <button onClick={() => { setNameMismatchPrompt({ open: false, pendingSlip: null, existingName: '', newName: '' }); toast.success('Slip discarded') }} style={{ padding:'10px 14px', background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>Discard this slip</button>
+              <button onClick={() => { const pending = nameMismatchPrompt.pendingSlip!; setNameMismatchPrompt({ open: false, pendingSlip: null, existingName: '', newName: '' }); addSlipToTimeline(pending) }} style={{ padding:'10px 14px', background:'#fff', color:C.text, border:`1px solid ${C.border}`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit' }}>Use anyway · this is the same person</button>
+            </div>
           </div>
         </div>
       )}
