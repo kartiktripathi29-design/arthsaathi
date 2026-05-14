@@ -697,6 +697,7 @@ function ProfileContent() {
   const [emptyMonthsDismissed, setEmptyMonthsDismissed] = useState(false)
   const [extendRangeModal, setExtendRangeModal] = useState<{ open: boolean; fromMonth: string; toMonth: string; gapMin: string; gapMax: string }>({ open: false, fromMonth: '', toMonth: '', gapMin: '', gapMax: '' })
   const [otherIncomeModal, setOtherIncomeModal] = useState<{ open: boolean }>({ open: false })
+  const [reviewSlipsModal, setReviewSlipsModal] = useState<{ open: boolean; slips: SlipData[]; suspicious: Set<number> }>({ open: false, slips: [], suspicious: new Set() })
   const [breakdownExpanded, setBreakdownExpanded] = useState(false)
   const [salaryFlagsModal, setSalaryFlagsModal] = useState<{ open: boolean; slipId: string | null; employmentId: string | null }>({ open: false, slipId: null, employmentId: null })
   const [taxCta, setTaxCta] = useState<{ submittedAt: string | null }>({ submittedAt: null })
@@ -1342,12 +1343,54 @@ function ProfileContent() {
       if (slips.length === 1) {
         addSlipToTimeline(slips[0], tid)
       } else {
-        addMultipleSlipsToTimeline(slips, tid)
+        // Multi-slip: open review modal so user can verify Claude's parsing before committing.
+        // Detect suspicious months — those far from other slips' months, or duplicate within batch.
+        const suspicious = detectSuspiciousSlips(slips, salaryTimeline)
+        toast.dismiss(tid)
+        setReviewSlipsModal({ open: true, slips, suspicious })
       }
     } catch (e: any) {
       setPendingMonthIntent(null)
       toast.error(e.message || 'Failed to read salary slip', { id: tid })
     } finally { setLoadingDoc(null) }
+  }
+
+  // Flag slips with months that look unusual — likely Claude hallucinations.
+  // Heuristics: (a) month is duplicate within batch, (b) month is far from other slips' months in this batch or timeline, (c) month is more than 6 months in the future from "today".
+  const monthsBetween = (a: string, b: string): number => {
+    const [ay, am] = a.split('-').map(Number)
+    const [by, bm] = b.split('-').map(Number)
+    return (ay - by) * 12 + (am - bm)
+  }
+  const detectSuspiciousSlips = (slips: SlipData[], timeline: SalaryTimeline | null): Set<number> => {
+    const sus = new Set<number>()
+    if (slips.length === 0) return sus
+    const sorted = slips.map(s => s.monthKey).sort()
+    // Within-batch duplicates
+    const seen = new Set<string>()
+    slips.forEach((s, i) => {
+      if (seen.has(s.monthKey)) sus.add(i)
+      seen.add(s.monthKey)
+    })
+    // Reference set of "known good" months from existing timeline + this batch
+    const knownMonths: string[] = [...sorted]
+    if (timeline) timeline.employments.forEach(e => e.slips.forEach(s => knownMonths.push(s.monthKey)))
+    knownMonths.sort()
+    // Flag if a slip month is > 4 months away from its nearest neighbor among known months
+    slips.forEach((s, i) => {
+      const others = knownMonths.filter(mk => mk !== s.monthKey)
+      if (others.length === 0) return
+      const distances = others.map(mk => Math.abs(monthsBetween(s.monthKey, mk)))
+      const minDist = Math.min(...distances)
+      if (minDist > 4) sus.add(i)
+    })
+    // Flag future months > 6 months from today
+    const today = new Date()
+    const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
+    slips.forEach((s, i) => {
+      if (monthsBetween(s.monthKey, todayKey) > 6) sus.add(i)
+    })
+    return sus
   }
 
   // Add multiple slips from the same uploaded file in ONE state update.
@@ -2818,6 +2861,104 @@ function ProfileContent() {
           </div>
         </div>
       )}
+
+      {/* ── REVIEW PARSED SLIPS MODAL (multi-slip uploads) ── */}
+      {reviewSlipsModal.open && reviewSlipsModal.slips.length > 0 && (() => {
+        const close = () => setReviewSlipsModal({ open: false, slips: [], suspicious: new Set() })
+        const updateSlipMonth = (idx: number, newMonthKey: string) => {
+          setReviewSlipsModal(prev => {
+            const updated = [...prev.slips]
+            updated[idx] = { ...updated[idx], monthKey: newMonthKey }
+            return { ...prev, slips: updated, suspicious: detectSuspiciousSlips(updated, salaryTimeline) }
+          })
+        }
+        const removeSlip = (idx: number) => {
+          setReviewSlipsModal(prev => {
+            const updated = prev.slips.filter((_, i) => i !== idx)
+            return { ...prev, slips: updated, suspicious: detectSuspiciousSlips(updated, salaryTimeline) }
+          })
+        }
+        const confirmAdd = () => {
+          const slips = reviewSlipsModal.slips
+          // Final dup check within batch
+          const monthSet = new Set<string>()
+          for (const s of slips) {
+            if (monthSet.has(s.monthKey)) {
+              toast.error(`Duplicate month ${monthLabel(s.monthKey)} in batch. Fix before adding.`)
+              return
+            }
+            monthSet.add(s.monthKey)
+          }
+          close()
+          if (slips.length === 1) {
+            addSlipToTimeline(slips[0])
+          } else {
+            addMultipleSlipsToTimeline(slips)
+          }
+        }
+        // Build month options — wide range, FY of first slip plus ±1 year
+        const baseFY = fyStartYearForMonthKey(reviewSlipsModal.slips[0].monthKey)
+        const allMonths: string[] = []
+        for (let y = baseFY - 1; y <= baseFY + 1; y++) {
+          for (let m = 1; m <= 12; m++) {
+            allMonths.push(`${y}-${String(m).padStart(2, '0')}`)
+          }
+        }
+        return (
+          <div style={{ position:'fixed', inset:0, background:'rgba(28,43,34,0.55)', zIndex:99, display:'flex', alignItems:'center', justifyContent:'center', padding:20, overflow:'auto' }} onClick={close}>
+            <div onClick={e=>e.stopPropagation()} style={{ background:'#fff', borderRadius:10, padding:20, maxWidth:620, width:'100%', maxHeight:'85vh', overflow:'auto', boxShadow:'0 12px 40px rgba(0,0,0,0.18)' }}>
+              <p style={{ fontSize:16, fontWeight:700, color:C.text, margin:'0 0 4px' }}>Review parsed slips · {reviewSlipsModal.slips.length} found</p>
+              <p style={{ fontSize:11.5, color:C.muted, margin:'0 0 14px', lineHeight:1.55 }}>
+                We extracted these slips from your file. <strong>AI parsing can misread dates</strong> on scans. Please verify before adding to your timeline. Anything with ⚠ looks unusual — please double-check the actual slip.
+              </p>
+              <div style={{ display:'flex', flexDirection:'column' as const, gap:8, marginBottom:14 }}>
+                {reviewSlipsModal.slips.map((slip, idx) => {
+                  const isSus = reviewSlipsModal.suspicious.has(idx)
+                  return (
+                    <div key={idx} style={{ padding:'10px 12px', background: isSus ? '#FFF3DD' : '#FAFAF8', border:`1px solid ${isSus ? '#E6CFA7' : C.border}`, borderRadius:6 }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12 }}>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
+                            {isSus && <span title="Unusual month — please verify" style={{ fontSize:13 }}>⚠</span>}
+                            <span style={{ fontSize:11, color:C.muted, textTransform:'uppercase' as const, letterSpacing:'0.04em' }}>Slip {idx + 1}</span>
+                          </div>
+                          <div style={{ display:'grid', gridTemplateColumns:'90px 1fr', gap:'4px 10px', fontSize:11.5 }}>
+                            <span style={{ color:C.muted }}>Employer</span>
+                            <span style={{ color:C.text, fontWeight:500, whiteSpace:'nowrap' as const, overflow:'hidden', textOverflow:'ellipsis' }}>{slip.parsed.employerName || '—'}</span>
+                            <span style={{ color:C.muted }}>Employee</span>
+                            <span style={{ color:C.text, whiteSpace:'nowrap' as const, overflow:'hidden', textOverflow:'ellipsis' }}>{(slip.parsed as any).employeeName || '—'}</span>
+                            <span style={{ color:C.muted }}>Month</span>
+                            <select
+                              value={slip.monthKey}
+                              onChange={e => updateSlipMonth(idx, e.target.value)}
+                              style={{ padding:'4px 8px', border:`1px solid ${isSus ? C.danger : C.border}`, borderRadius:3, fontSize:12, fontFamily:'inherit', background:'#fff', maxWidth:170 }}>
+                              {allMonths.map(mk => <option key={mk} value={mk}>{monthLabel(mk)}</option>)}
+                            </select>
+                            <span style={{ color:C.muted }}>Gross</span>
+                            <span style={{ color:C.text, fontWeight:500, fontVariantNumeric:'tabular-nums' as const }}>{fmt(slip.parsed.grossSalary || 0)}</span>
+                            <span style={{ color:C.muted }}>Net</span>
+                            <span style={{ color:C.text, fontVariantNumeric:'tabular-nums' as const }}>{fmt(slip.parsed.netSalary || 0)}</span>
+                          </div>
+                        </div>
+                        <button onClick={() => removeSlip(idx)} title="Remove from batch" style={{ padding:'4px 8px', background:'transparent', color:C.danger, border:`1px solid ${C.border}`, borderRadius:3, fontSize:11, cursor:'pointer', fontFamily:'inherit', flexShrink:0 }}>Skip</button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              {reviewSlipsModal.slips.length === 0 && (
+                <p style={{ fontSize:12, color:C.danger, margin:'0 0 14px' }}>All slips removed. Click Cancel.</p>
+              )}
+              <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+                <button onClick={close} style={{ padding:'9px 16px', background:'#fff', color:C.muted, border:`1px solid ${C.border}`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit' }}>Cancel — discard all</button>
+                <button onClick={confirmAdd} disabled={reviewSlipsModal.slips.length === 0} style={{ padding:'9px 18px', background:reviewSlipsModal.slips.length === 0 ? C.muted : C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12.5, cursor:reviewSlipsModal.slips.length === 0 ? 'not-allowed' : 'pointer', fontFamily:'inherit', fontWeight:600 }}>
+                  Add {reviewSlipsModal.slips.length} slip{reviewSlipsModal.slips.length !== 1 ? 's' : ''} to timeline
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── EXTEND RANGE MODAL (Same as existing employer) ── */}
       {extendRangeModal.open && salaryTimeline && (() => {
