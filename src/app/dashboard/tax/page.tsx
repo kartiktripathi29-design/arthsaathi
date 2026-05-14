@@ -75,7 +75,7 @@ function DeductionBar({ used, max, label }: { used:number; max:number; label:str
 }
 
 // ─── Section row ──────────────────────────────────────────────────────────────
-function Row({ label, sectionTag, tooltip, children }: { label:string; sectionTag?:string; tooltip?:string; children:React.ReactNode }) {
+function Row({ label, sectionTag, tooltip, children }: { label:string; sectionTag?:string; tooltip?:string; children?:React.ReactNode }) {
   return (
     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 14px', borderBottom:`1px solid #FAF7F2`, gap:12 }}>
       <div style={{ fontSize:13, color:C.text, display:'flex', flexDirection:'column' as const, gap:2 }}>
@@ -190,6 +190,55 @@ function calcTax(income: number, deductions: Deductions, monthlyNet: number) {
     deductionBreakdown: { c80, hraExempt, c80D, c80CCD, c80TTA, c80G, c24B, c80E, stdDed, total: totalOldDed },
     newTaxable, oldTaxable
   }
+}
+
+// ─── Marginal slab rate for Old Regime (used for headroom math) ───────────────
+// Returns the effective tax-saved rate (slab rate × 1.04 cess) for one additional rupee of deduction at current taxable income.
+function oldRegimeMarginalRate(oldTaxable: number): number {
+  // Old slabs cumulative: 2.5L (0%), +2.5L (5%), +5L (20%), rest (30%)
+  let rate: number
+  if (oldTaxable <= 250000) rate = 0
+  else if (oldTaxable <= 500000) rate = 0.05
+  else if (oldTaxable <= 1000000) rate = 0.20
+  else rate = 0.30
+  return rate * 1.04   // cess
+}
+
+// ─── Headroom analysis — what user could still save ───────────────────────────
+interface HeadroomItem {
+  key: string
+  question: string
+  sectionTag: string
+  currentUsed: number
+  cap: number
+  unused: number
+  taxSaved: number
+}
+function computeHeadroom(d: Deductions, oldTaxable: number): HeadroomItem[] {
+  const mRate = oldRegimeMarginalRate(oldTaxable)
+  if (mRate === 0) return []   // user already pays no tax — no headroom value
+  const used80C = clamp(d.ppf + d.elss + d.lic + d.homeLoanPrincipal + d.tuition + d.nsc + d.epf, 150000)
+  const usedNPS = clamp(d.nps, 50000)
+  const cap80D_self = d.selfSenior ? 50000 : 25000
+  const cap80D_parents = d.parentsSenior ? 50000 : 25000
+  const used80D_self = clamp(d.selfFamily, cap80D_self)
+  const used80D_parents = clamp(d.parents, cap80D_parents)
+  const used24B = clamp(d.homeLoanInterest, 200000)
+  const cap80TTA = d.selfSenior ? 50000 : 10000
+  const used80TTA = clamp(d.savingsInterest, cap80TTA)
+
+  const raw: HeadroomItem[] = [
+    { key: '80C', question: 'Tax-saving investments (PPF / ELSS / LIC / home loan principal / etc.)', sectionTag: 'Section 80C', currentUsed: used80C, cap: 150000, unused: 150000 - used80C, taxSaved: 0 },
+    { key: '80CCD', question: 'NPS additional contribution', sectionTag: 'Section 80CCD(1B)', currentUsed: usedNPS, cap: 50000, unused: 50000 - usedNPS, taxSaved: 0 },
+    { key: '80D_self', question: 'Health insurance for yourself and family', sectionTag: 'Section 80D — Self & Family', currentUsed: used80D_self, cap: cap80D_self, unused: cap80D_self - used80D_self, taxSaved: 0 },
+    { key: '80D_par', question: 'Health insurance for parents', sectionTag: 'Section 80D — Parents', currentUsed: used80D_parents, cap: cap80D_parents, unused: cap80D_parents - used80D_parents, taxSaved: 0 },
+    { key: '24B', question: 'Home loan interest', sectionTag: 'Section 24(b)', currentUsed: used24B, cap: 200000, unused: 200000 - used24B, taxSaved: 0 },
+    { key: '80TTA', question: d.selfSenior ? 'Savings + FD interest' : 'Savings account interest', sectionTag: d.selfSenior ? 'Section 80TTB' : 'Section 80TTA', currentUsed: used80TTA, cap: cap80TTA, unused: cap80TTA - used80TTA, taxSaved: 0 },
+  ]
+  return raw
+    .map(item => ({ ...item, taxSaved: Math.round(item.unused * mRate) }))
+    .filter(item => item.unused >= 5000)   // skip noise
+    .sort((a, b) => b.taxSaved - a.taxSaved)
 }
 
 // ─── Initial deductions state ─────────────────────────────────────────────────
@@ -764,6 +813,45 @@ export default function TaxPage() {
             ))}
           </div>
 
+          {/* ── Headroom analysis: where the user can save more ── */}
+          {(() => {
+            const headroom = computeHeadroom(ded, tax.oldTaxable)
+            if (headroom.length === 0) return null
+            const totalSavings = headroom.reduce((s, h) => s + h.taxSaved, 0)
+            const isNewRecommended = tax.recommended === 'new'
+            return (
+              <div style={{ ...sCard, marginBottom:16 }}>
+                <div style={sCH}>Where you can save more this year <span style={{ fontSize:10, background:C.fg, color:C.wheat, padding:'2px 8px', borderRadius:3, fontWeight:600, textTransform:'none', letterSpacing:0 }}>Up to {fmt(totalSavings)}/year</span></div>
+                {isNewRecommended && (
+                  <div style={{ padding:'10px 14px', background:'#FFF8E8', borderBottom:`1px solid #E6CFA7`, fontSize:11.5, color:'#7A5A20', lineHeight:1.55 }}>
+                    <strong>Note:</strong> You picked New Regime. These deductions only count under Old Regime. If you fill these in, Old Regime might become cheaper for you — re-check the comparison after.
+                  </div>
+                )}
+                {!isNewRecommended && (
+                  <div style={{ padding:'10px 14px', background:'#FAFAF8', borderBottom:`1px solid ${C.border}`, fontSize:11.5, color:C.muted, lineHeight:1.55 }}>
+                    Based on your current slab, every rupee you claim under these saves tax at <strong>{Math.round(oldRegimeMarginalRate(tax.oldTaxable) * 100)}%</strong>. Numbers below are the actual tax you'd save if you fill these to the cap.
+                  </div>
+                )}
+                {headroom.map((h, i) => (
+                  <div key={h.key} style={{ display:'grid', gridTemplateColumns:'1fr auto auto', gap:14, alignItems:'center', padding:'11px 14px', borderBottom:i<headroom.length-1?`1px solid #FAF7F2`:'none' }}>
+                    <div>
+                      <div style={{ fontSize:12.5, color:C.text, fontWeight:500, marginBottom:2 }}>{h.question}</div>
+                      <div style={{ fontSize:10.5, color:'#A09080', marginBottom:3 }}>{h.sectionTag}</div>
+                      <div style={{ fontSize:11, color:C.muted }}>Currently claiming {fmt(h.currentUsed)} of {fmt(h.cap)} cap · {fmt(h.unused)} unused</div>
+                    </div>
+                    <div style={{ textAlign:'right' as const }}>
+                      <div style={{ fontSize:10, color:C.muted, textTransform:'uppercase' as const, letterSpacing:'0.04em' }}>You'd save</div>
+                      <div style={{ fontSize:15, fontWeight:700, color:C.fg, fontVariantNumeric:'tabular-nums' as const }}>{fmt(h.taxSaved)}</div>
+                    </div>
+                  </div>
+                ))}
+                <div style={{ padding:'10px 14px', background:'#FAFAF8', borderTop:`1px solid ${C.border}`, fontSize:11, color:C.muted, lineHeight:1.5, fontStyle:'italic' as const }}>
+                  These are the maximum tax savings if you fully use each cap. Real-world: invest only what fits your financial situation. PPF and EPF have lock-ins; ELSS has a 3-year lock-in.
+                </div>
+              </div>
+            )
+          })()}
+
           {/* Monthly view */}
           <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:6, padding:'14px 16px', marginBottom:16 }}>
             <div style={{ fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:12 }}>Monthly view</div>
@@ -781,10 +869,11 @@ export default function TaxPage() {
             </div>
           </div>
 
-          <div style={{ display:'flex', gap:8 }}>
-            <button onClick={() => goStep(5)} style={{ flex:1, padding:'10px', background:C.card, color:C.muted, border:`1px solid ${C.border}`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit' }}>← Back</button>
-            <button onClick={reset} style={{ flex:1, padding:'10px', background:'#FBF0F0', color:C.danger, border:`1px solid #F0CECE`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit' }}>↺ Start over</button>
-            <Link href="/dashboard/invest" style={{ flex:2, padding:'10px', background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:'inherit', textDecoration:'none', display:'flex', alignItems:'center', justifyContent:'center' }}>Proceed to Investments →</Link>
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap' as const }}>
+            <button onClick={() => goStep(5)} style={{ flex:'1 1 110px', padding:'10px', background:C.card, color:C.muted, border:`1px solid ${C.border}`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit' }}>← Back</button>
+            <button onClick={reset} style={{ flex:'1 1 110px', padding:'10px', background:'#FBF0F0', color:C.danger, border:`1px solid #F0CECE`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit' }}>↺ Start over</button>
+            <a href="/dashboard/tax/snapshot" target="_blank" rel="noopener noreferrer" style={{ flex:'1 1 180px', padding:'10px', background:'#fff', color:C.fg, border:`1px solid ${C.fg}`, borderRadius:5, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:'inherit', textDecoration:'none', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>📄 Print tax computation →</a>
+            <Link href="/dashboard/invest" style={{ flex:'2 1 220px', padding:'10px', background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:'inherit', textDecoration:'none', display:'flex', alignItems:'center', justifyContent:'center' }}>Proceed to Investments →</Link>
           </div>
         </div>
       )}
