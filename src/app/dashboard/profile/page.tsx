@@ -695,6 +695,8 @@ function ProfileContent() {
   const [employmentPrompt, setEmploymentPrompt] = useState<{ open: boolean; pendingSlip: SlipData | null; reason: 'employer_changed' | 'basic_jumped' | null; oldEmployerName?: string; newEmployerName?: string }>({ open: false, pendingSlip: null, reason: null })
   const [nameMismatchPrompt, setNameMismatchPrompt] = useState<{ open: boolean; pendingSlip: SlipData | null; existingName: string; newName: string }>({ open: false, pendingSlip: null, existingName: '', newName: '' })
   const [emptyMonthsDismissed, setEmptyMonthsDismissed] = useState(false)
+  const [extendRangeModal, setExtendRangeModal] = useState<{ open: boolean; fromMonth: string; toMonth: string; gapMin: string; gapMax: string }>({ open: false, fromMonth: '', toMonth: '', gapMin: '', gapMax: '' })
+  const [otherIncomeModal, setOtherIncomeModal] = useState<{ open: boolean }>({ open: false })
   const [breakdownExpanded, setBreakdownExpanded] = useState(false)
   const [salaryFlagsModal, setSalaryFlagsModal] = useState<{ open: boolean; slipId: string | null; employmentId: string | null }>({ open: false, slipId: null, employmentId: null })
   const [taxCta, setTaxCta] = useState<{ submittedAt: string | null }>({ submittedAt: null })
@@ -1948,7 +1950,7 @@ function ProfileContent() {
                       </div>
                     </div>
 
-                    {/* ── Empty-months notice (Fix C) ── */}
+                    {/* ── Empty-months notice (four-option) ── */}
                     {!emptyMonthsDismissed && (() => {
                       const months = fyMonths(salaryTimeline.fyStartYear)
                       const empty = months.filter(mk => {
@@ -1959,6 +1961,16 @@ function ProfileContent() {
                       const rangeLabel = empty.length === 1
                         ? monthLabel(empty[0])
                         : `${monthLabel(empty[0])} – ${monthLabel(empty[empty.length - 1])}`
+                      // Find earliest employment (chronologically) — that's what "Same" extends backward
+                      const earliestEmp = salaryTimeline.employments.slice().sort((a, b) => a.fromMonth.localeCompare(b.fromMonth))[0]
+                      const earliestEmpStart = earliestEmp?.fromMonth || ''
+                      // What's the latest empty month BEFORE the earliest employment starts?
+                      // That's the natural cap for "Same — extend backward"
+                      const emptyBeforeEarliest = empty.filter(mk => mk < earliestEmpStart)
+                      const canExtendBackward = emptyBeforeEarliest.length > 0 && earliestEmp
+                      const sameLabel = canExtendBackward && earliestEmp
+                        ? `Same as ${earliestEmp.employerName.length > 18 ? earliestEmp.employerName.slice(0, 18) + '…' : earliestEmp.employerName}`
+                        : 'Same as existing'
                       return (
                         <div style={{ ...S.card, border:`1px solid #E6CFA7`, background:'#FFF8E8' }}>
                           <div style={{ padding:'12px 16px', display:'flex', gap:12, alignItems:'flex-start' }}>
@@ -1966,12 +1978,38 @@ function ProfileContent() {
                             <div style={{ flex:1 }}>
                               <p style={{ fontSize:12, fontWeight:600, color:C.text, margin:'0 0 4px' }}>{empty.length} month{empty.length !== 1 ? 's' : ''} have no salary data ({rangeLabel})</p>
                               <p style={{ fontSize:11.5, color:C.muted, margin:'0 0 10px', lineHeight:1.55 }}>
-                                These months are currently treated as <strong>₹0 income</strong>. If you were employed, upload those slips so your annual total and tax estimates reflect reality. If you were genuinely between jobs, this is correct.
+                                These months are currently treated as <strong>₹0 income</strong>. What were you doing during this period?
                               </p>
                               <div style={{ display:'flex', gap:8, flexWrap:'wrap' as const }}>
-                                <button onClick={() => salaryRef.current?.click()} style={{ padding:'7px 12px', background:C.fg, color:C.wheat, border:'none', borderRadius:4, fontSize:11.5, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>I had income — upload slips</button>
-                                <button onClick={() => { setEmptyMonthsDismissed(true); try { localStorage.setItem('av_empty_months_dismissed', '1') } catch {} }} style={{ padding:'7px 12px', background:'transparent', color:C.muted, border:`1px solid ${C.border}`, borderRadius:4, fontSize:11.5, cursor:'pointer', fontFamily:'inherit' }}>These months were ₹0 — dismiss</button>
+                                {canExtendBackward && (
+                                  <button
+                                    onClick={() => {
+                                      const defaultTo = emptyBeforeEarliest[emptyBeforeEarliest.length - 1]
+                                      const defaultFrom = emptyBeforeEarliest[0]
+                                      setExtendRangeModal({ open: true, fromMonth: defaultFrom, toMonth: defaultTo, gapMin: defaultFrom, gapMax: defaultTo })
+                                    }}
+                                    style={{ padding:'7px 12px', background:C.fg, color:C.wheat, border:'none', borderRadius:4, fontSize:11.5, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+                                    {sameLabel}
+                                  </button>
+                                )}
+                                <button onClick={() => salaryRef.current?.click()} style={{ padding:'7px 12px', background:'#fff', color:C.fg, border:`1px solid ${C.border}`, borderRadius:4, fontSize:11.5, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Different — upload slip</button>
+                                <button onClick={() => setOtherIncomeModal({ open: true })} style={{ padding:'7px 12px', background:'#fff', color:C.fg, border:`1px solid ${C.border}`, borderRadius:4, fontSize:11.5, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Other (freelance / business)</button>
+                                <button onClick={() => {
+                                  // NIL: write empty-component overrides for every empty month, then dismiss notice
+                                  setSalaryTimeline(prev => {
+                                    if (!prev) return prev
+                                    const newOverrides = empty.map(mk => ({ monthKey: mk, components: [] as { label: string; amount: number; type: 'earning' | 'deduction' }[] }))
+                                    const filtered = prev.overrides.filter(o => !empty.includes(o.monthKey))
+                                    return { ...prev, overrides: [...filtered, ...newOverrides] }
+                                  })
+                                  setEmptyMonthsDismissed(true)
+                                  try { localStorage.setItem('av_empty_months_dismissed', '1') } catch {}
+                                  toast.success(`${empty.length} month${empty.length !== 1 ? 's' : ''} marked as ₹0`)
+                                }} style={{ padding:'7px 12px', background:'transparent', color:C.muted, border:`1px solid ${C.border}`, borderRadius:4, fontSize:11.5, cursor:'pointer', fontFamily:'inherit' }}>NIL — no income</button>
                               </div>
+                              <p style={{ fontSize:10.5, color:C.muted, margin:'10px 0 0', fontStyle:'italic' as const, lineHeight:1.5 }}>
+                                Tip: After answering, if any gap remains, this notice will update with the remaining months.
+                              </p>
                             </div>
                           </div>
                         </div>
@@ -2670,6 +2708,94 @@ function ProfileContent() {
               </button>
             </div>
             <button onClick={() => setEmploymentPrompt({ open: false, pendingSlip: null, reason: null })} style={{ marginTop:12, width:'100%', padding:9, background:'#fff', color:C.muted, border:`1px solid ${C.border}`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit' }}>Cancel · don't add this slip</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── EXTEND RANGE MODAL (Same as existing employer) ── */}
+      {extendRangeModal.open && salaryTimeline && (() => {
+        const earliestEmp = salaryTimeline.employments.slice().sort((a, b) => a.fromMonth.localeCompare(b.fromMonth))[0]
+        if (!earliestEmp) return null
+        // Build month options between gapMin and gapMax (inclusive)
+        const optionRange: string[] = []
+        const [minY, minM] = extendRangeModal.gapMin.split('-').map(Number)
+        const [maxY, maxM] = extendRangeModal.gapMax.split('-').map(Number)
+        let cy = minY, cm = minM
+        while (cy < maxY || (cy === maxY && cm <= maxM)) {
+          optionRange.push(`${cy}-${String(cm).padStart(2, '0')}`)
+          cm += 1
+          if (cm > 12) { cm = 1; cy += 1 }
+        }
+        const close = () => setExtendRangeModal({ open: false, fromMonth: '', toMonth: '', gapMin: '', gapMax: '' })
+        const confirm = () => {
+          const from = extendRangeModal.fromMonth
+          const to = extendRangeModal.toMonth
+          if (from > to) { toast.error('From must be earlier than To'); return }
+          setSalaryTimeline(prev => {
+            if (!prev) return prev
+            // Find the earliest employment and extend its fromMonth to 'from'
+            const sorted = [...prev.employments].sort((a, b) => a.fromMonth.localeCompare(b.fromMonth))
+            const earliest = sorted[0]
+            const updatedEmployments = prev.employments.map(e => e.id === earliest.id ? { ...e, fromMonth: from } : e)
+            // Months between 'to' and 'earliest.fromMonth - 1' that remain empty after extension → those are still gaps
+            // For now we just extend; if user still has remaining gap, the notice will re-render
+            return { ...prev, employments: updatedEmployments }
+          })
+          toast.success(`Extended ${earliestEmp.employerName} backward · ${monthLabel(from)} – ${monthLabel(to)}`)
+          close()
+        }
+        return (
+          <div style={{ position:'fixed', inset:0, background:'rgba(28,43,34,0.5)', zIndex:99, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }} onClick={close}>
+            <div onClick={e=>e.stopPropagation()} style={{ background:'#fff', borderRadius:10, padding:20, maxWidth:480, width:'100%', boxShadow:'0 12px 40px rgba(0,0,0,0.18)' }}>
+              <p style={{ fontSize:16, fontWeight:700, color:C.text, margin:'0 0 4px' }}>Extend {earliestEmp.employerName} backward</p>
+              <p style={{ fontSize:12, color:C.muted, margin:'0 0 14px', lineHeight:1.55 }}>
+                Pick the range you were at this employer. We'll use {earliestEmp.employerName}'s recurring components (basic, HRA, etc.) for those months.
+              </p>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
+                <div>
+                  <p style={{ fontSize:11, color:C.muted, margin:'0 0 4px' }}>From</p>
+                  <select value={extendRangeModal.fromMonth} onChange={e => setExtendRangeModal(p => ({ ...p, fromMonth: e.target.value }))} style={{ width:'100%', padding:'8px 10px', border:`1px solid ${C.border}`, borderRadius:4, fontSize:13, background:'#fff', fontFamily:'inherit' }}>
+                    {optionRange.map(mk => <option key={mk} value={mk}>{monthLabel(mk)}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <p style={{ fontSize:11, color:C.muted, margin:'0 0 4px' }}>To</p>
+                  <select value={extendRangeModal.toMonth} onChange={e => setExtendRangeModal(p => ({ ...p, toMonth: e.target.value }))} style={{ width:'100%', padding:'8px 10px', border:`1px solid ${C.border}`, borderRadius:4, fontSize:13, background:'#fff', fontFamily:'inherit' }}>
+                    {optionRange.map(mk => <option key={mk} value={mk}>{monthLabel(mk)}</option>)}
+                  </select>
+                </div>
+              </div>
+              <p style={{ fontSize:10.5, color:C.muted, margin:'0 0 14px', fontStyle:'italic' as const, lineHeight:1.5 }}>
+                We project from your earliest uploaded slip's recurring components. If you got a hike during this period, that won't be reflected — upload those slips instead for accuracy.
+              </p>
+              <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+                <button onClick={close} style={{ padding:'9px 16px', background:'#fff', color:C.muted, border:`1px solid ${C.border}`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit' }}>Cancel</button>
+                <button onClick={confirm} style={{ padding:'9px 18px', background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>Extend backward</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* ── OTHER INCOME STUB MODAL (freelance / business — placeholder for Build 4) ── */}
+      {otherIncomeModal.open && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(28,43,34,0.5)', zIndex:99, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }} onClick={() => setOtherIncomeModal({ open: false })}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:'#fff', borderRadius:10, padding:20, maxWidth:480, width:'100%', boxShadow:'0 12px 40px rgba(0,0,0,0.18)' }}>
+            <p style={{ fontSize:16, fontWeight:700, color:C.text, margin:'0 0 8px' }}>Freelance / business income</p>
+            <p style={{ fontSize:12.5, color:C.text, margin:'0 0 10px', lineHeight:1.6 }}>
+              You had non-salary income during this period — freelancing, consulting, business turnover, rental, or capital gains. These are different from salary in how tax is computed.
+            </p>
+            <p style={{ fontSize:12, color:C.muted, margin:'0 0 14px', lineHeight:1.6 }}>
+              We're building proper support for non-salary income (with Section 44ADA, 44AD, and other presumptive schemes) in a coming update. For now:
+            </p>
+            <ul style={{ fontSize:11.5, color:C.text, margin:'0 0 16px', paddingLeft:20, lineHeight:1.7 }}>
+              <li>If most of these months had no other income too, click <strong>NIL</strong> — we'll mark them ₹0 and you can add the freelance income separately later.</li>
+              <li>If you have payslip-format records of the freelance income, upload them as slips via <strong>Different — upload slip</strong>.</li>
+              <li>For now, keep records of gross earnings and TDS (typically under Section 194J) so you can reconcile when this feature ships.</li>
+            </ul>
+            <div style={{ display:'flex', justifyContent:'flex-end' }}>
+              <button onClick={() => setOtherIncomeModal({ open: false })} style={{ padding:'9px 18px', background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>Got it</button>
+            </div>
           </div>
         </div>
       )}
