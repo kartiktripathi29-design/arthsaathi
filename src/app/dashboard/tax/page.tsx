@@ -75,11 +75,14 @@ function DeductionBar({ used, max, label }: { used:number; max:number; label:str
 }
 
 // ─── Section row ──────────────────────────────────────────────────────────────
-function Row({ label, tooltip, children }: { label:string; tooltip?:string; children:React.ReactNode }) {
+function Row({ label, sectionTag, tooltip, children }: { label:string; sectionTag?:string; tooltip?:string; children:React.ReactNode }) {
   return (
-    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 14px', borderBottom:`1px solid #FAF7F2` }}>
-      <div style={{ fontSize:13, color:C.text, display:'flex', alignItems:'center' }}>
-        {label}{tooltip && <Info text={tooltip} />}
+    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 14px', borderBottom:`1px solid #FAF7F2`, gap:12 }}>
+      <div style={{ fontSize:13, color:C.text, display:'flex', flexDirection:'column' as const, gap:2 }}>
+        <div style={{ display:'flex', alignItems:'center' }}>
+          {label}{tooltip && <Info text={tooltip} />}
+        </div>
+        {sectionTag && <span style={{ fontSize:10, color:'#A09080', fontWeight:500, letterSpacing:'0.03em' }}>{sectionTag}</span>}
       </div>
       {children}
     </div>
@@ -98,7 +101,7 @@ function NavButtons({ onBack, onReset, onProceed, proceedLabel='Proceed →' }: 
 }
 
 // ─── Step indicator ───────────────────────────────────────────────────────────
-const STEPS = ['Smart','Income','HRA','80C','80D','Other','Results']
+const STEPS = ['Smart','Income','HRA','Investments','Health','Other','Results']
 function StepBar({ current }: { current:number }) {
   return (
     <div style={{ display:'flex', alignItems:'center', gap:0, marginBottom:22, overflowX:'auto', paddingBottom:2 }}>
@@ -192,7 +195,7 @@ function calcTax(income: number, deductions: Deductions, monthlyNet: number) {
 // ─── Initial deductions state ─────────────────────────────────────────────────
 const defaultDed: Deductions = { rentPaid:0, hraReceived:0, isMetro:true, basic:0, ppf:0, elss:0, lic:0, homeLoanPrincipal:0, tuition:0, nsc:0, epf:0, selfFamily:0, parents:0, parentsSenior:false, selfSenior:false, nps:0, savingsInterest:0, donations100:0, donations50:0, homeLoanInterest:0, eduLoanInterest:0 }
 
-const STEP_LABELS = ['Smart','Income','HRA','80C','80D','Other','Results']
+const STEP_LABELS = ['Smart','Income','HRA','Investments','Health','Other','Results']
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function TaxPage() {
@@ -414,9 +417,9 @@ export default function TaxPage() {
             )}
             {(() => {
               const notDetected: {label:string; icon:string}[] = []
-              if (!autoDetected.find(d => d.key === 'epf')) notDetected.push({ label:'Employee PF (80C)', icon:'🏛️' })
-              if (!autoDetected.find(d => d.key === 'elss')) notDetected.push({ label:'ELSS / SIP (80C)', icon:'📈' })
-              if (!autoDetected.find(d => d.key === 'selfFamily')) notDetected.push({ label:'Health Insurance (80D)', icon:'💊' })
+              if (!autoDetected.find(d => d.key === 'epf')) notDetected.push({ label:'Provident Fund (auto from payslip)', icon:'🏛️' })
+              if (!autoDetected.find(d => d.key === 'elss')) notDetected.push({ label:'Mutual fund SIPs / ELSS', icon:'📈' })
+              if (!autoDetected.find(d => d.key === 'selfFamily')) notDetected.push({ label:'Health insurance premiums', icon:'💊' })
               if (ded.nps === 0) notDetected.push({ label:'NPS (80CCD1B)', icon:'🏢' })
               if (ded.homeLoanInterest === 0) notDetected.push({ label:'Home Loan Interest (24B)', icon:'🏠' })
               if (ded.rentPaid === 0) notDetected.push({ label:'HRA (Rent)', icon:'🏘️' })
@@ -510,16 +513,16 @@ export default function TaxPage() {
         <div>
           <div style={sCard}>
             <div style={sCH}>
-              <span>HRA — House Rent Allowance Exemption
+              <span>Rent & House Rent Allowance
                 <Info text="The HRA exemption is the MINIMUM of 3 values: (1) Actual HRA received, (2) Rent paid minus 10% of basic salary, (3) 50% of basic if metro / 40% if non-metro. Only applicable in Old Regime." />
               </span>
             </div>
             <div style={{ padding:'12px 14px', background:'#FAFAF8', borderBottom:`1px solid ${C.border}`, fontSize:12, color:C.muted, lineHeight:1.65 }}>
               If you pay rent and receive HRA in your salary, part of it is tax-exempt. Skip this section if you own your home or don't receive HRA.
             </div>
-            <Row label="Monthly rent you pay"><AmtInput value={ded.rentPaid} onChange={updateDed('rentPaid')} /></Row>
-            <Row label="Monthly HRA received in salary"><AmtInput value={ded.hraReceived} onChange={updateDed('hraReceived')} /></Row>
-            <Row label="City type">
+            <Row label="How much rent do you pay each month?" sectionTag="Section 10(13A) — HRA exemption"><AmtInput value={ded.rentPaid} onChange={updateDed('rentPaid')} /></Row>
+            <Row label="Monthly HRA shown in your salary slip" sectionTag="House Rent Allowance"><AmtInput value={ded.hraReceived} onChange={updateDed('hraReceived')} /></Row>
+            <Row label="Which city do you live in?" sectionTag="Metro = 50% of basic; Non-Metro = 40%">
               <div style={{ display:'flex', gap:6 }}>
                 {[['Metro (Delhi, Mumbai, Chennai, Kolkata)', true], ['Non-Metro', false]].map(([l, v]) => (
                   <button key={String(v)} onClick={() => updateDed('isMetro')(v as boolean)}
@@ -548,7 +551,7 @@ export default function TaxPage() {
               )
             })()}
           </div>
-          <NavButtons onBack={() => goStep(1)} onReset={reset} onProceed={() => goStep(3)} proceedLabel="Proceed to 80C →" />
+          <NavButtons onBack={() => goStep(1)} onReset={reset} onProceed={() => goStep(3)} proceedLabel="Proceed to Investments →" />
         </div>
       )}
 
@@ -556,20 +559,20 @@ export default function TaxPage() {
       {step === 3 && (
         <div>
           <div style={sCard}>
-            <div style={sCH}>80C — Investments & Payments <span style={{ fontSize:10, background:C.fg, color:C.wheat, padding:'2px 8px', borderRadius:3, fontWeight:600, textTransform:'none', letterSpacing:0 }}>Max ₹1,50,000</span></div>
-            <DeductionBar used={clamp(ded.ppf+ded.elss+ded.lic+ded.homeLoanPrincipal+ded.tuition+ded.nsc+ded.epf,150000)} max={150000} label="80C deduction used" />
-            <Row label="PPF contribution"><AmtInput value={ded.ppf} onChange={updateDed('ppf')} /></Row>
-            <Row label="ELSS mutual fund investment"><AmtInput value={ded.elss} onChange={updateDed('elss')} /></Row>
-            <Row label="LIC / Life insurance premium"><AmtInput value={ded.lic} onChange={updateDed('lic')} /></Row>
-            <Row label="Home loan — principal repayment"><AmtInput value={ded.homeLoanPrincipal} onChange={updateDed('homeLoanPrincipal')} /></Row>
-            <Row label="Children's tuition fees"><AmtInput value={ded.tuition} onChange={updateDed('tuition')} /></Row>
-            <Row label="NSC / Tax saver FD / SCSS"><AmtInput value={ded.nsc} onChange={updateDed('nsc')} /></Row>
-            <Row label="EPF employee contribution (if not in payslip)"><AmtInput value={ded.epf} onChange={updateDed('epf')} /></Row>
+            <div style={sCH}>Tax-Saving Investments & Payments <span style={{ fontSize:10, background:C.fg, color:C.wheat, padding:'2px 8px', borderRadius:3, fontWeight:600, textTransform:'none', letterSpacing:0 }}>Section 80C · cap ₹1,50,000</span></div>
+            <DeductionBar used={clamp(ded.ppf+ded.elss+ded.lic+ded.homeLoanPrincipal+ded.tuition+ded.nsc+ded.epf,150000)} max={150000} label="Tax-saving investments used (₹1.5L cap)" />
+            <Row label="Did you invest in PPF this year?" sectionTag="Section 80C — Public Provident Fund"><AmtInput value={ded.ppf} onChange={updateDed('ppf')} /></Row>
+            <Row label="Did you invest in ELSS (tax-saver mutual fund)?" sectionTag="Section 80C — Equity-Linked Savings Scheme"><AmtInput value={ded.elss} onChange={updateDed('elss')} /></Row>
+            <Row label="Do you pay premiums for life insurance (LIC etc.)?" sectionTag="Section 80C — Life insurance"><AmtInput value={ded.lic} onChange={updateDed('lic')} /></Row>
+            <Row label="Are you repaying a home loan? Enter principal paid this year." sectionTag="Section 80C — Home loan principal"><AmtInput value={ded.homeLoanPrincipal} onChange={updateDed('homeLoanPrincipal')} /></Row>
+            <Row label="Do you pay school/college fees for your children?" sectionTag="Section 80C — Children's tuition"><AmtInput value={ded.tuition} onChange={updateDed('tuition')} /></Row>
+            <Row label="Did you invest in NSC, tax-saver FD, or SCSS?" sectionTag="Section 80C — Other instruments"><AmtInput value={ded.nsc} onChange={updateDed('nsc')} /></Row>
+            <Row label="Your EPF contribution (we already filled this from your slip)" sectionTag="Section 80C — Provident Fund"><AmtInput value={ded.epf} onChange={updateDed('epf')} /></Row>
             <div style={{ padding:'10px 14px', background:'#FAFAF8', borderTop:`1px solid ${C.border}`, fontSize:11.5, color:C.muted, lineHeight:1.65 }}>
               All of the above pool into a single ₹1,50,000 limit. Any amount beyond ₹1.5L gives no additional benefit in Old Regime.
             </div>
           </div>
-          <NavButtons onBack={() => goStep(2)} onReset={reset} onProceed={() => goStep(4)} proceedLabel="Proceed to 80D →" />
+          <NavButtons onBack={() => goStep(2)} onReset={reset} onProceed={() => goStep(4)} proceedLabel="Proceed to Health Insurance →" />
         </div>
       )}
 
@@ -577,11 +580,11 @@ export default function TaxPage() {
       {step === 4 && (
         <div>
           <div style={sCard}>
-            <div style={sCH}>80D — Health Insurance Premiums <span style={{ fontSize:10, background:C.fg, color:C.wheat, padding:'2px 8px', borderRadius:3, fontWeight:600, textTransform:'none', letterSpacing:0 }}>Max ₹25K–75K</span></div>
+            <div style={sCH}>Health Insurance Premiums <span style={{ fontSize:10, background:C.fg, color:C.wheat, padding:'2px 8px', borderRadius:3, fontWeight:600, textTransform:'none', letterSpacing:0 }}>Section 80D · save up to ₹75K</span></div>
             <div style={{ padding:'10px 14px', background:'#FAFAF8', borderBottom:`1px solid ${C.border}`, fontSize:11.5, color:C.muted, lineHeight:1.65 }}>
-              You can claim premiums paid for yourself + family (max ₹25K, or ₹50K if you're a senior citizen) AND parents separately (max ₹25K, or ₹50K if parents are senior citizens).
+              Premiums you pay for health insurance reduce your taxable income. You can claim for yourself + family, and separately for parents. Senior citizens (60+) get a higher limit.
             </div>
-            <Row label="Are you a senior citizen? (60+)">
+            <Row label="Are you 60 or older?" sectionTag="Affects max 80D limit">
               <div style={{ display:'flex', gap:6 }}>
                 {[['Yes', true], ['No', false]].map(([l,v]) => (
                   <button key={String(v)} onClick={() => updateDed('selfSenior')(v as boolean)}
@@ -591,10 +594,10 @@ export default function TaxPage() {
                 ))}
               </div>
             </Row>
-            <Row label={`Self + family insurance premium (max ${fmt(ded.selfSenior?50000:25000)})`}>
+            <Row label={`Annual health insurance premium for you and your family (cap ${fmt(ded.selfSenior?50000:25000)})`} sectionTag="Section 80D — Self & Family">
               <AmtInput value={ded.selfFamily} onChange={updateDed('selfFamily')} max={ded.selfSenior?50000:25000} />
             </Row>
-            <Row label="Are your parents senior citizens? (60+)">
+            <Row label="Are your parents 60 or older?" sectionTag="Senior citizens get higher 80D limit">
               <div style={{ display:'flex', gap:6 }}>
                 {[['Yes', true], ['No', false]].map(([l,v]) => (
                   <button key={String(v)} onClick={() => updateDed('parentsSenior')(v as boolean)}
@@ -604,7 +607,7 @@ export default function TaxPage() {
                 ))}
               </div>
             </Row>
-            <Row label={`Parents' insurance premium (max ${fmt(ded.parentsSenior?50000:25000)})`}>
+            <Row label={`Annual health insurance premium for your parents (cap ${fmt(ded.parentsSenior?50000:25000)})`} sectionTag="Section 80D — Parents">
               <AmtInput value={ded.parents} onChange={updateDed('parents')} max={ded.parentsSenior?50000:25000} />
             </Row>
             <div style={{ padding:'10px 14px', background:C.wl, borderTop:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between' }}>
@@ -622,52 +625,53 @@ export default function TaxPage() {
           {/* 80CCD(1B) */}
           <div style={sCard}>
             <div style={sCH}>
-              <span>80CCD(1B) — NPS Additional Contribution
+              <span>NPS — Extra retirement savings, extra tax break
                 <Info text="This is SEPARATE from 80C. You get an extra ₹50,000 deduction for investing in NPS (National Pension Scheme) over and above the ₹1.5L 80C limit. Total tax benefit can be 80C (₹1.5L) + 80CCD(1B) (₹50K) = ₹2L." />
               </span>
-              <span style={{ fontSize:10, background:C.fg, color:C.wheat, padding:'2px 8px', borderRadius:3, fontWeight:600, textTransform:'none', letterSpacing:0 }}>Max ₹50,000</span>
+              <span style={{ fontSize:10, background:C.fg, color:C.wheat, padding:'2px 8px', borderRadius:3, fontWeight:600, textTransform:'none', letterSpacing:0 }}>Section 80CCD(1B) · cap ₹50,000</span>
             </div>
-            <Row label="NPS contribution this FY (voluntary, over employer)"><AmtInput value={ded.nps} onChange={updateDed('nps')} max={50000} /></Row>
+            <Row label="Did you invest in NPS this year? (beyond what your employer contributes)" sectionTag="Section 80CCD(1B) — extra ₹50,000 deduction beyond 80C"><AmtInput value={ded.nps} onChange={updateDed('nps')} max={50000} /></Row>
           </div>
 
           {/* 24B */}
           <div style={sCard}>
             <div style={sCH}>
-              <span>24(B) — Home Loan Interest
+              <span>Home Loan Interest
                 <Info text="Not to be confused with 80C (home loan principal). This is the INTEREST portion of your home loan EMI. You can claim up to ₹2,00,000/year on a self-occupied property. No limit for let-out property." />
               </span>
-              <span style={{ fontSize:10, background:C.fg, color:C.wheat, padding:'2px 8px', borderRadius:3, fontWeight:600, textTransform:'none', letterSpacing:0 }}>Max ₹2,00,000</span>
+              <span style={{ fontSize:10, background:C.fg, color:C.wheat, padding:'2px 8px', borderRadius:3, fontWeight:600, textTransform:'none', letterSpacing:0 }}>Section 24(b) · cap ₹2,00,000</span>
             </div>
-            <Row label="Home loan interest paid this FY"><AmtInput value={ded.homeLoanInterest} onChange={updateDed('homeLoanInterest')} max={200000} /></Row>
+            <Row label="Are you paying a home loan? Enter interest paid this year." sectionTag="Section 24(b) — home loan interest (cap ₹2L)"><AmtInput value={ded.homeLoanInterest} onChange={updateDed('homeLoanInterest')} max={200000} /></Row>
           </div>
 
           {/* 80TTA */}
           <div style={sCard}>
             <div style={sCH}>
-              <span>80TTA — Savings Account Interest
+              <span>Interest from Savings Account
                 <Info text="Interest earned from your savings bank account (NOT FD) is exempt up to ₹10,000. If you're a senior citizen, use 80TTB instead — it covers both savings and FD interest up to ₹50,000." />
               </span>
-              <span style={{ fontSize:10, background:C.fg, color:C.wheat, padding:'2px 8px', borderRadius:3, fontWeight:600, textTransform:'none', letterSpacing:0 }}>{ded.selfSenior?'Max ₹50,000 (80TTB)':'Max ₹10,000'}</span>
+              <span style={{ fontSize:10, background:C.fg, color:C.wheat, padding:'2px 8px', borderRadius:3, fontWeight:600, textTransform:'none', letterSpacing:0 }}>{ded.selfSenior?'Section 80TTB · cap ₹50,000':'Section 80TTA · cap ₹10,000'}</span>
             </div>
-            <Row label={ded.selfSenior?'Savings + FD interest earned (80TTB)':'Savings account interest earned'}><AmtInput value={ded.savingsInterest} onChange={updateDed('savingsInterest')} max={ded.selfSenior?50000:10000} /></Row>
+            <Row label={ded.selfSenior?'Total interest earned from savings + FDs this year':'Total interest earned from savings account this year'} sectionTag={ded.selfSenior?'Section 80TTB — first ₹50K tax-free (senior citizens)':'Section 80TTA — first ₹10K tax-free'}><AmtInput value={ded.savingsInterest} onChange={updateDed('savingsInterest')} max={ded.selfSenior?50000:10000} /></Row>
           </div>
 
           {/* 80E */}
           <div style={sCard}>
-            <div style={sCH}>80E — Education Loan Interest <span style={{ fontSize:10, background:C.fg, color:C.wheat, padding:'2px 8px', borderRadius:3, fontWeight:600, textTransform:'none', letterSpacing:0 }}>No upper limit</span></div>
+            <div style={sCH}>Education Loan Interest <span style={{ fontSize:10, background:C.fg, color:C.wheat, padding:'2px 8px', borderRadius:3, fontWeight:600, textTransform:'none', letterSpacing:0 }}>Section 80E · no cap</span></div>
             <div style={{ padding:'8px 14px', background:'#FAFAF8', borderBottom:`1px solid ${C.border}`, fontSize:11.5, color:C.muted }}>The entire interest paid on an education loan is deductible. Available for 8 years or until interest is fully repaid.</div>
-            <Row label="Education loan interest paid this FY"><AmtInput value={ded.eduLoanInterest} onChange={updateDed('eduLoanInterest')} /></Row>
+            <Row label="Are you paying an education loan? Enter interest paid this year." sectionTag="Section 80E — education loan interest (no cap)"><AmtInput value={ded.eduLoanInterest} onChange={updateDed('eduLoanInterest')} /></Row>
           </div>
 
           {/* 80G */}
           <div style={sCard}>
             <div style={sCH}>
-              <span>80G — Donations
+              <span>Donations to Charities & Relief Funds
                 <Info text="Donations to government-approved funds qualify. PM Relief Fund, CMs Relief Fund = 100% deduction. Most charitable trusts = 50% deduction. Cash donations above ₹2,000 are NOT eligible." />
               </span>
+              <span style={{ fontSize:10, background:C.fg, color:C.wheat, padding:'2px 8px', borderRadius:3, fontWeight:600, textTransform:'none', letterSpacing:0 }}>Section 80G</span>
             </div>
-            <Row label="100% qualifying donations (PM Relief Fund etc.)"><AmtInput value={ded.donations100} onChange={updateDed('donations100')} /></Row>
-            <Row label="50% qualifying donations (charitable trusts etc.)"><AmtInput value={ded.donations50} onChange={updateDed('donations50')} /></Row>
+            <Row label="Donations to government relief funds (PM, CM relief etc.)" sectionTag="Section 80G — 100% deduction"><AmtInput value={ded.donations100} onChange={updateDed('donations100')} /></Row>
+            <Row label="Donations to charitable trusts / NGOs" sectionTag="Section 80G — 50% deduction"><AmtInput value={ded.donations50} onChange={updateDed('donations50')} /></Row>
           </div>
 
           <NavButtons onBack={() => goStep(4)} onReset={reset} onProceed={() => goStep(6)} proceedLabel="See my tax results →" />
@@ -705,14 +709,14 @@ export default function TaxPage() {
             </div>
             {[
               { l:'Standard deduction (both regimes)', v:tax.deductionBreakdown.stdDed, always:true },
-              { l:'HRA exemption (rent)', v:tax.deductionBreakdown.hraExempt },
-              { l:'80C — investments & payments', v:tax.deductionBreakdown.c80 },
-              { l:'80D — health insurance', v:tax.deductionBreakdown.c80D },
-              { l:'80CCD(1B) — NPS additional', v:tax.deductionBreakdown.c80CCD },
-              { l:'80TTA/TTB — savings interest', v:tax.deductionBreakdown.c80TTA },
-              { l:'24(B) — home loan interest', v:tax.deductionBreakdown.c24B },
-              { l:'80E — education loan interest', v:tax.deductionBreakdown.c80E },
-              { l:'80G — donations', v:tax.deductionBreakdown.c80G },
+              { l:'Rent / HRA exemption', v:tax.deductionBreakdown.hraExempt },
+              { l:'Tax-saving investments & payments', v:tax.deductionBreakdown.c80 },
+              { l:'Health insurance premiums', v:tax.deductionBreakdown.c80D },
+              { l:'NPS additional', v:tax.deductionBreakdown.c80CCD },
+              { l:'Savings account interest', v:tax.deductionBreakdown.c80TTA },
+              { l:'Home loan interest', v:tax.deductionBreakdown.c24B },
+              { l:'Education loan interest', v:tax.deductionBreakdown.c80E },
+              { l:'Donations', v:tax.deductionBreakdown.c80G },
             ].filter(r => (r as any).always || r.v > 0).map((r,i,arr) => (
               <div key={r.l} style={{ display:'flex', justifyContent:'space-between', padding:'9px 14px', borderBottom:i<arr.length-1?`1px solid #FAF7F2`:'none', fontSize:12.5, color:C.text }}>
                 <span style={{ color:C.muted }}>{r.l}</span>
