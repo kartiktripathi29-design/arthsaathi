@@ -1373,9 +1373,12 @@ function ProfileContent() {
         }
         const updated = {
           ...prev,
-          employments: prev.employments.map(e => e.id === existingEmp.id
-            ? { ...e, slips: e.slips.filter(s => s.monthKey !== slip.monthKey).concat(slip).sort((a,b) => a.monthKey.localeCompare(b.monthKey)) }
-            : e),
+          employments: prev.employments.map(e => {
+            if (e.id !== existingEmp.id) return e
+            const newSlips = e.slips.filter(s => s.monthKey !== slip.monthKey).concat(slip).sort((a,b) => a.monthKey.localeCompare(b.monthKey))
+            const newFromMonth = newSlips[0].monthKey < e.fromMonth ? newSlips[0].monthKey : e.fromMonth
+            return { ...e, slips: newSlips, fromMonth: newFromMonth }
+          }),
           overrides: prev.overrides.filter(o => o.monthKey !== slip.monthKey),
         }
         if (toastId) toast.success(`Replaced ${monthLabel(slip.monthKey)} slip`, { id: toastId })
@@ -1398,9 +1401,13 @@ function ProfileContent() {
       // Silent path: same employer, stable basic — just add to latest employment
       const updated = {
         ...prev,
-        employments: prev.employments.map((e, i) => i === prev.employments.length - 1
-          ? { ...e, slips: [...e.slips, slip].sort((a,b) => a.monthKey.localeCompare(b.monthKey)) }
-          : e),
+        employments: prev.employments.map((e, i) => {
+          if (i !== prev.employments.length - 1) return e
+          const newSlips = [...e.slips, slip].sort((a,b) => a.monthKey.localeCompare(b.monthKey))
+          // Extend fromMonth backward if this slip pre-dates the employment's start
+          const newFromMonth = newSlips[0].monthKey < e.fromMonth ? newSlips[0].monthKey : e.fromMonth
+          return { ...e, slips: newSlips, fromMonth: newFromMonth }
+        }),
       }
       if (toastId) toast.success(`Salary slip added · ${monthLabel(slip.monthKey)}`, { id: toastId })
       return updated
@@ -1436,9 +1443,12 @@ function ProfileContent() {
       // For 'hike', the new slip's components naturally have higher recurring values, projection adjusts forward
       const updated = {
         ...prev,
-        employments: prev.employments.map((e, i) => i === prev.employments.length - 1
-          ? { ...e, slips: [...e.slips, slip].sort((a,b) => a.monthKey.localeCompare(b.monthKey)) }
-          : e),
+        employments: prev.employments.map((e, i) => {
+          if (i !== prev.employments.length - 1) return e
+          const newSlips = [...e.slips, slip].sort((a,b) => a.monthKey.localeCompare(b.monthKey))
+          const newFromMonth = newSlips[0].monthKey < e.fromMonth ? newSlips[0].monthKey : e.fromMonth
+          return { ...e, slips: newSlips, fromMonth: newFromMonth }
+        }),
       }
       toast.success(choice === 'hike' ? `Hike recorded from ${monthLabel(slip.monthKey)}` : `Slip added · ${monthLabel(slip.monthKey)}`)
       return updated
