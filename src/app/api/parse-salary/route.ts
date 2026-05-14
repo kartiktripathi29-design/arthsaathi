@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { parseSalaryFromBase64 } from '@/lib/claude'
+import { PDFDocument } from 'pdf-lib'
+import type { ParsedSalaryData } from '@/types'
 
 export const maxDuration = 60
+
+// Safety cap — refuse to process more than this many pages in one upload.
+// Each page = one Claude call, so this bounds cost and latency.
+const MAX_PAGES = 6
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,25 +18,85 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'base64Data and mediaType are required' }, { status: 400 })
     }
 
-    const slips = await parseSalaryFromBase64(base64Data, mediaType)
+    // ─── PAGES TO PARSE ─────────────────────────────────────────────
+    // For images → single page (no splitting possible)
+    // For PDFs → check page count; split if multi-page
+    let pagesToParse: Array<{ base64: string; mediaType: 'application/pdf' | 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' }> = []
 
-    if (!Array.isArray(slips) || slips.length === 0) {
+    if (mediaType === 'application/pdf') {
+      // Decode PDF and check page count
+      let doc: PDFDocument
+      try {
+        const pdfBytes = Buffer.from(base64Data, 'base64')
+        doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: false })
+      } catch (e: any) {
+        if (e?.message?.toLowerCase().includes('encrypted') || e?.message?.toLowerCase().includes('password')) {
+          return NextResponse.json({ error: 'PDF is password-protected. Please remove the password and re-upload.' }, { status: 422 })
+        }
+        return NextResponse.json({ error: 'Could not read PDF file. The file may be corrupted.' }, { status: 422 })
+      }
+
+      const pageCount = doc.getPageCount()
+      if (pageCount === 0) {
+        return NextResponse.json({ error: 'PDF has no pages.' }, { status: 422 })
+      }
+      if (pageCount > MAX_PAGES) {
+        return NextResponse.json({ error: `PDF has ${pageCount} pages. Multi-slip uploads support up to ${MAX_PAGES} pages. Please split this PDF and upload separately.` }, { status: 422 })
+      }
+
+      if (pageCount === 1) {
+        // Single page — parse as-is
+        pagesToParse.push({ base64: base64Data, mediaType: 'application/pdf' })
+      } else {
+        // Multi-page — split into N single-page PDFs
+        for (let i = 0; i < pageCount; i++) {
+          const newDoc = await PDFDocument.create()
+          const [copiedPage] = await newDoc.copyPages(doc, [i])
+          newDoc.addPage(copiedPage)
+          const pageBytes = await newDoc.save()
+          const pageB64 = Buffer.from(pageBytes).toString('base64')
+          pagesToParse.push({ base64: pageB64, mediaType: 'application/pdf' })
+        }
+      }
+    } else if (mediaType.startsWith('image/')) {
+      // Image — single slip, no splitting
+      pagesToParse.push({ base64: base64Data, mediaType: mediaType as any })
+    } else {
+      return NextResponse.json({ error: `Unsupported file type: ${mediaType}` }, { status: 400 })
+    }
+
+    // ─── PARSE EACH PAGE IN PARALLEL ─────────────────────────────────
+    // Each Claude call uses the original (proven) single-slip prompt — no regression risk.
+    const settled = await Promise.allSettled(
+      pagesToParse.map(p => parseSalaryFromBase64(p.base64, p.mediaType))
+    )
+
+    const parsedSlips: ParsedSalaryData[] = []
+    const errors: string[] = []
+    settled.forEach((r, idx) => {
+      if (r.status === 'fulfilled') {
+        parsedSlips.push(r.value)
+      } else {
+        errors.push(`Page ${idx + 1}: ${r.reason?.message || 'parse failed'}`)
+      }
+    })
+
+    if (parsedSlips.length === 0) {
       return NextResponse.json(
-        { error: 'Could not extract salary data. Please ensure the document is a clear salary slip.' },
+        { error: 'Could not extract salary data. Please ensure the document is a clear salary slip.', details: errors },
         { status: 422 }
       )
     }
 
-    // Filter out any slip that has neither gross nor net (likely a parse miss)
-    const validSlips = slips.filter(p => p && (p.grossSalary || p.netSalary))
+    // ─── VALIDATE + FILL COMPUTED FIELDS PER SLIP ────────────────────
+    const validSlips = parsedSlips.filter(p => p && (p.grossSalary || p.netSalary))
     if (validSlips.length === 0) {
       return NextResponse.json(
-        { error: 'Could not extract salary data from any page. Please ensure the document is a clear salary slip.' },
+        { error: 'Could not extract salary data from any page. Please ensure the document is a clear salary slip.', details: errors },
         { status: 422 }
       )
     }
 
-    // Fill in computed fields per slip
     for (const parsed of validSlips) {
       if (!parsed.ctcMonthly && parsed.grossSalary) {
         parsed.ctcMonthly = parsed.grossSalary + (parsed.employerPF || 0)
@@ -45,7 +111,8 @@ export async function POST(req: NextRequest) {
       success: true,
       data: validSlips,
       count: validSlips.length,
-      skipped: slips.length - validSlips.length,
+      skipped: parsedSlips.length - validSlips.length,
+      errors: errors.length > 0 ? errors : undefined,
     })
   } catch (error: any) {
     console.error('Salary parse error:', error)
