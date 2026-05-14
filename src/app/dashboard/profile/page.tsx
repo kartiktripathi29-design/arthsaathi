@@ -1300,35 +1300,142 @@ function ProfileContent() {
         toast.error(json.error || 'Failed to parse salary slip', { id: tid })
         return
       }
-      const parsed: ParsedSalaryData = json.data
-      const slip = slipFromParsed(parsed, file.name)
-      // If user clicked a projected month to upload, but the slip's month differs, surface that as a toast warning.
-      // Slip's own month still wins (auto-prefer) — user keeps the freedom to upload anyway.
-      if (pendingMonthIntent && pendingMonthIntent !== slip.monthKey) {
-        toast(`Slip is for ${monthLabel(slip.monthKey)} — added there instead of ${monthLabel(pendingMonthIntent)}`, { icon: 'ℹ️', duration: 5000 })
+      // Backend now returns an array of slips. Defensive: handle legacy single-object too.
+      const parsedSlips: ParsedSalaryData[] = Array.isArray(json.data) ? json.data : [json.data]
+      if (parsedSlips.length === 0) {
+        toast.error('No slips found in the file', { id: tid })
+        return
+      }
+
+      // Build SlipData for each parsed slip, sorted earliest first
+      const slips = parsedSlips
+        .map(p => slipFromParsed(p, file.name))
+        .sort((a, b) => a.monthKey.localeCompare(b.monthKey))
+
+      // pendingMonthIntent only meaningful for single-slip uploads (from a clicked projected month).
+      // For multi-slip files, the user uploaded a batch; per-month intent doesn't apply.
+      if (slips.length === 1 && pendingMonthIntent && pendingMonthIntent !== slips[0].monthKey) {
+        toast(`Slip is for ${monthLabel(slips[0].monthKey)} — added there instead of ${monthLabel(pendingMonthIntent)}`, { icon: 'ℹ️', duration: 5000 })
       }
       setPendingMonthIntent(null)
 
-      // Fix A — Employee name guard. Compare slip's employee name against existing slips.
-      // If names don't plausibly match → soft warn, default to discard.
-      const newName = (parsed as any)?.employeeName || ''
-      if (newName && salaryTimeline && salaryTimeline.employments.some(e => e.slips.length > 0)) {
+      // Employee-name guard runs against the FIRST slip in the batch.
+      // All slips in one file should be the same person; we only check once.
+      const firstName = (parsedSlips[0] as any)?.employeeName || ''
+      if (firstName && salaryTimeline && salaryTimeline.employments.some(e => e.slips.length > 0)) {
         const lastEmp = salaryTimeline.employments[salaryTimeline.employments.length - 1]
         const lastSlip = lastEmp.slips.sort((a, b) => b.monthKey.localeCompare(a.monthKey))[0]
         const existingName = (lastSlip?.parsed as any)?.employeeName || ''
-        if (existingName && !namesPlausiblyMatch(existingName, newName)) {
+        if (existingName && !namesPlausiblyMatch(existingName, firstName)) {
           toast.dismiss(tid)
-          setNameMismatchPrompt({ open: true, pendingSlip: slip, existingName, newName })
+          // Stash the whole batch (we'll add all of them if user confirms)
+          if (slips.length === 1) {
+            setNameMismatchPrompt({ open: true, pendingSlip: slips[0], existingName, newName: firstName })
+          } else {
+            // Multi-slip batch with name mismatch — discard and tell user
+            toast.error(`Different employee detected (${firstName} vs ${existingName}). Discarded ${slips.length} slips.`, { duration: 6000 })
+          }
           return
         }
       }
 
-      addSlipToTimeline(slip, tid)
+      if (slips.length === 1) {
+        addSlipToTimeline(slips[0], tid)
+      } else {
+        addMultipleSlipsToTimeline(slips, tid)
+      }
     } catch (e: any) {
       setPendingMonthIntent(null)
       toast.error(e.message || 'Failed to read salary slip', { id: tid })
     } finally { setLoadingDoc(null) }
   }
+
+  // Add multiple slips from the same uploaded file in ONE state update.
+  // Same-document means same-employer by definition, so we don't fire the
+  // "employer changed / basic jumped" prompts between slips in the batch.
+  // Existing slips with same monthKey in any employment get REPLACED silently
+  // (typical case: user re-uploads to refresh data).
+  const addMultipleSlipsToTimeline = (slips: SlipData[], toastId?: string) => {
+    if (slips.length === 0) return
+    setEmptyMonthsDismissed(false)
+    try { localStorage.removeItem('av_empty_months_dismissed') } catch {}
+
+    setSalaryTimeline(prev => {
+      // First batch ever — create timeline from the earliest slip's FY
+      if (!prev) {
+        const earliest = slips[0]
+        const fyStart = fyStartYearForMonthKey(earliest.monthKey)
+        const newTimeline: SalaryTimeline = {
+          fy: fyLabel(fyStart),
+          fyStartYear: fyStart,
+          employments: [{
+            id: uid(),
+            employerName: earliest.parsed.employerName || 'Employer',
+            fromMonth: slips[0].monthKey,
+            toMonth: null,
+            slips: [...slips].sort((a, b) => a.monthKey.localeCompare(b.monthKey)),
+          }],
+          overrides: [],
+        }
+        if (toastId) toast.success(`${slips.length} slips added`, { id: toastId })
+        return newTimeline
+      }
+
+      // Existing timeline — fold all slips into the latest employment.
+      // (Same file = same employer = same employment.)
+      const latestEmpIdx = prev.employments.length - 1
+      const latestEmp = prev.employments[latestEmpIdx]
+      const existingMonthKeys = new Set(latestEmp.slips.map(s => s.monthKey))
+      // Other employments also can't have duplicate months — collect for replacement
+      const allOtherEmpMonths = new Set<string>()
+      prev.employments.forEach((e, i) => {
+        if (i !== latestEmpIdx) e.slips.forEach(s => allOtherEmpMonths.add(s.monthKey))
+      })
+
+      const newSlipsForLatest: SlipData[] = []
+      const replacedMonths: string[] = []
+      const skippedMonths: string[] = []
+      for (const slip of slips) {
+        if (existingMonthKeys.has(slip.monthKey)) {
+          // Replace in-place
+          replacedMonths.push(slip.monthKey)
+          newSlipsForLatest.push(slip)
+        } else if (allOtherEmpMonths.has(slip.monthKey)) {
+          // Month belongs to another employment — skip to avoid silent reassignment
+          skippedMonths.push(slip.monthKey)
+        } else {
+          newSlipsForLatest.push(slip)
+        }
+      }
+
+      const replacedSet = new Set(replacedMonths)
+      const mergedSlips = [
+        ...latestEmp.slips.filter(s => !replacedSet.has(s.monthKey)),
+        ...newSlipsForLatest,
+      ].sort((a, b) => a.monthKey.localeCompare(b.monthKey))
+
+      const newFromMonth = mergedSlips[0].monthKey < latestEmp.fromMonth
+        ? mergedSlips[0].monthKey
+        : latestEmp.fromMonth
+
+      const updated = {
+        ...prev,
+        employments: prev.employments.map((e, i) => i === latestEmpIdx
+          ? { ...e, slips: mergedSlips, fromMonth: newFromMonth }
+          : e),
+        overrides: prev.overrides.filter(o => !mergedSlips.some(s => s.monthKey === o.monthKey)),
+      }
+
+      const added = newSlipsForLatest.length - replacedMonths.length
+      const parts: string[] = []
+      if (added > 0) parts.push(`${added} added`)
+      if (replacedMonths.length > 0) parts.push(`${replacedMonths.length} replaced`)
+      if (skippedMonths.length > 0) parts.push(`${skippedMonths.length} skipped (already in another employment)`)
+      if (toastId) toast.success(parts.join(' · ') || `${slips.length} slips processed`, { id: toastId })
+      return updated
+    })
+  }
+
 
   // Add slip to timeline — auto-detects same employer / hike / new employer
   // Prompts user only when ambiguous (employer name change OR basic salary jump >5%)

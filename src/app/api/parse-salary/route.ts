@@ -12,26 +12,41 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'base64Data and mediaType are required' }, { status: 400 })
     }
 
-    const parsed = await parseSalaryFromBase64(base64Data, mediaType)
+    const slips = await parseSalaryFromBase64(base64Data, mediaType)
 
-    // Basic validation
-    if (!parsed.grossSalary && !parsed.netSalary) {
+    if (!Array.isArray(slips) || slips.length === 0) {
       return NextResponse.json(
         { error: 'Could not extract salary data. Please ensure the document is a clear salary slip.' },
         { status: 422 }
       )
     }
 
-    // Fill in computed fields if missing
-    if (!parsed.ctcMonthly && parsed.grossSalary) {
-      parsed.ctcMonthly = parsed.grossSalary + parsed.employerPF
-      parsed.ctcAnnual = parsed.ctcMonthly * 12
-    }
-    if (!parsed.netSalary && parsed.grossSalary) {
-      parsed.netSalary = parsed.grossSalary - parsed.totalDeductions
+    // Filter out any slip that has neither gross nor net (likely a parse miss)
+    const validSlips = slips.filter(p => p && (p.grossSalary || p.netSalary))
+    if (validSlips.length === 0) {
+      return NextResponse.json(
+        { error: 'Could not extract salary data from any page. Please ensure the document is a clear salary slip.' },
+        { status: 422 }
+      )
     }
 
-    return NextResponse.json({ success: true, data: parsed })
+    // Fill in computed fields per slip
+    for (const parsed of validSlips) {
+      if (!parsed.ctcMonthly && parsed.grossSalary) {
+        parsed.ctcMonthly = parsed.grossSalary + (parsed.employerPF || 0)
+        parsed.ctcAnnual = parsed.ctcMonthly * 12
+      }
+      if (!parsed.netSalary && parsed.grossSalary) {
+        parsed.netSalary = parsed.grossSalary - (parsed.totalDeductions || 0)
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: validSlips,
+      count: validSlips.length,
+      skipped: slips.length - validSlips.length,
+    })
   } catch (error: any) {
     console.error('Salary parse error:', error)
     return NextResponse.json(
