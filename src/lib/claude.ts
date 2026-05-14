@@ -12,51 +12,40 @@ const client = new Anthropic({
 
 // ─── Salary Slip Parser ───────────────────────────────────────────────────
 
-const SALARY_PARSE_SYSTEM = `You are a precise Indian payroll document parser. Extract ALL salary slips from an Indian payslip document — a single file may contain ONE slip or MULTIPLE monthly slips.
+const SALARY_PARSE_SYSTEM = `You are a precise Indian payroll document parser. Extract ALL salary components from any Indian payslip — regardless of format, employer, or layout.
 
 Return ONLY valid JSON. No markdown, no explanation. Use this exact schema:
 {
-  "slips": [
-    {
-      "employeeName": "string",
-      "employerName": "string",
-      "month": "string (e.g. March)",
-      "year": "string (e.g. 2024)",
-      "basicSalary": number,
-      "hra": number,
-      "da": number,
-      "ta": number,
-      "lta": number,
-      "medicalAllowance": number,
-      "specialAllowance": number,
-      "otherAllowances": number,
-      "grossSalary": number,
-      "employeePF": number,
-      "employerPF": number,
-      "esic": number,
-      "professionalTax": number,
-      "tdsDeducted": number,
-      "loanDeduction": number,
-      "otherDeductions": number,
-      "totalDeductions": number,
-      "netSalary": number,
-      "ctcMonthly": number,
-      "ctcAnnual": number,
-      "components": [
-        {"label": "string", "amount": number, "type": "earning|deduction|computed"}
-      ]
-    }
+  "employeeName": "string",
+  "employerName": "string",
+  "month": "string (e.g. March)",
+  "year": "string (e.g. 2024)",
+  "basicSalary": number,
+  "hra": number,
+  "da": number,
+  "ta": number,
+  "lta": number,
+  "medicalAllowance": number,
+  "specialAllowance": number,
+  "otherAllowances": number,
+  "grossSalary": number,
+  "employeePF": number,
+  "employerPF": number,
+  "esic": number,
+  "professionalTax": number,
+  "tdsDeducted": number,
+  "loanDeduction": number,
+  "otherDeductions": number,
+  "totalDeductions": number,
+  "netSalary": number,
+  "ctcMonthly": number,
+  "ctcAnnual": number,
+  "components": [
+    {"label": "string", "amount": number, "type": "earning|deduction|computed"}
   ]
 }
 
-Rules for multi-slip handling:
-- If the document contains ONE slip, return "slips" as an array with 1 element.
-- If the document contains MULTIPLE monthly slips (e.g. Jan + Feb in one PDF, or quarterly slips bundled), return one object per slip.
-- A "slip" = one month of pay data. Look for separate "Salary for the month of" headers, distinct month/period markers, or page breaks between months.
-- Do NOT split a single slip into multiple array elements just because its data spans multiple visual pages. One slip can be multi-page.
-- Process slips in chronological order (earliest month first) where possible.
-
-Rules per slip (same as before):
+Rules:
 - All amounts in INR rupees (numbers only, no symbols)
 - If a field is not present, use 0
 - grossSalary = sum of all earnings before deductions
@@ -72,7 +61,7 @@ Rules per slip (same as before):
 export async function parseSalaryFromBase64(
   base64Data: string,
   mediaType: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' | 'application/pdf'
-): Promise<ParsedSalaryData[]> {
+): Promise<ParsedSalaryData> {
   const isImage = mediaType.startsWith('image/')
 
   let content: Anthropic.MessageParam['content']
@@ -89,7 +78,7 @@ export async function parseSalaryFromBase64(
       },
       {
         type: 'text',
-        text: 'Parse this Indian salary slip and return the JSON as specified. If the document contains multiple monthly slips, return one object per slip in the "slips" array. Extract every number you can see accurately.',
+        text: 'Parse this Indian salary slip and return the JSON as specified. Extract every number you can see accurately.',
       },
     ]
   } else {
@@ -105,14 +94,14 @@ export async function parseSalaryFromBase64(
       } as any,
       {
         type: 'text',
-        text: 'Parse this Indian salary slip PDF and return the JSON as specified. If the document contains multiple monthly slips, return one object per slip in the "slips" array.',
+        text: 'Parse this Indian salary slip PDF and return the JSON as specified.',
       },
     ]
   }
 
   const response = await client.messages.create({
     model: 'claude-opus-4-5',
-    max_tokens: 4000,   // higher cap — multi-slip responses are larger
+    max_tokens: 2000,
     system: SALARY_PARSE_SYSTEM,
     messages: [{ role: 'user', content }],
   })
@@ -121,14 +110,8 @@ export async function parseSalaryFromBase64(
   const jsonMatch = text.match(/\{[\s\S]*\}/)
   if (!jsonMatch) throw new Error('Could not extract JSON from Claude response')
 
-  const parsed = JSON.parse(jsonMatch[0])
-
-  // Defensive: accept both new shape { slips: [...] } and legacy single-object shape
-  if (parsed && Array.isArray(parsed.slips)) {
-    return parsed.slips as ParsedSalaryData[]
-  }
-  // Legacy fallback — Claude returned a single slip object directly
-  return [parsed as ParsedSalaryData]
+  const parsed = JSON.parse(jsonMatch[0]) as ParsedSalaryData
+  return parsed
 }
 
 // ─── Offer Letter Parser ─────────────────────────────────────────────────
