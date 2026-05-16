@@ -113,14 +113,14 @@ function StepBar({ current, onJump }: { current:number; onJump?:(step:number)=>v
       {STEPS.map((s,i) => {
         const isCompleted = i < current
         const isCurrent = i === current
-        const isClickable = (isCompleted || (i < STEPS.length - 1 && i <= current)) && onJump
+        const isClickable = !isCurrent && onJump   // any step except current — both directions
         const handleClick = isClickable ? () => onJump!(i) : undefined
         return (
           <div key={s} style={{ display:'flex', alignItems:'center', flex: i < STEPS.length-1 ? 1 : 'none' }}>
             <div
               onClick={handleClick}
               role={isClickable ? 'button' : undefined}
-              title={isClickable ? `Go back to ${s}` : undefined}
+              title={isClickable ? `Jump to ${s}` : undefined}
               style={{ display:'flex', flexDirection:'column' as const, alignItems:'center', gap:4, flexShrink:0, cursor:isClickable?'pointer':'default' }}>
               <div style={{ width:26, height:26, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, flexShrink:0, background:isCompleted?C.fg:isCurrent?C.wheat:'#F0EBE0', color:isCompleted?C.wheat:isCurrent?C.fg:C.muted, border:`1px solid ${i<=current?C.fg:C.border}`, transition:'transform 0.1s' }}>
                 {isCompleted ? '✓' : i+1}
