@@ -1,5 +1,5 @@
 'use client'
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useAppStore } from '@/store/AppStore'
 import Link from 'next/link'
 
@@ -38,6 +38,11 @@ function Info({ text }: { text: string }) {
 // ─── Amount input ─────────────────────────────────────────────────────────────
 function AmtInput({ value, onChange, max, width=120 }: { value:number; onChange:(n:number)=>void; max?:number; width?:number }) {
   const [local, setLocal] = useState(value > 0 ? String(value) : '')
+  // Sync local state when the parent's value prop changes externally (auto-fill, reset, navigation back/forward).
+  // Without this, the input "freezes" with whatever was in local state on mount.
+  useEffect(() => {
+    setLocal(value > 0 ? String(value) : '')
+  }, [value])
   return (
     <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:3 }}>
       <div style={{ display:'flex', alignItems:'center', border:`1px solid ${C.border}`, borderRadius:4, overflow:'hidden' }}>
@@ -102,20 +107,30 @@ function NavButtons({ onBack, onReset, onProceed, proceedLabel='Proceed →' }: 
 
 // ─── Step indicator ───────────────────────────────────────────────────────────
 const STEPS = ['Smart','Income','HRA','Investments','Health','Other','Results']
-function StepBar({ current }: { current:number }) {
+function StepBar({ current, onJump }: { current:number; onJump?:(step:number)=>void }) {
   return (
     <div style={{ display:'flex', alignItems:'center', gap:0, marginBottom:22, overflowX:'auto', paddingBottom:2 }}>
-      {STEPS.map((s,i) => (
-        <div key={s} style={{ display:'flex', alignItems:'center', flex: i < STEPS.length-1 ? 1 : 'none' }}>
-          <div style={{ display:'flex', flexDirection:'column' as const, alignItems:'center', gap:4, flexShrink:0 }}>
-            <div style={{ width:26, height:26, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, flexShrink:0, background:i<current?C.fg:i===current?C.wheat:'#F0EBE0', color:i<current?C.wheat:i===current?C.fg:C.muted, border:`1px solid ${i<=current?C.fg:C.border}` }}>
-              {i < current ? '✓' : i+1}
+      {STEPS.map((s,i) => {
+        const isCompleted = i < current
+        const isCurrent = i === current
+        const isClickable = (isCompleted || (i < STEPS.length - 1 && i <= current)) && onJump
+        const handleClick = isClickable ? () => onJump!(i) : undefined
+        return (
+          <div key={s} style={{ display:'flex', alignItems:'center', flex: i < STEPS.length-1 ? 1 : 'none' }}>
+            <div
+              onClick={handleClick}
+              role={isClickable ? 'button' : undefined}
+              title={isClickable ? `Go back to ${s}` : undefined}
+              style={{ display:'flex', flexDirection:'column' as const, alignItems:'center', gap:4, flexShrink:0, cursor:isClickable?'pointer':'default' }}>
+              <div style={{ width:26, height:26, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, flexShrink:0, background:isCompleted?C.fg:isCurrent?C.wheat:'#F0EBE0', color:isCompleted?C.wheat:isCurrent?C.fg:C.muted, border:`1px solid ${i<=current?C.fg:C.border}`, transition:'transform 0.1s' }}>
+                {isCompleted ? '✓' : i+1}
+              </div>
+              <span style={{ fontSize:9, fontWeight:isCurrent?700:400, color:i<=current?C.fg:C.muted, whiteSpace:'nowrap', textDecoration:isClickable?'underline dotted #C0B090':'none', textUnderlineOffset:'2px' }}>{s}</span>
             </div>
-            <span style={{ fontSize:9, fontWeight:i===current?700:400, color:i<=current?C.fg:C.muted, whiteSpace:'nowrap' }}>{s}</span>
+            {i < STEPS.length-1 && <div style={{ flex:1, height:1, background:i<current?C.fg:C.border, margin:'0 4px', marginBottom:14 }} />}
           </div>
-          {i < STEPS.length-1 && <div style={{ flex:1, height:1, background:i<current?C.fg:C.border, margin:'0 4px', marginBottom:14 }} />}
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -278,16 +293,21 @@ export default function TaxPage() {
     } catch {}
   })
 
-  // Save progress on every change
-  const saveProgress = (s: number, d: Deductions) => {
-    try { localStorage.setItem('av_tax_progress', JSON.stringify({ step: s, ded: d })) } catch {}
-  }
+  // Save progress on every change of step or ded — useEffect-based to avoid closure staleness.
+  // skipFirstSaveRef prevents the save from firing on initial mount (when ded === defaultDed),
+  // which would otherwise wipe out the localStorage we just loaded from.
+  const skipFirstSaveRef = useRef(true)
+  useEffect(() => {
+    if (skipFirstSaveRef.current) {
+      skipFirstSaveRef.current = false
+      return
+    }
+    try { localStorage.setItem('av_tax_progress', JSON.stringify({ step, ded })) } catch {}
+  }, [step, ded])
 
-  const goStep = (s: number) => { setStep(s); saveProgress(s, ded) }
+  const goStep = (s: number) => { setStep(s) }
   const updateDed = (k: keyof Deductions) => (v: number | boolean) => {
-    const newDed = { ...ded, [k]: v }
-    setDed(newDed)
-    saveProgress(step, newDed)
+    setDed(prev => ({ ...prev, [k]: v }))
   }
   const reset = () => {
     setStep(-1)
@@ -434,7 +454,7 @@ export default function TaxPage() {
         <p style={{ fontSize:13, color:C.muted, margin:0 }}>We'll show you exactly how your tax is calculated — and how to pay less</p>
       </div>
 
-      <StepBar current={step} />
+      <StepBar current={step} onJump={goStep} />
 
       {/* ── STEP 0: Smart Deductions ── */}
       {step === 0 && (
@@ -832,19 +852,37 @@ export default function TaxPage() {
                     Based on your current slab, every rupee you claim under these saves tax at <strong>{Math.round(oldRegimeMarginalRate(tax.oldTaxable) * 100)}%</strong>. Numbers below are the actual tax you'd save if you fill these to the cap.
                   </div>
                 )}
-                {headroom.map((h, i) => (
-                  <div key={h.key} style={{ display:'grid', gridTemplateColumns:'1fr auto auto', gap:14, alignItems:'center', padding:'11px 14px', borderBottom:i<headroom.length-1?`1px solid #FAF7F2`:'none' }}>
-                    <div>
-                      <div style={{ fontSize:12.5, color:C.text, fontWeight:500, marginBottom:2 }}>{h.question}</div>
-                      <div style={{ fontSize:10.5, color:'#A09080', marginBottom:3 }}>{h.sectionTag}</div>
-                      <div style={{ fontSize:11, color:C.muted }}>Currently claiming {fmt(h.currentUsed)} of {fmt(h.cap)} cap · {fmt(h.unused)} unused</div>
-                    </div>
-                    <div style={{ textAlign:'right' as const }}>
-                      <div style={{ fontSize:10, color:C.muted, textTransform:'uppercase' as const, letterSpacing:'0.04em' }}>You'd save</div>
-                      <div style={{ fontSize:15, fontWeight:700, color:C.fg, fontVariantNumeric:'tabular-nums' as const }}>{fmt(h.taxSaved)}</div>
-                    </div>
-                  </div>
-                ))}
+                {headroom.map((h, i) => {
+                  // Map each headroom key to the wizard step where its input lives.
+                  // 80C → step 3 (Investments) · NPS (80CCD), home loan interest (24B), savings (80TTA) → step 5 (Other) · health (80D) → step 4 (Health)
+                  const stepMap: Record<string, number> = { '80C': 3, '80CCD': 5, '80D_self': 4, '80D_par': 4, '24B': 5, '80TTA': 5 }
+                  const targetStep = stepMap[h.key]
+                  return (
+                    <button
+                      key={h.key}
+                      onClick={() => targetStep !== undefined && goStep(targetStep)}
+                      title={`Edit on ${STEPS[targetStep] || ''} step →`}
+                      style={{
+                        display:'grid', gridTemplateColumns:'1fr auto auto', gap:14, alignItems:'center', padding:'11px 14px',
+                        borderBottom:i<headroom.length-1?`1px solid #FAF7F2`:'none',
+                        width:'100%', textAlign:'left' as const, background:'transparent', border:'none',
+                        borderTop: i === 0 ? 'none' : undefined, cursor:'pointer', fontFamily:'inherit',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#FAF7F2')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                      <div>
+                        <div style={{ fontSize:12.5, color:C.text, fontWeight:500, marginBottom:2 }}>{h.question}</div>
+                        <div style={{ fontSize:10.5, color:'#A09080', marginBottom:3 }}>{h.sectionTag}</div>
+                        <div style={{ fontSize:11, color:C.muted }}>Currently claiming {fmt(h.currentUsed)} of {fmt(h.cap)} cap · {fmt(h.unused)} unused</div>
+                      </div>
+                      <div style={{ textAlign:'right' as const }}>
+                        <div style={{ fontSize:10, color:C.muted, textTransform:'uppercase' as const, letterSpacing:'0.04em' }}>You'd save</div>
+                        <div style={{ fontSize:15, fontWeight:700, color:C.fg, fontVariantNumeric:'tabular-nums' as const }}>{fmt(h.taxSaved)}</div>
+                      </div>
+                      <div style={{ fontSize:14, color:C.fg, paddingLeft:4 }}>›</div>
+                    </button>
+                  )
+                })}
                 <div style={{ padding:'10px 14px', background:'#FAFAF8', borderTop:`1px solid ${C.border}`, fontSize:11, color:C.muted, lineHeight:1.5, fontStyle:'italic' as const }}>
                   These are the maximum tax savings if you fully use each cap. Real-world: invest only what fits your financial situation. PPF and EPF have lock-ins; ELSS has a 3-year lock-in.
                 </div>
