@@ -168,28 +168,50 @@ function calcHRAExempt(d: Deductions, salary: number): number {
   return Math.max(0, Math.min(rule1, Math.max(0, rule2), rule3))
 }
 
-// `income` = salary income (annual). `otherTaxable` = total taxable income from other heads (freelance net, capital gains taxable, etc.)
-// Standard deduction (₹50K/75K) applies only to salary, capped at salary amount.
-// HRA exemption uses salary basic, not total. cess (4%) applies to total tax.
-function calcTax(income: number, deductions: Deductions, monthlyNet: number, otherTaxable: number = 0) {
+// Tax computation handling slab + special-rate income
+// `slabOther` = freelance net + F&O + intraday + FD + savings + dividends + bond interest (all slab rate)
+// `equityLtcg` = LTCG from equity/MF (12.5% on amount above ₹1.25L)
+// `equityStcg` = STCG from equity/MF (20% flat)
+// `crypto` = crypto/VDA gains (30% flat, no deductions, no losses set-off)
+// Standard deduction applies only to salary (capped). HRA exemption uses salary. Cess 4% on total tax.
+interface OtherIncomeBreakdown {
+  slabOther: number
+  equityLtcg: number
+  equityStcg: number
+  crypto: number
+}
+function calcTax(income: number, deductions: Deductions, monthlyNet: number, otherBreakdown: OtherIncomeBreakdown = { slabOther: 0, equityLtcg: 0, equityStcg: 0, crypto: 0 }) {
   const salaryAnnual = income
-  const totalGross = salaryAnnual + otherTaxable
+  // Bug fix: savings interest entered in 80TTA field is INCOME. Add to slab total so it's taxed, then 80TTA deduction reduces it (capped).
+  const savingsInterestIncome = deductions.savingsInterest || 0
+  const slabOtherTotal = otherBreakdown.slabOther + savingsInterestIncome
+  const slabGross = salaryAnnual + slabOtherTotal   // amount that goes into slab calculation
 
-  // New regime
-  const newStdDed = Math.min(75000, salaryAnnual)   // std ded caps at salary
-  const newTaxable = Math.max(0, totalGross - newStdDed)
-  let newTax = 0, rem = newTaxable
+  // ─── Special-rate tax (same under both regimes; no deductions) ──────────────
+  // Equity LTCG: 12.5% on amount above ₹1.25L
+  const equityLtcgTaxable = Math.max(0, otherBreakdown.equityLtcg - 125000)
+  const equityLtcgTax = Math.round(equityLtcgTaxable * 0.125)
+  // Equity STCG: 20% flat
+  const equityStcgTax = Math.round(otherBreakdown.equityStcg * 0.20)
+  // Crypto: 30% flat
+  const cryptoTax = Math.round(otherBreakdown.crypto * 0.30)
+  const specialRateTax = equityLtcgTax + equityStcgTax + cryptoTax
+
+  // ─── New regime — slab on slabGross only (special-rate income taxed separately) ──
+  const newStdDed = Math.min(75000, salaryAnnual)
+  const newTaxable = Math.max(0, slabGross - newStdDed)
+  let newSlabTax = 0, rem = newTaxable
   for (const [l,r] of [[300000,0],[300000,0.05],[300000,0.10],[300000,0.15],[300000,0.20],[Infinity,0.30]] as [number,number][]) {
-    const c = Math.min(rem, l); newTax += c*r; rem-=c; if(rem<=0) break
+    const c = Math.min(rem, l); newSlabTax += c*r; rem-=c; if(rem<=0) break
   }
-  // Section 87A rebate (New): only if total taxable income ≤ ₹7L AND user is resident individual
-  if (newTaxable <= 700000) newTax = 0
-  newTax = Math.round(newTax * 1.04)
+  // Section 87A rebate (New): rebate applies only to slab-rate income, only if slab taxable ≤ ₹7L. Special-rate tax is NOT rebated.
+  if (newTaxable <= 700000) newSlabTax = 0
+  const newTax = Math.round((newSlabTax + specialRateTax) * 1.04)
 
-  // Old regime deductions
-  const oldStdDed = Math.min(75000, salaryAnnual)   // std ded caps at salary (matches existing code; flagged: real-world Old Regime is ₹50K, but app uses ₹75K consistently)
+  // ─── Old regime — slab on (slabGross - deductions) ───────────────────────────
+  const oldStdDed = Math.min(75000, salaryAnnual)
   const c80 = clamp(deductions.ppf + deductions.elss + deductions.lic + deductions.homeLoanPrincipal + deductions.tuition + deductions.nsc + deductions.epf, 150000)
-  const hraExempt = calcHRAExempt(deductions, salaryAnnual)   // HRA uses salary only
+  const hraExempt = calcHRAExempt(deductions, salaryAnnual)
   const c80D = clamp(deductions.selfFamily, deductions.selfSenior?50000:25000) + clamp(deductions.parents, deductions.parentsSenior?50000:25000)
   const c80CCD = clamp(deductions.nps, 50000)
   const c80TTA = clamp(deductions.savingsInterest, deductions.selfSenior?50000:10000)
@@ -198,20 +220,62 @@ function calcTax(income: number, deductions: Deductions, monthlyNet: number, oth
   const c80E = deductions.eduLoanInterest
 
   const totalOldDed = oldStdDed + c80 + hraExempt + c80D + c80CCD + c80TTA + c80G + c24B + c80E
-  const oldTaxable = Math.max(0, totalGross - totalOldDed)
-  let oldTax = 0, rem2 = oldTaxable
+  const oldTaxable = Math.max(0, slabGross - totalOldDed)
+  let oldSlabTax = 0, rem2 = oldTaxable
   for (const [l,r] of [[250000,0],[250000,0.05],[500000,0.20],[Infinity,0.30]] as [number,number][]) {
-    const c = Math.min(rem2, l); oldTax += c*r; rem2-=c; if(rem2<=0) break
+    const c = Math.min(rem2, l); oldSlabTax += c*r; rem2-=c; if(rem2<=0) break
   }
-  if (oldTaxable <= 500000) oldTax = 0
-  oldTax = Math.round(oldTax * 1.04)
+  if (oldTaxable <= 500000) oldSlabTax = 0
+  const oldTax = Math.round((oldSlabTax + specialRateTax) * 1.04)
+
+  // Total gross including special-rate income (for display only)
+  const totalGross = salaryAnnual + slabOtherTotal + otherBreakdown.equityLtcg + otherBreakdown.equityStcg + otherBreakdown.crypto
 
   return {
-    newTax, oldTax, savings: Math.abs(oldTax-newTax), recommended: newTax<=oldTax?'new':'old',
+    newTax, oldTax, savings: Math.abs(oldTax-newTax), recommended: (newTax<=oldTax?'new':'old') as 'new'|'old',
     deductionBreakdown: { c80, hraExempt, c80D, c80CCD, c80TTA, c80G, c24B, c80E, stdDed: oldStdDed, total: totalOldDed },
     newTaxable, oldTaxable,
-    salaryAnnual, otherTaxable, totalGross,
+    salaryAnnual, slabOther: slabOtherTotal, totalGross,
+    // Special-rate breakdown (for UI display)
+    equityLtcg: otherBreakdown.equityLtcg, equityStcg: otherBreakdown.equityStcg, crypto: otherBreakdown.crypto,
+    equityLtcgTax, equityStcgTax, cryptoTax, specialRateTax,
+    // Slab-only tax (before cess and before special-rate add)
+    newSlabTax: Math.round(newSlabTax * 1.04), oldSlabTax: Math.round(oldSlabTax * 1.04),
   }
+}
+
+// ─── ITR form recommendation logic ─────────────────────────────────────────
+// Recommendation based on income heads captured. Footnote acknowledges what we don't capture.
+function recommendITRForm(input: {
+  salaryAnnual: number
+  hasFreelancePresumptive: boolean
+  hasFreelanceActual: boolean
+  hasFNOIntraday: boolean
+  hasEquityGains: boolean
+  hasCrypto: boolean
+  hasInterestDividends: boolean
+  totalIncome: number
+}): { form: string; reasonShort: string; reasonDetail: string } {
+  const { hasFreelancePresumptive, hasFreelanceActual, hasFNOIntraday, hasEquityGains, hasCrypto, totalIncome } = input
+  const hasBusinessIncome = hasFNOIntraday || hasFreelanceActual
+  const hasPresumptiveOnly = hasFreelancePresumptive && !hasBusinessIncome
+  const hasCapitalGains = hasEquityGains || hasCrypto
+
+  if (hasBusinessIncome) {
+    const trigger = hasFNOIntraday ? 'F&O / Intraday trading' : 'Freelance income declared on actual basis'
+    return { form: 'ITR-3', reasonShort: trigger, reasonDetail: `You need ITR-3 because of: ${trigger}. ITR-3 covers business or professional income alongside salary, capital gains, and other heads.` }
+  }
+  if (hasPresumptiveOnly && totalIncome < 5000000 && !hasCapitalGains) {
+    return { form: 'ITR-4', reasonShort: 'Presumptive freelance income (44ADA)', reasonDetail: `ITR-4 (Sugam) is the simplified form for salaried users with presumptive freelance income (Section 44ADA), no capital gains, and total income under ₹50L.` }
+  }
+  if (hasCapitalGains) {
+    const heads: string[] = []
+    if (hasEquityGains) heads.push('equity gains')
+    if (hasCrypto) heads.push('crypto gains')
+    if (hasPresumptiveOnly) heads.push('presumptive freelance income')
+    return { form: 'ITR-2', reasonShort: heads.join(' + '), reasonDetail: `ITR-2 covers salary + capital gains (including ${heads.join(', ')}). No business income from F&O/intraday or actual freelance.` }
+  }
+  return { form: 'ITR-1', reasonShort: 'Salary only', reasonDetail: 'ITR-1 (Sahaj) is the simplest form — for salaried users with one house property and interest income under ₹50L total. No capital gains, no business income.' }
 }
 
 // ─── Marginal slab rate for Old Regime (used for headroom math) ───────────────
@@ -273,31 +337,69 @@ export default function TaxPage() {
   const { salary } = useAppStore()
   const [step, setStep] = useState(-1) // -1 = welcome screen
   const [ded, setDed] = useState<Deductions>(defaultDed)
-  // ─── Other Income state (Build 4) — read from av_other_income localStorage ───
-  const [otherTaxable, setOtherTaxable] = useState(0)
+  // ─── Other Income state (Build 4 Phase 2) — read av_other_income, compute by tax-rate ───
+  const [otherBreakdown, setOtherBreakdown] = useState<OtherIncomeBreakdown>({ slabOther: 0, equityLtcg: 0, equityStcg: 0, crypto: 0 })
   const [otherTDS, setOtherTDS] = useState(0)
-  const [otherSources, setOtherSources] = useState<Array<{ sourceName: string; type: string; taxable: number; tds: number; method: string }>>([])
+  const [otherSources, setOtherSources] = useState<Array<{
+    sourceName: string; type: string; slab: number; ltcg: number; stcg: number; crypto: number; tds: number; method: string
+  }>>([])
+  const [hasFreelancePresumptive, setHasFreelancePresumptive] = useState(false)
+  const [hasFreelanceActual, setHasFreelanceActual] = useState(false)
+  const [hasFNOIntraday, setHasFNOIntraday] = useState(false)
+  const [hasEquityGains, setHasEquityGains] = useState(false)
+  const [hasCrypto, setHasCrypto] = useState(false)
+  const [hasInterestDividends, setHasInterestDividends] = useState(false)
   useEffect(() => {
     try {
       const ois = localStorage.getItem('av_other_income')
       if (!ois) return
       const store = JSON.parse(ois)
-      let totalTaxable = 0, totalTDS = 0
-      const sources: Array<{ sourceName: string; type: string; taxable: number; tds: number; method: string }> = []
+      const breakdown: OtherIncomeBreakdown = { slabOther: 0, equityLtcg: 0, equityStcg: 0, crypto: 0 }
+      let totTDS = 0
+      const sources: Array<{ sourceName: string; type: string; slab: number; ltcg: number; stcg: number; crypto: number; tds: number; method: string }> = []
+      let hPresump = false, hActual = false, hFNO = false, hEquity = false, hCrypto = false, hIntDiv = false
       for (const e of (store.entries || [])) {
-        if (e.type !== 'freelance') continue
-        const tax = e.declarationMethod === 'presumptive_44ada'
-          ? Math.round(e.grossReceipts * 0.5)
-          : Math.max(0, e.grossReceipts - e.expenses)
-        totalTaxable += tax
-        totalTDS += (e.tdsDeducted || 0)
-        sources.push({ sourceName: e.sourceName, type: e.type, taxable: tax, tds: e.tdsDeducted || 0, method: e.declarationMethod })
+        let slab = 0, ltcg = 0, stcg = 0, crypto = 0, tds = 0, method = ''
+        if (e.type === 'freelance') {
+          slab = e.declarationMethod === 'presumptive_44ada'
+            ? Math.round(e.grossReceipts * 0.5)
+            : Math.max(0, e.grossReceipts - (e.expenses || 0))
+          tds = e.tdsDeducted || 0
+          method = e.declarationMethod
+          if (e.declarationMethod === 'presumptive_44ada') hPresump = true; else hActual = true
+        } else if (e.type === 'equity') {
+          ltcg = e.ltcgGains || 0
+          stcg = e.stcgGains || 0
+          if (ltcg > 0 || stcg > 0) hEquity = true
+        } else if (e.type === 'crypto') {
+          crypto = e.cryptoGains || 0
+          tds = e.cryptoTds194S || 0
+          if (crypto > 0) hCrypto = true
+        } else if (e.type === 'fno_intraday') {
+          slab = e.fnoNetProfit || 0
+          tds = e.fnoTdsDeducted || 0
+          if (slab > 0) hFNO = true
+        } else if (e.type === 'interest_div') {
+          slab = (e.fdInterest || 0) + (e.savingsInterest || 0) + (e.dividends || 0) + (e.otherInterest || 0)
+          tds = e.interestTds || 0
+          if (slab > 0) hIntDiv = true
+        }
+        breakdown.slabOther += slab
+        breakdown.equityLtcg += ltcg
+        breakdown.equityStcg += stcg
+        breakdown.crypto += crypto
+        totTDS += tds
+        sources.push({ sourceName: e.sourceName, type: e.type, slab, ltcg, stcg, crypto, tds, method })
       }
-      setOtherTaxable(totalTaxable)
-      setOtherTDS(totalTDS)
+      setOtherBreakdown(breakdown)
+      setOtherTDS(totTDS)
       setOtherSources(sources)
+      setHasFreelancePresumptive(hPresump); setHasFreelanceActual(hActual)
+      setHasFNOIntraday(hFNO); setHasEquityGains(hEquity); setHasCrypto(hCrypto); setHasInterestDividends(hIntDiv)
     } catch {}
   }, [])
+  // For backward-compat with display code that reads a single number
+  const otherTaxable = otherBreakdown.slabOther + otherBreakdown.equityLtcg + otherBreakdown.equityStcg + otherBreakdown.crypto
   const annual = (salary?.grossSalary || 0) * 12
   const set = (k: keyof Deductions) => (v: number | boolean) => setDed(prev => ({ ...prev, [k]: v }))
 
@@ -347,7 +449,7 @@ export default function TaxPage() {
     try { localStorage.removeItem('av_tax_progress') } catch {}
   }
 
-  const tax = (annual || otherTaxable) ? calcTax(annual, ded, salary?.netSalary||0, otherTaxable) : null
+  const tax = (annual || otherTaxable) ? calcTax(annual, ded, salary?.netSalary||0, otherBreakdown) : null
 
   // ─── Smart Deductions: auto-detect from profile data ──────────────────────
   const [autoDetected, setAutoDetected] = useState<{key:string; label:string; section:string; amount:number; source:string; icon:string}[]>([])
@@ -604,18 +706,27 @@ export default function TaxPage() {
             {otherSources.length > 0 && (
               <>
                 <div style={{ padding:'10px 16px', background:'#FAF7F2', borderTop:`1px solid ${C.border}`, fontSize:11, color:C.muted, textTransform:'uppercase' as const, letterSpacing:'0.04em', fontWeight:600 }}>Other Income</div>
-                {otherSources.map((s, i) => (
-                  <div key={i} style={{ padding:'10px 16px', borderTop:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:12 }}>
-                    <div>
-                      <div style={{ color:C.text, fontWeight:500 }}>{s.sourceName}</div>
-                      <div style={{ color:C.muted, fontSize:10.5, marginTop:2 }}>Freelance · {s.method === 'presumptive_44ada' ? 'Section 44ADA (50% taxable)' : 'actual income basis'}{s.tds > 0 ? ` · TDS ${fmt(s.tds)}` : ''}</div>
+                {otherSources.map((s, i) => {
+                  const totalForSource = s.slab + s.ltcg + s.stcg + s.crypto
+                  let label = ''
+                  if (s.type === 'freelance') label = `Freelance · ${s.method === 'presumptive_44ada' ? 'Section 44ADA (50% taxable)' : 'actual income basis'}`
+                  else if (s.type === 'equity') label = `Equity · ${s.ltcg > 0 ? `LTCG ${fmt(s.ltcg)}` : ''}${s.ltcg > 0 && s.stcg > 0 ? ' · ' : ''}${s.stcg > 0 ? `STCG ${fmt(s.stcg)}` : ''} (taxed separately at LTCG/STCG rates)`
+                  else if (s.type === 'crypto') label = `Crypto · 30% flat tax`
+                  else if (s.type === 'fno_intraday') label = `F&O / Intraday · taxed at slab rate`
+                  else if (s.type === 'interest_div') label = `Interest & dividends · slab rate`
+                  return (
+                    <div key={i} style={{ padding:'10px 16px', borderTop:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:12 }}>
+                      <div>
+                        <div style={{ color:C.text, fontWeight:500 }}>{s.sourceName}</div>
+                        <div style={{ color:C.muted, fontSize:10.5, marginTop:2 }}>{label}{s.tds > 0 ? ` · TDS ${fmt(s.tds)}` : ''}</div>
+                      </div>
+                      <div style={{ fontWeight:700, color:C.text, fontVariantNumeric:'tabular-nums' as const }}>{fmt(totalForSource)}</div>
                     </div>
-                    <div style={{ fontWeight:700, color:C.text, fontVariantNumeric:'tabular-nums' as const }}>{fmt(s.taxable)}</div>
-                  </div>
-                ))}
+                  )
+                })}
                 <div style={{ padding:'10px 16px', borderTop:`1px solid ${C.fg}`, background:C.wl, display:'flex', justifyContent:'space-between', fontSize:12, fontWeight:700, color:C.fg }}>
-                  <span>Total annual taxable income</span>
-                  <span style={{ fontVariantNumeric:'tabular-nums' as const }}>{fmt(annual + otherTaxable)}</span>
+                  <span>Total income from other sources</span>
+                  <span style={{ fontVariantNumeric:'tabular-nums' as const }}>{fmt(otherTaxable)}</span>
                 </div>
               </>
             )}
@@ -882,6 +993,33 @@ export default function TaxPage() {
               </div>
             ))}
           </div>
+
+          {/* ── ITR Form Recommendation ── */}
+          {(() => {
+            const itr = recommendITRForm({
+              salaryAnnual: annual,
+              hasFreelancePresumptive, hasFreelanceActual,
+              hasFNOIntraday, hasEquityGains, hasCrypto, hasInterestDividends,
+              totalIncome: annual + otherTaxable,
+            })
+            return (
+              <div style={{ ...sCard, marginBottom:16 }}>
+                <div style={sCH}>Which ITR form should you file?</div>
+                <div style={{ padding:'14px 16px', display:'flex', alignItems:'center', gap:14 }}>
+                  <div style={{ flexShrink:0, padding:'10px 14px', background:C.fg, color:C.wheat, borderRadius:5, fontSize:18, fontWeight:700, letterSpacing:'0.02em' }}>
+                    {itr.form}
+                  </div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:11, color:C.muted, textTransform:'uppercase' as const, letterSpacing:'0.04em', marginBottom:3, fontWeight:600 }}>Recommended form</div>
+                    <div style={{ fontSize:12.5, color:C.text, lineHeight:1.55 }}>{itr.reasonDetail}</div>
+                  </div>
+                </div>
+                <div style={{ padding:'10px 14px', background:'#FAFAF8', borderTop:`1px solid ${C.border}`, fontSize:11, color:C.muted, lineHeight:1.55, fontStyle:'italic' as const }}>
+                  Based on what you've told us. If you have rental income, property sales, or foreign income, your ITR form may differ — confirm with a CA before filing.
+                </div>
+              </div>
+            )
+          })()}
 
           {/* ── Headroom analysis: where the user can save more ── */}
           {(() => {

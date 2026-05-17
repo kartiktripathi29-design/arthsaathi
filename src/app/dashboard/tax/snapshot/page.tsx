@@ -43,21 +43,37 @@ function calcHRAExempt(d: Deductions, annualGross: number): number {
   return Math.max(0, Math.min(rule1, Math.max(0, rule2), rule3))
 }
 
-// ─── Tax computation — duplicated from tax-page.tsx for the snapshot ────────
-function calcTax(income: number, d: Deductions, otherTaxable: number = 0) {
+// ─── Tax computation — duplicated from tax-page.tsx ────────
+interface OtherIncomeBreakdown {
+  slabOther: number
+  equityLtcg: number
+  equityStcg: number
+  crypto: number
+}
+function calcTax(income: number, d: Deductions, otherBreakdown: OtherIncomeBreakdown = { slabOther: 0, equityLtcg: 0, equityStcg: 0, crypto: 0 }) {
   const salaryAnnual = income
-  const totalGross = salaryAnnual + otherTaxable
-  // New regime — std ded caps at salary
-  const newStdDed = Math.min(75000, salaryAnnual)
-  const newTaxable = Math.max(0, totalGross - newStdDed)
-  let newTax = 0, rem = newTaxable
-  for (const [l, r] of [[300000, 0], [300000, 0.05], [300000, 0.10], [300000, 0.15], [300000, 0.20], [Infinity, 0.30]] as [number, number][]) {
-    const c = Math.min(rem, l); newTax += c * r; rem -= c; if (rem <= 0) break
-  }
-  if (newTaxable <= 700000) newTax = 0
-  newTax = Math.round(newTax * 1.04)
+  const savingsInterestIncome = d.savingsInterest || 0
+  const slabOtherTotal = otherBreakdown.slabOther + savingsInterestIncome
+  const slabGross = salaryAnnual + slabOtherTotal
 
-  // Old regime — std ded caps at salary, HRA uses salary only
+  // Special-rate tax
+  const equityLtcgTaxable = Math.max(0, otherBreakdown.equityLtcg - 125000)
+  const equityLtcgTax = Math.round(equityLtcgTaxable * 0.125)
+  const equityStcgTax = Math.round(otherBreakdown.equityStcg * 0.20)
+  const cryptoTax = Math.round(otherBreakdown.crypto * 0.30)
+  const specialRateTax = equityLtcgTax + equityStcgTax + cryptoTax
+
+  // New regime
+  const newStdDed = Math.min(75000, salaryAnnual)
+  const newTaxable = Math.max(0, slabGross - newStdDed)
+  let newSlabTax = 0, rem = newTaxable
+  for (const [l, r] of [[300000, 0], [300000, 0.05], [300000, 0.10], [300000, 0.15], [300000, 0.20], [Infinity, 0.30]] as [number, number][]) {
+    const c = Math.min(rem, l); newSlabTax += c * r; rem -= c; if (rem <= 0) break
+  }
+  if (newTaxable <= 700000) newSlabTax = 0
+  const newTax = Math.round((newSlabTax + specialRateTax) * 1.04)
+
+  // Old regime
   const oldStdDed = Math.min(75000, salaryAnnual)
   const c80 = clamp(d.ppf + d.elss + d.lic + d.homeLoanPrincipal + d.tuition + d.nsc + d.epf, 150000)
   const hraExempt = calcHRAExempt(d, salaryAnnual)
@@ -68,20 +84,50 @@ function calcTax(income: number, d: Deductions, otherTaxable: number = 0) {
   const c24B = clamp(d.homeLoanInterest, 200000)
   const c80E = d.eduLoanInterest
   const totalOldDed = oldStdDed + c80 + hraExempt + c80D + c80CCD + c80TTA + c80G + c24B + c80E
-  const oldTaxable = Math.max(0, totalGross - totalOldDed)
-  let oldTax = 0, rem2 = oldTaxable
+  const oldTaxable = Math.max(0, slabGross - totalOldDed)
+  let oldSlabTax = 0, rem2 = oldTaxable
   for (const [l, r] of [[250000, 0], [250000, 0.05], [500000, 0.20], [Infinity, 0.30]] as [number, number][]) {
-    const c = Math.min(rem2, l); oldTax += c * r; rem2 -= c; if (rem2 <= 0) break
+    const c = Math.min(rem2, l); oldSlabTax += c * r; rem2 -= c; if (rem2 <= 0) break
   }
-  if (oldTaxable <= 500000) oldTax = 0
-  oldTax = Math.round(oldTax * 1.04)
+  if (oldTaxable <= 500000) oldSlabTax = 0
+  const oldTax = Math.round((oldSlabTax + specialRateTax) * 1.04)
+
+  const totalGross = salaryAnnual + slabOtherTotal + otherBreakdown.equityLtcg + otherBreakdown.equityStcg + otherBreakdown.crypto
 
   return {
     newTax, oldTax,
     recommended: newTax <= oldTax ? 'new' as const : 'old' as const,
     deductions: { stdDed: oldStdDed, c80, hraExempt, c80D, c80CCD, c80TTA, c80G, c24B, c80E, total: totalOldDed },
-    newTaxable, oldTaxable, salaryAnnual, otherTaxable, totalGross,
+    newTaxable, oldTaxable, salaryAnnual, slabOther: slabOtherTotal, totalGross,
+    equityLtcg: otherBreakdown.equityLtcg, equityStcg: otherBreakdown.equityStcg, crypto: otherBreakdown.crypto,
+    equityLtcgTax, equityStcgTax, cryptoTax, specialRateTax,
   }
+}
+
+// ─── ITR recommendation (mirrors tax-page.tsx) ──────────────────────────────
+function recommendITRForm(input: {
+  hasFreelancePresumptive: boolean; hasFreelanceActual: boolean; hasFNOIntraday: boolean
+  hasEquityGains: boolean; hasCrypto: boolean; totalIncome: number
+}): { form: string; reasonDetail: string } {
+  const { hasFreelancePresumptive, hasFreelanceActual, hasFNOIntraday, hasEquityGains, hasCrypto, totalIncome } = input
+  const hasBusinessIncome = hasFNOIntraday || hasFreelanceActual
+  const hasPresumptiveOnly = hasFreelancePresumptive && !hasBusinessIncome
+  const hasCapitalGains = hasEquityGains || hasCrypto
+  if (hasBusinessIncome) {
+    const trigger = hasFNOIntraday ? 'F&O / Intraday trading' : 'Freelance income declared on actual basis'
+    return { form: 'ITR-3', reasonDetail: `You need ITR-3 because of: ${trigger}.` }
+  }
+  if (hasPresumptiveOnly && totalIncome < 5000000 && !hasCapitalGains) {
+    return { form: 'ITR-4', reasonDetail: 'ITR-4 (Sugam) — simplified form for salaried users with presumptive freelance income under Section 44ADA.' }
+  }
+  if (hasCapitalGains) {
+    const heads: string[] = []
+    if (hasEquityGains) heads.push('equity gains')
+    if (hasCrypto) heads.push('crypto gains')
+    if (hasPresumptiveOnly) heads.push('presumptive freelance')
+    return { form: 'ITR-2', reasonDetail: `ITR-2 — salary + capital gains (${heads.join(', ')}).` }
+  }
+  return { form: 'ITR-1', reasonDetail: 'ITR-1 (Sahaj) — salary, one house property, and interest income.' }
 }
 
 // ─── Main page ──────────────────────────────────────────────────────────────
@@ -103,10 +149,18 @@ function SnapshotContent() {
   const [employeeName, setEmployeeName] = useState('')
   const [fyLabel, setFyLabel] = useState('FY ?')
   const [loadFailed, setLoadFailed] = useState(false)
-  // Other income
-  const [otherTaxable, setOtherTaxable] = useState(0)
+  // Other income — full breakdown + flags for ITR recommendation
+  const [otherBreakdown, setOtherBreakdown] = useState<OtherIncomeBreakdown>({ slabOther: 0, equityLtcg: 0, equityStcg: 0, crypto: 0 })
   const [otherTDS, setOtherTDS] = useState(0)
-  const [otherSources, setOtherSources] = useState<Array<{ sourceName: string; type: string; grossReceipts: number; expenses: number; taxable: number; tds: number; method: string; fromMonth: string; toMonth: string | null }>>([])
+  const [otherSources, setOtherSources] = useState<Array<{
+    sourceName: string; type: string; slab: number; ltcg: number; stcg: number; crypto: number; tds: number; method: string; fromMonth: string; toMonth: string | null
+    grossReceipts: number; expenses: number
+  }>>([])
+  const [hasFreelancePresumptive, setHasFreelancePresumptive] = useState(false)
+  const [hasFreelanceActual, setHasFreelanceActual] = useState(false)
+  const [hasFNOIntraday, setHasFNOIntraday] = useState(false)
+  const [hasEquityGains, setHasEquityGains] = useState(false)
+  const [hasCrypto, setHasCrypto] = useState(false)
 
   useEffect(() => {
     try {
@@ -117,30 +171,57 @@ function SnapshotContent() {
         if (d.ded) setDed({ ...defaultDed, ...d.ded })
       }
 
-      // Other Income (Build 4)
+      // Other Income — all 5 types
       const ois = localStorage.getItem('av_other_income')
       if (ois) {
         try {
           const store = JSON.parse(ois)
-          let totalTaxable = 0, totalOtherTDS = 0
-          const sources: Array<{ sourceName: string; type: string; grossReceipts: number; expenses: number; taxable: number; tds: number; method: string; fromMonth: string; toMonth: string | null }> = []
+          const breakdown: OtherIncomeBreakdown = { slabOther: 0, equityLtcg: 0, equityStcg: 0, crypto: 0 }
+          let totOtherTDS = 0
+          const sources: Array<typeof otherSources[number]> = []
+          let hPresump = false, hActual = false, hFNO = false, hEquity = false, hCrypto = false
           for (const e of (store.entries || [])) {
-            if (e.type !== 'freelance') continue
-            const taxable = e.declarationMethod === 'presumptive_44ada'
-              ? Math.round(e.grossReceipts * 0.5)
-              : Math.max(0, e.grossReceipts - (e.expenses || 0))
-            totalTaxable += taxable
-            totalOtherTDS += (e.tdsDeducted || 0)
+            let slab = 0, ltcg = 0, stcg = 0, crypto = 0, tds = 0, method = ''
+            if (e.type === 'freelance') {
+              slab = e.declarationMethod === 'presumptive_44ada'
+                ? Math.round(e.grossReceipts * 0.5)
+                : Math.max(0, e.grossReceipts - (e.expenses || 0))
+              tds = e.tdsDeducted || 0
+              method = e.declarationMethod
+              if (e.declarationMethod === 'presumptive_44ada') hPresump = true; else hActual = true
+            } else if (e.type === 'equity') {
+              ltcg = e.ltcgGains || 0
+              stcg = e.stcgGains || 0
+              if (ltcg > 0 || stcg > 0) hEquity = true
+            } else if (e.type === 'crypto') {
+              crypto = e.cryptoGains || 0
+              tds = e.cryptoTds194S || 0
+              if (crypto > 0) hCrypto = true
+            } else if (e.type === 'fno_intraday') {
+              slab = e.fnoNetProfit || 0
+              tds = e.fnoTdsDeducted || 0
+              if (slab > 0) hFNO = true
+            } else if (e.type === 'interest_div') {
+              slab = (e.fdInterest || 0) + (e.savingsInterest || 0) + (e.dividends || 0) + (e.otherInterest || 0)
+              tds = e.interestTds || 0
+            }
+            breakdown.slabOther += slab
+            breakdown.equityLtcg += ltcg
+            breakdown.equityStcg += stcg
+            breakdown.crypto += crypto
+            totOtherTDS += tds
             sources.push({
               sourceName: e.sourceName, type: e.type,
-              grossReceipts: e.grossReceipts, expenses: e.expenses || 0,
-              taxable, tds: e.tdsDeducted || 0, method: e.declarationMethod,
+              slab, ltcg, stcg, crypto, tds, method,
               fromMonth: e.fromMonth, toMonth: e.toMonth || null,
+              grossReceipts: e.grossReceipts || 0, expenses: e.expenses || 0,
             })
           }
-          setOtherTaxable(totalTaxable)
-          setOtherTDS(totalOtherTDS)
+          setOtherBreakdown(breakdown)
+          setOtherTDS(totOtherTDS)
           setOtherSources(sources)
+          setHasFreelancePresumptive(hPresump); setHasFreelanceActual(hActual)
+          setHasFNOIntraday(hFNO); setHasEquityGains(hEquity); setHasCrypto(hCrypto)
         } catch {}
       }
 
@@ -216,6 +297,7 @@ function SnapshotContent() {
     }
   }, [])
 
+  const otherTaxable = otherBreakdown.slabOther + otherBreakdown.equityLtcg + otherBreakdown.equityStcg + otherBreakdown.crypto
   if (loadFailed) {
     return <ErrorState message="No income data found. Visit the Tax Optimiser first to enter your details." onBack={() => router.push('/dashboard/tax')} />
   }
@@ -223,10 +305,14 @@ function SnapshotContent() {
     return <div style={{ padding:40, textAlign:'center', color:C.muted, fontFamily:'"Sora",sans-serif' }}>Loading…</div>
   }
 
-  const tax = calcTax(annualGross, ded, otherTaxable)
+  const tax = calcTax(annualGross, ded, otherBreakdown)
   const recommendedTax = tax.recommended === 'new' ? tax.newTax : tax.oldTax
   const totalTDSCombined = totalTDS + otherTDS
   const balance = recommendedTax - totalTDSCombined
+  const itrRec = recommendITRForm({
+    hasFreelancePresumptive, hasFreelanceActual, hasFNOIntraday, hasEquityGains, hasCrypto,
+    totalIncome: annualGross + otherTaxable,
+  })
 
   return (
     <>
@@ -288,33 +374,48 @@ function SnapshotContent() {
                 <thead>
                   <tr>
                     <Th>Source</Th>
-                    <Th style={{ width:140 }}>Method</Th>
-                    <Th style={{ textAlign:'right', width:120 }}>Gross</Th>
-                    <Th style={{ textAlign:'right', width:120 }}>Taxable</Th>
+                    <Th style={{ width:170 }}>Type</Th>
+                    <Th style={{ textAlign:'right', width:120 }}>Amount</Th>
                     <Th style={{ textAlign:'right', width:100 }}>TDS</Th>
                   </tr>
                 </thead>
                 <tbody>
-                  {otherSources.map((s, i) => (
-                    <tr key={i}>
-                      <Td>{s.sourceName}<div style={{ fontSize:10, color:C.muted, marginTop:1 }}>Freelance · {monthLabel(s.fromMonth)} {s.toMonth ? `– ${monthLabel(s.toMonth)}` : '– ongoing'}</div></Td>
-                      <Td>{s.method === 'presumptive_44ada' ? 'Section 44ADA' : 'Actual'}</Td>
-                      <Td num>{fmt(s.grossReceipts)}</Td>
-                      <Td num>{fmt(s.taxable)}</Td>
-                      <Td num>{s.tds > 0 ? fmt(s.tds) : '—'}</Td>
-                    </tr>
-                  ))}
+                  {otherSources.map((s, i) => {
+                    let typeLabel = ''
+                    let amount = s.slab + s.ltcg + s.stcg + s.crypto
+                    if (s.type === 'freelance') typeLabel = `Freelance · ${s.method === 'presumptive_44ada' ? '44ADA' : 'Actual'}`
+                    else if (s.type === 'equity') typeLabel = `Equity · LTCG ${fmt(s.ltcg)} · STCG ${fmt(s.stcg)}`
+                    else if (s.type === 'crypto') typeLabel = `Crypto / VDA · 30% flat`
+                    else if (s.type === 'fno_intraday') typeLabel = `F&O / Intraday · slab rate`
+                    else if (s.type === 'interest_div') typeLabel = `Interest & Dividends · slab rate`
+                    return (
+                      <tr key={i}>
+                        <Td>{s.sourceName}{(s.type === 'freelance' || s.type === 'fno_intraday') && s.fromMonth && <div style={{ fontSize:10, color:C.muted, marginTop:1 }}>{monthLabel(s.fromMonth)} {s.toMonth ? `– ${monthLabel(s.toMonth)}` : '– ongoing'}</div>}</Td>
+                        <Td><div style={{ fontSize:11 }}>{typeLabel}</div></Td>
+                        <Td num>{fmt(amount)}</Td>
+                        <Td num>{s.tds > 0 ? fmt(s.tds) : '—'}</Td>
+                      </tr>
+                    )
+                  })}
                   <Tr total>
-                    <Td>Total taxable from other sources</Td>
-                    <Td></Td>
+                    <Td>Total</Td>
                     <Td></Td>
                     <Td num>{fmt(otherTaxable)}</Td>
                     <Td num>{fmt(otherTDS)}</Td>
                   </Tr>
                 </tbody>
               </table>
+              {(otherBreakdown.equityLtcg > 0 || otherBreakdown.equityStcg > 0 || otherBreakdown.crypto > 0) && (
+                <div style={{ marginTop:10, padding:'10px 12px', background:'#FAF7F2', borderRadius:5, border:`1px solid ${C.border}`, fontSize:11, color:C.text, lineHeight:1.6 }}>
+                  <strong>Special-rate income tax (computed separately from slab):</strong>
+                  {otherBreakdown.equityLtcg > 0 && <div>· Equity LTCG: {fmt(otherBreakdown.equityLtcg)} → tax {fmt(tax.equityLtcgTax)} (12.5% after ₹1.25L exemption)</div>}
+                  {otherBreakdown.equityStcg > 0 && <div>· Equity STCG: {fmt(otherBreakdown.equityStcg)} → tax {fmt(tax.equityStcgTax)} (20% flat)</div>}
+                  {otherBreakdown.crypto > 0 && <div>· Crypto: {fmt(otherBreakdown.crypto)} → tax {fmt(tax.cryptoTax)} (30% flat)</div>}
+                  <div style={{ marginTop:4, fontWeight:700 }}>Total special-rate tax: {fmt(tax.specialRateTax)}</div>
+                </div>
+              )}
               <p style={{ fontSize:10.5, color:C.muted, margin:'8px 0 0', fontStyle:'italic' as const, lineHeight:1.5 }}>
-                Standard deduction (₹75,000) applies to salary income only. HRA exemption applies to salary income only. Other-source income is added to taxable base for slab computation.
+                Standard deduction and HRA exemption apply to salary income only. Slab-rate other income (freelance, F&O, interest, dividends) is added to slab base. Capital gains and crypto are taxed at special rates separately.
               </p>
             </Section>
           )}
@@ -395,6 +496,21 @@ function SnapshotContent() {
                 You'll likely receive a refund of {fmt(Math.abs(balance))} after filing your ITR.
               </p>
             )}
+          </Section>
+
+          {/* Section 6: ITR Form Recommendation */}
+          <Section title="6 · Recommended ITR Form">
+            <div style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 14px', background:'#FAF7F2', border:`1px solid ${C.border}`, borderRadius:5 }}>
+              <div style={{ flexShrink:0, padding:'10px 14px', background:C.fg, color:C.wheat, borderRadius:5, fontSize:18, fontWeight:700, letterSpacing:'0.02em' }}>
+                {itrRec.form}
+              </div>
+              <div style={{ flex:1, fontSize:12, color:C.text, lineHeight:1.55 }}>
+                {itrRec.reasonDetail}
+              </div>
+            </div>
+            <p style={{ fontSize:10.5, color:C.muted, margin:'8px 0 0', fontStyle:'italic' as const, lineHeight:1.5 }}>
+              Recommendation based on income heads captured here. If you also have rental income, property sales, or foreign income, your ITR form may differ — verify with a CA.
+            </p>
           </Section>
 
           {/* Footer disclaimer */}

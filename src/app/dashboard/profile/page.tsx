@@ -310,18 +310,39 @@ interface SalaryTimeline {
 }
 
 // ─── Other Income types (Build 4: non-salary income heads) ───────────────────
-type OtherIncomeType = 'freelance' | 'capital_gains' | 'rental' | 'other'
+// ─── Other Income types (Build 4 — Phase 1 + Phase 2 expansion) ────────────
+type OtherIncomeType =
+  | 'freelance'        // Slab rate · presumptive 44ADA or actual
+  | 'equity'           // LTCG (12.5% above ₹1.25L exemption) + STCG (20%)
+  | 'crypto'           // 30% flat, no deductions, no loss set-off
+  | 'fno_intraday'     // Slab rate, speculative + non-speculative business income
+  | 'interest_div'     // Slab rate — FD, savings, dividends, bonds
 interface OtherIncomeEntry {
   id: string
   type: OtherIncomeType
-  sourceName: string                                          // user label, e.g. "Consulting clients"
-  fromMonth: string                                           // "2025-04"
-  toMonth: string | null                                      // null = ongoing
+  sourceName: string
+  fromMonth: string
+  toMonth: string | null
   // Freelance fields
   grossReceipts: number
-  expenses: number                                            // 0 if presumptive
-  tdsDeducted: number                                         // 194J TDS
+  expenses: number
+  tdsDeducted: number
   declarationMethod: 'presumptive_44ada' | 'actual'
+  // Equity fields (one entry can carry both LTCG and STCG from same broker)
+  ltcgGains: number
+  stcgGains: number
+  // Crypto fields
+  cryptoGains: number
+  cryptoTds194S: number
+  // F&O / Intraday fields (both slab rate; one entry per source)
+  fnoNetProfit: number             // gross P&L net of expenses (user's net trading profit)
+  fnoTdsDeducted: number           // rare but possible
+  // Interest / Dividends sub-fields
+  fdInterest: number
+  savingsInterest: number          // bank savings account interest
+  dividends: number
+  otherInterest: number            // bonds, NSC, post office, etc.
+  interestTds: number              // TDS 194A (FD) + TDS 194 (dividends)
   createdAt: string
 }
 interface OtherIncomeStore {
@@ -329,11 +350,39 @@ interface OtherIncomeStore {
   fyStartYear: number
   entries: OtherIncomeEntry[]
 }
-// Compute taxable income from one OtherIncomeEntry
-function computeOtherIncomeTaxable(e: OtherIncomeEntry): number {
-  if (e.type !== 'freelance') return 0   // other heads not yet supported
-  if (e.declarationMethod === 'presumptive_44ada') return Math.round(e.grossReceipts * 0.5)
-  return Math.max(0, e.grossReceipts - e.expenses)
+// Compute breakdown of taxable income from one entry, split by tax-rate category
+function computeOtherIncomeTaxable(e: OtherIncomeEntry): {
+  slab: number          // taxed at slab rate (added to total income)
+  equityLtcg: number    // 12.5% above ₹1.25L exempt
+  equityStcg: number    // 20% flat
+  crypto: number        // 30% flat
+  tds: number           // any TDS deducted (for reconciliation)
+} {
+  const out = { slab: 0, equityLtcg: 0, equityStcg: 0, crypto: 0, tds: 0 }
+  if (e.type === 'freelance') {
+    out.slab = e.declarationMethod === 'presumptive_44ada'
+      ? Math.round(e.grossReceipts * 0.5)
+      : Math.max(0, e.grossReceipts - (e.expenses || 0))
+    out.tds = e.tdsDeducted || 0
+  } else if (e.type === 'equity') {
+    out.equityLtcg = e.ltcgGains || 0
+    out.equityStcg = e.stcgGains || 0
+  } else if (e.type === 'crypto') {
+    out.crypto = e.cryptoGains || 0
+    out.tds = e.cryptoTds194S || 0
+  } else if (e.type === 'fno_intraday') {
+    out.slab = e.fnoNetProfit || 0
+    out.tds = e.fnoTdsDeducted || 0
+  } else if (e.type === 'interest_div') {
+    out.slab = (e.fdInterest || 0) + (e.savingsInterest || 0) + (e.dividends || 0) + (e.otherInterest || 0)
+    out.tds = e.interestTds || 0
+  }
+  return out
+}
+// Single-number summary used by older UI bits
+function computeOtherIncomeTaxableTotal(e: OtherIncomeEntry): number {
+  const b = computeOtherIncomeTaxable(e)
+  return b.slab + b.equityLtcg + b.equityStcg + b.crypto
 }
 
 // Default classification of components — recurring unless name suggests one-time
@@ -717,7 +766,28 @@ function ProfileContent() {
   const [intelligence, setIntelligence] = useState<IntelligenceReport | null>(null)
   const [salaryTimeline, setSalaryTimeline] = useState<SalaryTimeline | null>(null)
   const [otherIncomeStore, setOtherIncomeStore] = useState<OtherIncomeStore | null>(null)
-  const [freelanceForm, setFreelanceForm] = useState<{ open: boolean; editingId: string | null; sourceName: string; fromMonth: string; toMonth: string; ongoing: boolean; grossReceipts: string; expenses: string; tdsDeducted: string; declarationMethod: 'presumptive_44ada' | 'actual' }>({ open: false, editingId: null, sourceName: '', fromMonth: '', toMonth: '', ongoing: false, grossReceipts: '', expenses: '', tdsDeducted: '', declarationMethod: 'presumptive_44ada' })
+  const [incomeForm, setIncomeForm] = useState<{
+    open: boolean; editingId: string | null; type: OtherIncomeType
+    sourceName: string; fromMonth: string; toMonth: string; ongoing: boolean
+    // Freelance
+    grossReceipts: string; expenses: string; tdsDeducted: string; declarationMethod: 'presumptive_44ada' | 'actual'
+    // Equity
+    ltcgGains: string; stcgGains: string
+    // Crypto
+    cryptoGains: string; cryptoTds194S: string
+    // F&O / Intraday
+    fnoNetProfit: string; fnoTdsDeducted: string
+    // Interest / Dividends
+    fdInterest: string; savingsInterest: string; dividends: string; otherInterest: string; interestTds: string
+  }>({
+    open: false, editingId: null, type: 'freelance',
+    sourceName: '', fromMonth: '', toMonth: '', ongoing: false,
+    grossReceipts: '', expenses: '', tdsDeducted: '', declarationMethod: 'presumptive_44ada',
+    ltcgGains: '', stcgGains: '',
+    cryptoGains: '', cryptoTds194S: '',
+    fnoNetProfit: '', fnoTdsDeducted: '',
+    fdInterest: '', savingsInterest: '', dividends: '', otherInterest: '', interestTds: '',
+  })
   const [otherIncomeMenuOpen, setOtherIncomeMenuOpen] = useState(false)
   const [salaryComponentsExpanded, setSalaryComponentsExpanded] = useState(true)
   const [salaryMonthEditor, setSalaryMonthEditor] = useState<{ open: boolean; monthKey: string | null }>({ open: false, monthKey: null })
@@ -1523,48 +1593,100 @@ function ProfileContent() {
   // Add slip to timeline — auto-detects same employer / hike / new employer
   // Prompts user only when ambiguous (employer name change OR basic salary jump >5%)
   // ─── Other Income helpers (Build 4) ─────────────────────────────────────
-  const openFreelanceForm = (gapRange?: { fromMonth: string; toMonth: string }) => {
+  const emptyFormFields = () => ({
+    grossReceipts: '', expenses: '', tdsDeducted: '', declarationMethod: 'presumptive_44ada' as const,
+    ltcgGains: '', stcgGains: '',
+    cryptoGains: '', cryptoTds194S: '',
+    fnoNetProfit: '', fnoTdsDeducted: '',
+    fdInterest: '', savingsInterest: '', dividends: '', otherInterest: '', interestTds: '',
+  })
+  const defaultSourceNameFor = (type: OtherIncomeType): string => {
+    switch (type) {
+      case 'freelance': return ''
+      case 'equity': return 'Stocks & Mutual Funds'
+      case 'crypto': return 'Crypto Trading'
+      case 'fno_intraday': return 'F&O / Intraday Trading'
+      case 'interest_div': return 'Interest & Dividends'
+    }
+  }
+  const openOtherIncomeForm = (type: OtherIncomeType, gapRange?: { fromMonth: string; toMonth: string }) => {
     const fyStart = salaryTimeline?.fyStartYear ?? new Date().getFullYear() - (new Date().getMonth() < 3 ? 1 : 0)
     const defaultFrom = gapRange?.fromMonth || `${fyStart}-04`
     const defaultTo = gapRange?.toMonth || `${fyStart + 1}-03`
-    setFreelanceForm({
-      open: true, editingId: null, sourceName: '',
-      fromMonth: defaultFrom, toMonth: defaultTo, ongoing: false,
-      grossReceipts: '', expenses: '', tdsDeducted: '',
-      declarationMethod: 'presumptive_44ada',
+    // For non-freelance types, period defaults to full FY and ongoing=false (capital gains are one-time events)
+    setIncomeForm({
+      open: true, editingId: null, type,
+      sourceName: defaultSourceNameFor(type),
+      fromMonth: defaultFrom, toMonth: defaultTo, ongoing: type === 'freelance' ? false : false,
+      ...emptyFormFields(),
     })
   }
-  const openFreelanceFormForEdit = (entry: OtherIncomeEntry) => {
-    setFreelanceForm({
-      open: true, editingId: entry.id, sourceName: entry.sourceName,
+  const openOtherIncomeFormForEdit = (entry: OtherIncomeEntry) => {
+    setIncomeForm({
+      open: true, editingId: entry.id, type: entry.type,
+      sourceName: entry.sourceName,
       fromMonth: entry.fromMonth, toMonth: entry.toMonth || '', ongoing: entry.toMonth === null,
       grossReceipts: entry.grossReceipts > 0 ? String(entry.grossReceipts) : '',
       expenses: entry.expenses > 0 ? String(entry.expenses) : '',
       tdsDeducted: entry.tdsDeducted > 0 ? String(entry.tdsDeducted) : '',
-      declarationMethod: entry.declarationMethod,
+      declarationMethod: entry.declarationMethod || 'presumptive_44ada',
+      ltcgGains: entry.ltcgGains > 0 ? String(entry.ltcgGains) : '',
+      stcgGains: entry.stcgGains > 0 ? String(entry.stcgGains) : '',
+      cryptoGains: entry.cryptoGains > 0 ? String(entry.cryptoGains) : '',
+      cryptoTds194S: entry.cryptoTds194S > 0 ? String(entry.cryptoTds194S) : '',
+      fnoNetProfit: entry.fnoNetProfit > 0 ? String(entry.fnoNetProfit) : '',
+      fnoTdsDeducted: entry.fnoTdsDeducted > 0 ? String(entry.fnoTdsDeducted) : '',
+      fdInterest: entry.fdInterest > 0 ? String(entry.fdInterest) : '',
+      savingsInterest: entry.savingsInterest > 0 ? String(entry.savingsInterest) : '',
+      dividends: entry.dividends > 0 ? String(entry.dividends) : '',
+      otherInterest: entry.otherInterest > 0 ? String(entry.otherInterest) : '',
+      interestTds: entry.interestTds > 0 ? String(entry.interestTds) : '',
     })
   }
-  const saveFreelanceForm = () => {
-    const f = freelanceForm
-    const gross = Number(f.grossReceipts) || 0
-    if (gross <= 0) { toast.error('Enter gross receipts'); return }
+  const saveIncomeForm = () => {
+    const f = incomeForm
     if (!f.sourceName.trim()) { toast.error('Give this income source a name'); return }
     if (!f.ongoing && f.fromMonth > f.toMonth) { toast.error('From month must be earlier than To month'); return }
-    const expenses = Number(f.expenses) || 0
-    const tds = Number(f.tdsDeducted) || 0
-    if (f.declarationMethod === 'actual' && expenses > gross) {
-      toast.error('Expenses cannot exceed gross receipts'); return
+    const num = (s: string) => Number(s) || 0
+
+    // Type-specific validation
+    if (f.type === 'freelance') {
+      if (num(f.grossReceipts) <= 0) { toast.error('Enter gross receipts'); return }
+      if (f.declarationMethod === 'actual' && num(f.expenses) > num(f.grossReceipts)) {
+        toast.error('Expenses cannot exceed gross receipts'); return
+      }
+    } else if (f.type === 'equity') {
+      if (num(f.ltcgGains) <= 0 && num(f.stcgGains) <= 0) { toast.error('Enter at least one gain (LTCG or STCG)'); return }
+    } else if (f.type === 'crypto') {
+      if (num(f.cryptoGains) <= 0) { toast.error('Enter crypto net gains'); return }
+    } else if (f.type === 'fno_intraday') {
+      if (num(f.fnoNetProfit) <= 0) { toast.error('Enter net profit (loss handling not supported yet)'); return }
+    } else if (f.type === 'interest_div') {
+      const total = num(f.fdInterest) + num(f.savingsInterest) + num(f.dividends) + num(f.otherInterest)
+      if (total <= 0) { toast.error('Enter at least one income amount'); return }
     }
+
     const entry: OtherIncomeEntry = {
       id: f.editingId || uid(),
-      type: 'freelance',
+      type: f.type,
       sourceName: f.sourceName.trim(),
       fromMonth: f.fromMonth,
       toMonth: f.ongoing ? null : f.toMonth,
-      grossReceipts: gross,
-      expenses: f.declarationMethod === 'presumptive_44ada' ? 0 : expenses,
-      tdsDeducted: tds,
+      grossReceipts: num(f.grossReceipts),
+      expenses: f.declarationMethod === 'presumptive_44ada' ? 0 : num(f.expenses),
+      tdsDeducted: num(f.tdsDeducted),
       declarationMethod: f.declarationMethod,
+      ltcgGains: num(f.ltcgGains),
+      stcgGains: num(f.stcgGains),
+      cryptoGains: num(f.cryptoGains),
+      cryptoTds194S: num(f.cryptoTds194S),
+      fnoNetProfit: num(f.fnoNetProfit),
+      fnoTdsDeducted: num(f.fnoTdsDeducted),
+      fdInterest: num(f.fdInterest),
+      savingsInterest: num(f.savingsInterest),
+      dividends: num(f.dividends),
+      otherInterest: num(f.otherInterest),
+      interestTds: num(f.interestTds),
       createdAt: new Date().toISOString(),
     }
     setOtherIncomeStore(prev => {
@@ -1575,7 +1697,7 @@ function ProfileContent() {
         : [...baseStore.entries, entry]
       return { ...baseStore, entries: updatedEntries }
     })
-    setFreelanceForm(prev => ({ ...prev, open: false }))
+    setIncomeForm(prev => ({ ...prev, open: false }))
     toast.success(f.editingId ? 'Income source updated' : 'Income source added')
   }
   const deleteOtherIncome = (id: string) => {
@@ -2245,7 +2367,7 @@ function ProfileContent() {
                                   </button>
                                 )}
                                 <button onClick={() => salaryRef.current?.click()} style={{ padding:'7px 12px', background:'#fff', color:C.fg, border:`1px solid ${C.border}`, borderRadius:4, fontSize:11.5, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Different — upload slip</button>
-                                <button onClick={() => openFreelanceForm({ fromMonth: empty[0], toMonth: empty[empty.length - 1] })} style={{ padding:'7px 12px', background:'#fff', color:C.fg, border:`1px solid ${C.border}`, borderRadius:4, fontSize:11.5, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Other (freelance / business)</button>
+                                <button onClick={() => openOtherIncomeForm('freelance', { fromMonth: empty[0], toMonth: empty[empty.length - 1] })} style={{ padding:'7px 12px', background:'#fff', color:C.fg, border:`1px solid ${C.border}`, borderRadius:4, fontSize:11.5, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Other (freelance / business)</button>
                                 <button onClick={() => {
                                   // NIL: write empty-component overrides for every empty month, then dismiss notice
                                   setSalaryTimeline(prev => {
@@ -2493,45 +2615,73 @@ function ProfileContent() {
                         <div style={{ padding:'14px 16px', background:'#FAF7F2', borderTop:`1px solid ${C.border}` }}>
                           <p style={{ fontSize:11, color:C.muted, margin:'0 0 10px', textTransform:'uppercase' as const, letterSpacing:'0.04em', fontWeight:600 }}>What type of income?</p>
                           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-                            <button onClick={() => { setOtherIncomeMenuOpen(false); openFreelanceForm() }} style={{ padding:'10px 12px', background:'#fff', border:`1px solid ${C.border}`, borderRadius:5, cursor:'pointer', fontFamily:'inherit', textAlign:'left' as const }}>
+                            <button onClick={() => { setOtherIncomeMenuOpen(false); openOtherIncomeForm('freelance') }} style={{ padding:'10px 12px', background:'#fff', border:`1px solid ${C.border}`, borderRadius:5, cursor:'pointer', fontFamily:'inherit', textAlign:'left' as const }}>
                               <div style={{ fontSize:12.5, fontWeight:600, color:C.text, marginBottom:2 }}>Freelance / Consulting</div>
-                              <div style={{ fontSize:10.5, color:C.muted }}>Section 44ADA or actual income · 194J TDS</div>
+                              <div style={{ fontSize:10.5, color:C.muted }}>Slab rate · 50% taxable under 44ADA, or actual income</div>
                             </button>
-                            <button disabled title="Coming soon" style={{ padding:'10px 12px', background:'#FAFAF8', border:`1px dashed ${C.border}`, borderRadius:5, cursor:'not-allowed', fontFamily:'inherit', textAlign:'left' as const, opacity:0.65 }}>
-                              <div style={{ fontSize:12.5, fontWeight:600, color:C.muted, marginBottom:2 }}>Capital Gains · coming soon</div>
-                              <div style={{ fontSize:10.5, color:C.muted }}>RSUs, mutual funds, stocks, property</div>
+                            <button onClick={() => { setOtherIncomeMenuOpen(false); openOtherIncomeForm('equity') }} style={{ padding:'10px 12px', background:'#fff', border:`1px solid ${C.border}`, borderRadius:5, cursor:'pointer', fontFamily:'inherit', textAlign:'left' as const }}>
+                              <div style={{ fontSize:12.5, fontWeight:600, color:C.text, marginBottom:2 }}>Equity (stocks + mutual funds)</div>
+                              <div style={{ fontSize:10.5, color:C.muted }}>LTCG 12.5% above ₹1.25L · STCG 20% flat</div>
                             </button>
-                            <button disabled title="Coming soon" style={{ padding:'10px 12px', background:'#FAFAF8', border:`1px dashed ${C.border}`, borderRadius:5, cursor:'not-allowed', fontFamily:'inherit', textAlign:'left' as const, opacity:0.65 }}>
-                              <div style={{ fontSize:12.5, fontWeight:600, color:C.muted, marginBottom:2 }}>Rental Income · coming soon</div>
-                              <div style={{ fontSize:10.5, color:C.muted }}>House property, Section 24</div>
+                            <button onClick={() => { setOtherIncomeMenuOpen(false); openOtherIncomeForm('crypto') }} style={{ padding:'10px 12px', background:'#fff', border:`1px solid ${C.border}`, borderRadius:5, cursor:'pointer', fontFamily:'inherit', textAlign:'left' as const }}>
+                              <div style={{ fontSize:12.5, fontWeight:600, color:C.text, marginBottom:2 }}>Crypto / VDA</div>
+                              <div style={{ fontSize:10.5, color:C.muted }}>30% flat · no deductions allowed</div>
                             </button>
-                            <button disabled title="Coming soon" style={{ padding:'10px 12px', background:'#FAFAF8', border:`1px dashed ${C.border}`, borderRadius:5, cursor:'not-allowed', fontFamily:'inherit', textAlign:'left' as const, opacity:0.65 }}>
-                              <div style={{ fontSize:12.5, fontWeight:600, color:C.muted, marginBottom:2 }}>Interest / Dividends · coming soon</div>
-                              <div style={{ fontSize:10.5, color:C.muted }}>Savings, FD, bonds, dividends</div>
+                            <button onClick={() => { setOtherIncomeMenuOpen(false); openOtherIncomeForm('fno_intraday') }} style={{ padding:'10px 12px', background:'#fff', border:`1px solid ${C.border}`, borderRadius:5, cursor:'pointer', fontFamily:'inherit', textAlign:'left' as const }}>
+                              <div style={{ fontSize:12.5, fontWeight:600, color:C.text, marginBottom:2 }}>F&O / Intraday Trading</div>
+                              <div style={{ fontSize:10.5, color:C.muted }}>Slab rate · taxed like salary</div>
+                            </button>
+                            <button onClick={() => { setOtherIncomeMenuOpen(false); openOtherIncomeForm('interest_div') }} style={{ padding:'10px 12px', background:'#fff', border:`1px solid ${C.border}`, borderRadius:5, cursor:'pointer', fontFamily:'inherit', textAlign:'left' as const, gridColumn:'1 / -1' }}>
+                              <div style={{ fontSize:12.5, fontWeight:600, color:C.text, marginBottom:2 }}>Interest, Dividends & Other</div>
+                              <div style={{ fontSize:10.5, color:C.muted }}>FD interest, savings interest, dividends, bond interest · slab rate</div>
                             </button>
                           </div>
                           <button onClick={() => setOtherIncomeMenuOpen(false)} style={{ marginTop:10, padding:'5px 10px', background:'transparent', border:'none', color:C.muted, fontSize:11, cursor:'pointer', fontFamily:'inherit' }}>Cancel</button>
                         </div>
                       )}
                       {otherIncomeStore && otherIncomeStore.entries.map(entry => {
-                        const taxable = computeOtherIncomeTaxable(entry)
+                        const b = computeOtherIncomeTaxable(entry)
+                        const taxable = b.slab + b.equityLtcg + b.equityStcg + b.crypto
+                        // Type label + description line
+                        let typeLabel = ''
+                        let detailLine = ''
+                        if (entry.type === 'freelance') {
+                          typeLabel = 'Freelance'
+                          detailLine = `${monthLabel(entry.fromMonth)} ${entry.toMonth ? `– ${monthLabel(entry.toMonth)}` : '– ongoing'} · ${entry.declarationMethod === 'presumptive_44ada' ? 'Section 44ADA (presumptive)' : 'actual income basis'}`
+                        } else if (entry.type === 'equity') {
+                          typeLabel = 'Equity (stocks + mutual funds)'
+                          const parts: string[] = []
+                          if (entry.ltcgGains > 0) parts.push(`LTCG ${fmt(entry.ltcgGains)}`)
+                          if (entry.stcgGains > 0) parts.push(`STCG ${fmt(entry.stcgGains)}`)
+                          detailLine = parts.join(' · ') || 'no gains entered'
+                        } else if (entry.type === 'crypto') {
+                          typeLabel = 'Crypto / VDA'
+                          detailLine = `Net gains ${fmt(entry.cryptoGains)}${entry.cryptoTds194S > 0 ? ` · TDS 194S ${fmt(entry.cryptoTds194S)}` : ''} · 30% flat`
+                        } else if (entry.type === 'fno_intraday') {
+                          typeLabel = 'F&O / Intraday Trading'
+                          detailLine = `Net profit ${fmt(entry.fnoNetProfit)}${entry.fnoTdsDeducted > 0 ? ` · TDS ${fmt(entry.fnoTdsDeducted)}` : ''} · taxed at slab rate`
+                        } else if (entry.type === 'interest_div') {
+                          typeLabel = 'Interest & Dividends'
+                          const parts: string[] = []
+                          if (entry.fdInterest > 0) parts.push(`FD ${fmt(entry.fdInterest)}`)
+                          if (entry.savingsInterest > 0) parts.push(`Savings ${fmt(entry.savingsInterest)}`)
+                          if (entry.dividends > 0) parts.push(`Dividends ${fmt(entry.dividends)}`)
+                          if (entry.otherInterest > 0) parts.push(`Other ${fmt(entry.otherInterest)}`)
+                          detailLine = parts.join(' · ') || 'no amounts entered'
+                        }
                         return (
                           <div key={entry.id} style={{ padding:'12px 16px', borderTop:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
                             <div style={{ flex:1, minWidth:0 }}>
                               <div style={{ fontSize:13, fontWeight:600, color:C.text, marginBottom:2 }}>{entry.sourceName}</div>
-                              <div style={{ fontSize:11, color:C.muted, marginBottom:3 }}>
-                                Freelance · {monthLabel(entry.fromMonth)} {entry.toMonth ? `– ${monthLabel(entry.toMonth)}` : '– ongoing'} · {entry.declarationMethod === 'presumptive_44ada' ? 'Section 44ADA (presumptive)' : 'actual income basis'}
-                              </div>
-                              <div style={{ fontSize:11, color:C.muted }}>
-                                Gross {fmt(entry.grossReceipts)}{entry.declarationMethod === 'actual' && entry.expenses > 0 ? ` · Expenses ${fmt(entry.expenses)}` : ''}{entry.tdsDeducted > 0 ? ` · TDS deducted ${fmt(entry.tdsDeducted)}` : ''}
-                              </div>
+                              <div style={{ fontSize:11, color:C.muted, marginBottom:3 }}>{typeLabel}</div>
+                              <div style={{ fontSize:11, color:C.muted }}>{detailLine}</div>
                             </div>
                             <div style={{ textAlign:'right' as const, flexShrink:0 }}>
                               <div style={{ fontSize:10, color:C.muted, textTransform:'uppercase' as const, letterSpacing:'0.04em' }}>Taxable</div>
                               <div style={{ fontSize:14, fontWeight:700, color:C.fg, fontVariantNumeric:'tabular-nums' as const }}>{fmt(taxable)}</div>
                             </div>
                             <div style={{ display:'flex', flexDirection:'column' as const, gap:4, flexShrink:0 }}>
-                              <button onClick={() => openFreelanceFormForEdit(entry)} style={{ fontSize:10.5, padding:'3px 8px', borderRadius:3, border:`1px solid ${C.border}`, background:C.card, color:C.fg, cursor:'pointer', fontFamily:'inherit' }}>Edit</button>
+                              <button onClick={() => openOtherIncomeFormForEdit(entry)} style={{ fontSize:10.5, padding:'3px 8px', borderRadius:3, border:`1px solid ${C.border}`, background:C.card, color:C.fg, cursor:'pointer', fontFamily:'inherit' }}>Edit</button>
                               <button onClick={() => deleteOtherIncome(entry.id)} style={{ fontSize:10.5, padding:'3px 8px', borderRadius:3, border:`1px solid ${C.border}`, background:C.card, color:C.danger, cursor:'pointer', fontFamily:'inherit' }}>Delete</button>
                             </div>
                           </div>
@@ -2540,7 +2690,7 @@ function ProfileContent() {
                       {otherIncomeStore && otherIncomeStore.entries.length > 0 && (
                         <div style={{ padding:'10px 16px', background:'#FAFAF8', borderTop:`1px solid ${C.border}`, fontSize:11, color:C.muted, display:'flex', justifyContent:'space-between' }}>
                           <span>Total taxable from other income</span>
-                          <span style={{ fontWeight:700, color:C.text, fontVariantNumeric:'tabular-nums' as const }}>{fmt(otherIncomeStore.entries.reduce((s, e) => s + computeOtherIncomeTaxable(e), 0))}</span>
+                          <span style={{ fontWeight:700, color:C.text, fontVariantNumeric:'tabular-nums' as const }}>{fmt(otherIncomeStore.entries.reduce((s, e) => s + computeOtherIncomeTaxableTotal(e), 0))}</span>
                         </div>
                       )}
                     </div>
@@ -3036,121 +3186,201 @@ function ProfileContent() {
         </div>
       )}
 
-      {/* ── FREELANCE INCOME FORM MODAL (Build 4) ── */}
-      {freelanceForm.open && (() => {
-        const close = () => setFreelanceForm(prev => ({ ...prev, open: false }))
-        // Build month options for From/To dropdowns — wide range
+      {/* ── INCOME FORM MODAL (Build 4 — handles all Other Income types) ── */}
+      {incomeForm.open && (() => {
+        const close = () => setIncomeForm(prev => ({ ...prev, open: false }))
+        const update = <K extends keyof typeof incomeForm>(k: K, v: typeof incomeForm[K]) =>
+          setIncomeForm(prev => ({ ...prev, [k]: v }))
         const fyStart = salaryTimeline?.fyStartYear ?? new Date().getFullYear() - (new Date().getMonth() < 3 ? 1 : 0)
         const months: string[] = []
         for (let y = fyStart - 1; y <= fyStart + 1; y++) {
           for (let m = 1; m <= 12; m++) months.push(`${y}-${String(m).padStart(2, '0')}`)
         }
-        const gross = Number(freelanceForm.grossReceipts) || 0
-        const expenses = Number(freelanceForm.expenses) || 0
-        const previewTaxable = freelanceForm.declarationMethod === 'presumptive_44ada'
-          ? Math.round(gross * 0.5)
-          : Math.max(0, gross - expenses)
+        const num = (s: string) => Number(s) || 0
+        // Title + intro by type
+        const titles: Record<OtherIncomeType, { title: string; intro: string }> = {
+          freelance: { title: incomeForm.editingId ? 'Edit freelance income' : 'Add freelance income', intro: 'Consulting, professional services, independent work. Taxed at slab rate; you can use Section 44ADA (50% deemed taxable) for simplicity.' },
+          equity: { title: incomeForm.editingId ? 'Edit equity gains' : 'Add equity gains', intro: 'Profits from selling stocks or equity mutual funds. Long-term (held > 1 year) taxed at 12.5% above ₹1.25L exemption. Short-term taxed at 20% flat.' },
+          crypto: { title: incomeForm.editingId ? 'Edit crypto gains' : 'Add crypto / VDA gains', intro: 'Profits from crypto trading (BTC, ETH, etc.) and other VDAs. Taxed at flat 30% — no deductions, no loss set-off allowed.' },
+          fno_intraday: { title: incomeForm.editingId ? 'Edit F&O / Intraday income' : 'Add F&O / Intraday income', intro: 'Trading income from F&O contracts and intraday equity. Taxed at your slab rate — same as salary.' },
+          interest_div: { title: incomeForm.editingId ? 'Edit interest & dividends' : 'Add interest & dividends', intro: 'FD interest, savings bank interest, dividends, and other interest income. All taxed at slab rate.' },
+        }
+        const t = titles[incomeForm.type as OtherIncomeType]
+
+        // Live taxable preview by type
+        let previewTaxable = 0, previewLine = ''
+        if (incomeForm.type === 'freelance') {
+          const g = num(incomeForm.grossReceipts), exp = num(incomeForm.expenses)
+          previewTaxable = incomeForm.declarationMethod === 'presumptive_44ada' ? Math.round(g * 0.5) : Math.max(0, g - exp)
+          previewLine = 'Taxable income from this source'
+        } else if (incomeForm.type === 'equity') {
+          const ltcg = num(incomeForm.ltcgGains), stcg = num(incomeForm.stcgGains)
+          // LTCG: 12.5% on amount above ₹1.25L; STCG: 20% flat (just amount, tax computed later)
+          previewTaxable = Math.max(0, ltcg - 125000) + stcg
+          previewLine = `Net taxable equity gains (after ₹1.25L LTCG exemption)`
+        } else if (incomeForm.type === 'crypto') {
+          previewTaxable = num(incomeForm.cryptoGains)
+          previewLine = 'Crypto gains (taxed at 30%)'
+        } else if (incomeForm.type === 'fno_intraday') {
+          previewTaxable = num(incomeForm.fnoNetProfit)
+          previewLine = 'Trading income (taxed at slab rate)'
+        } else if (incomeForm.type === 'interest_div') {
+          previewTaxable = num(incomeForm.fdInterest) + num(incomeForm.savingsInterest) + num(incomeForm.dividends) + num(incomeForm.otherInterest)
+          previewLine = 'Total interest + dividends'
+        }
+        const inputStyle: React.CSSProperties = { width:'100%', padding:'8px 10px', border:`1px solid ${C.border}`, borderRadius:4, fontSize:13, fontFamily:'inherit', fontVariantNumeric:'tabular-nums' as const }
+        const labelStyle: React.CSSProperties = { display:'block', fontSize:11, color:C.muted, marginBottom:4, fontWeight:500 }
         return (
           <div style={{ position:'fixed', inset:0, background:'rgba(28,43,34,0.5)', zIndex:99, display:'flex', alignItems:'center', justifyContent:'center', padding:20, overflow:'auto' }} onClick={close}>
             <div onClick={e=>e.stopPropagation()} style={{ background:'#fff', borderRadius:10, padding:22, maxWidth:560, width:'100%', maxHeight:'90vh', overflow:'auto', boxShadow:'0 12px 40px rgba(0,0,0,0.18)' }}>
-              <p style={{ fontSize:16, fontWeight:700, color:C.text, margin:'0 0 4px' }}>{freelanceForm.editingId ? 'Edit freelance income' : 'Add freelance income'}</p>
-              <p style={{ fontSize:11.5, color:C.muted, margin:'0 0 16px', lineHeight:1.55 }}>
-                Income from consulting, professional services, or independent work. Different tax treatment from salary.
-              </p>
+              <p style={{ fontSize:16, fontWeight:700, color:C.text, margin:'0 0 4px' }}>{t.title}</p>
+              <p style={{ fontSize:11.5, color:C.muted, margin:'0 0 16px', lineHeight:1.55 }}>{t.intro}</p>
 
               <div style={{ display:'flex', flexDirection:'column' as const, gap:14 }}>
+                {/* Common: source name */}
                 <div>
-                  <label style={{ display:'block', fontSize:11, color:C.muted, marginBottom:4, fontWeight:500 }}>Source name</label>
-                  <input
-                    type="text"
-                    value={freelanceForm.sourceName}
-                    onChange={e => setFreelanceForm(prev => ({ ...prev, sourceName: e.target.value }))}
-                    placeholder="e.g. Consulting clients, Writing gigs"
-                    style={{ width:'100%', padding:'8px 10px', border:`1px solid ${C.border}`, borderRadius:4, fontSize:13, fontFamily:'inherit' }}
-                  />
+                  <label style={labelStyle}>Source name</label>
+                  <input type="text" value={incomeForm.sourceName} onChange={e => update('sourceName', e.target.value)} placeholder={incomeForm.type === 'freelance' ? 'e.g. Consulting clients' : 'e.g. Zerodha account'} style={{ ...inputStyle, fontVariantNumeric:'normal' }} />
                 </div>
 
-                <div>
-                  <label style={{ display:'block', fontSize:11, color:C.muted, marginBottom:4, fontWeight:500 }}>Period</label>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-                    <div>
-                      <p style={{ fontSize:10, color:C.muted, margin:'0 0 3px' }}>From</p>
-                      <select value={freelanceForm.fromMonth} onChange={e => setFreelanceForm(prev => ({ ...prev, fromMonth: e.target.value }))} style={{ width:'100%', padding:'8px 10px', border:`1px solid ${C.border}`, borderRadius:4, fontSize:13, fontFamily:'inherit', background:'#fff' }}>
-                        {months.map(mk => <option key={mk} value={mk}>{monthLabel(mk)}</option>)}
-                      </select>
+                {/* Common: period (only for freelance and fno_intraday — others are point-in-time) */}
+                {(incomeForm.type === 'freelance' || incomeForm.type === 'fno_intraday') && (
+                  <div>
+                    <label style={labelStyle}>Period</label>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                      <div>
+                        <p style={{ fontSize:10, color:C.muted, margin:'0 0 3px' }}>From</p>
+                        <select value={incomeForm.fromMonth} onChange={e => update('fromMonth', e.target.value)} style={{ ...inputStyle, background:'#fff' }}>
+                          {months.map(mk => <option key={mk} value={mk}>{monthLabel(mk)}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <p style={{ fontSize:10, color:C.muted, margin:'0 0 3px' }}>To {incomeForm.ongoing && <span style={{ color:C.muted, fontStyle:'italic' as const }}>(ongoing)</span>}</p>
+                        <select value={incomeForm.toMonth} onChange={e => update('toMonth', e.target.value)} disabled={incomeForm.ongoing} style={{ ...inputStyle, background: incomeForm.ongoing ? '#FAFAF8' : '#fff', color: incomeForm.ongoing ? C.muted : C.text }}>
+                          {months.map(mk => <option key={mk} value={mk}>{monthLabel(mk)}</option>)}
+                        </select>
+                      </div>
                     </div>
-                    <div>
-                      <p style={{ fontSize:10, color:C.muted, margin:'0 0 3px' }}>To {freelanceForm.ongoing && <span style={{ color:C.muted, fontStyle:'italic' as const }}>(ongoing)</span>}</p>
-                      <select value={freelanceForm.toMonth} onChange={e => setFreelanceForm(prev => ({ ...prev, toMonth: e.target.value }))} disabled={freelanceForm.ongoing} style={{ width:'100%', padding:'8px 10px', border:`1px solid ${C.border}`, borderRadius:4, fontSize:13, fontFamily:'inherit', background: freelanceForm.ongoing ? '#FAFAF8' : '#fff', color: freelanceForm.ongoing ? C.muted : C.text }}>
-                        {months.map(mk => <option key={mk} value={mk}>{monthLabel(mk)}</option>)}
-                      </select>
-                    </div>
+                    <label style={{ display:'flex', alignItems:'center', gap:6, marginTop:8, fontSize:11.5, color:C.text, cursor:'pointer' }}>
+                      <input type="checkbox" checked={incomeForm.ongoing} onChange={e => update('ongoing', e.target.checked)} />
+                      Still ongoing
+                    </label>
                   </div>
-                  <label style={{ display:'flex', alignItems:'center', gap:6, marginTop:8, fontSize:11.5, color:C.text, cursor:'pointer' }}>
-                    <input type="checkbox" checked={freelanceForm.ongoing} onChange={e => setFreelanceForm(prev => ({ ...prev, ongoing: e.target.checked }))} />
-                    Still ongoing
-                  </label>
-                </div>
+                )}
 
-                <div>
-                  <label style={{ display:'block', fontSize:11, color:C.muted, marginBottom:4, fontWeight:500 }}>Gross receipts (total earned across period)</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={freelanceForm.grossReceipts}
-                    onChange={e => setFreelanceForm(prev => ({ ...prev, grossReceipts: e.target.value.replace(/[^0-9]/g, '') }))}
-                    placeholder="₹ 0"
-                    style={{ width:'100%', padding:'8px 10px', border:`1px solid ${C.border}`, borderRadius:4, fontSize:13, fontFamily:'inherit', fontVariantNumeric:'tabular-nums' as const }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display:'block', fontSize:11, color:C.muted, marginBottom:4, fontWeight:500 }}>TDS deducted by clients (Section 194J)</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={freelanceForm.tdsDeducted}
-                    onChange={e => setFreelanceForm(prev => ({ ...prev, tdsDeducted: e.target.value.replace(/[^0-9]/g, '') }))}
-                    placeholder="₹ 0 (leave blank if no TDS was deducted)"
-                    style={{ width:'100%', padding:'8px 10px', border:`1px solid ${C.border}`, borderRadius:4, fontSize:13, fontFamily:'inherit', fontVariantNumeric:'tabular-nums' as const }}
-                  />
-                </div>
-
-                <div style={{ padding:'12px 14px', background:'#FAF7F2', borderRadius:5, border:`1px solid ${C.border}` }}>
-                  <label style={{ display:'block', fontSize:11.5, color:C.text, marginBottom:8, fontWeight:600 }}>How do you want to declare this income?</label>
-                  <label style={{ display:'flex', alignItems:'flex-start', gap:8, marginBottom:8, cursor:'pointer' }}>
-                    <input type="radio" checked={freelanceForm.declarationMethod === 'presumptive_44ada'} onChange={() => setFreelanceForm(prev => ({ ...prev, declarationMethod: 'presumptive_44ada' }))} style={{ marginTop:3 }} />
+                {/* ─── FREELANCE type fields ─── */}
+                {incomeForm.type === 'freelance' && (
+                  <>
                     <div>
-                      <div style={{ fontSize:12, color:C.text, fontWeight:500 }}>Section 44ADA presumptive (recommended)</div>
-                      <div style={{ fontSize:10.5, color:C.muted, lineHeight:1.5 }}>Declare 50% of gross as taxable. No need to maintain books or prove expenses. Best for gross ≤ ₹75L.</div>
+                      <label style={labelStyle}>Gross receipts (total earned across period)</label>
+                      <input type="text" inputMode="numeric" value={incomeForm.grossReceipts} onChange={e => update('grossReceipts', e.target.value.replace(/[^0-9]/g, ''))} placeholder="₹ 0" style={inputStyle} />
                     </div>
-                  </label>
-                  <label style={{ display:'flex', alignItems:'flex-start', gap:8, cursor:'pointer' }}>
-                    <input type="radio" checked={freelanceForm.declarationMethod === 'actual'} onChange={() => setFreelanceForm(prev => ({ ...prev, declarationMethod: 'actual' }))} style={{ marginTop:3 }} />
                     <div>
-                      <div style={{ fontSize:12, color:C.text, fontWeight:500 }}>Actual income (gross minus expenses)</div>
-                      <div style={{ fontSize:10.5, color:C.muted, lineHeight:1.5 }}>Track actual expenses (laptop, software, travel, co-working etc.) and deduct them. Need proper records.</div>
+                      <label style={labelStyle}>TDS deducted by clients (Section 194J)</label>
+                      <input type="text" inputMode="numeric" value={incomeForm.tdsDeducted} onChange={e => update('tdsDeducted', e.target.value.replace(/[^0-9]/g, ''))} placeholder="₹ 0 (leave blank if no TDS)" style={inputStyle} />
                     </div>
-                  </label>
-
-                  {freelanceForm.declarationMethod === 'actual' && (
-                    <div style={{ marginTop:10 }}>
-                      <label style={{ display:'block', fontSize:11, color:C.muted, marginBottom:4 }}>Work-related expenses</label>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={freelanceForm.expenses}
-                        onChange={e => setFreelanceForm(prev => ({ ...prev, expenses: e.target.value.replace(/[^0-9]/g, '') }))}
-                        placeholder="₹ 0"
-                        style={{ width:'100%', padding:'7px 10px', border:`1px solid ${C.border}`, borderRadius:4, fontSize:12.5, fontFamily:'inherit', fontVariantNumeric:'tabular-nums' as const, background:'#fff' }}
-                      />
+                    <div style={{ padding:'12px 14px', background:'#FAF7F2', borderRadius:5, border:`1px solid ${C.border}` }}>
+                      <label style={{ display:'block', fontSize:11.5, color:C.text, marginBottom:8, fontWeight:600 }}>How do you want to declare this income?</label>
+                      <label style={{ display:'flex', alignItems:'flex-start', gap:8, marginBottom:8, cursor:'pointer' }}>
+                        <input type="radio" checked={incomeForm.declarationMethod === 'presumptive_44ada'} onChange={() => update('declarationMethod', 'presumptive_44ada')} style={{ marginTop:3 }} />
+                        <div>
+                          <div style={{ fontSize:12, color:C.text, fontWeight:500 }}>Section 44ADA presumptive (recommended)</div>
+                          <div style={{ fontSize:10.5, color:C.muted, lineHeight:1.5 }}>Declare 50% of gross as taxable. No books or expense proof needed. Best for gross ≤ ₹75L.</div>
+                        </div>
+                      </label>
+                      <label style={{ display:'flex', alignItems:'flex-start', gap:8, cursor:'pointer' }}>
+                        <input type="radio" checked={incomeForm.declarationMethod === 'actual'} onChange={() => update('declarationMethod', 'actual')} style={{ marginTop:3 }} />
+                        <div>
+                          <div style={{ fontSize:12, color:C.text, fontWeight:500 }}>Actual income (gross minus expenses)</div>
+                          <div style={{ fontSize:10.5, color:C.muted, lineHeight:1.5 }}>Track actual expenses (laptop, software, travel etc.). Need proper records.</div>
+                        </div>
+                      </label>
+                      {incomeForm.declarationMethod === 'actual' && (
+                        <div style={{ marginTop:10 }}>
+                          <label style={{ display:'block', fontSize:11, color:C.muted, marginBottom:4 }}>Work-related expenses</label>
+                          <input type="text" inputMode="numeric" value={incomeForm.expenses} onChange={e => update('expenses', e.target.value.replace(/[^0-9]/g, ''))} placeholder="₹ 0" style={{ ...inputStyle, padding:'7px 10px', fontSize:12.5, background:'#fff' }} />
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  </>
+                )}
 
-                {gross > 0 && (
+                {/* ─── EQUITY type fields ─── */}
+                {incomeForm.type === 'equity' && (
+                  <>
+                    <div>
+                      <label style={labelStyle}>Long-term gains (LTCG) — held more than 1 year</label>
+                      <input type="text" inputMode="numeric" value={incomeForm.ltcgGains} onChange={e => update('ltcgGains', e.target.value.replace(/[^0-9]/g, ''))} placeholder="₹ 0" style={inputStyle} />
+                      <p style={{ fontSize:10.5, color:C.muted, margin:'3px 0 0', lineHeight:1.4 }}>First ₹1,25,000 is exempt. Anything above is taxed at 12.5%.</p>
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Short-term gains (STCG) — held 1 year or less</label>
+                      <input type="text" inputMode="numeric" value={incomeForm.stcgGains} onChange={e => update('stcgGains', e.target.value.replace(/[^0-9]/g, ''))} placeholder="₹ 0" style={inputStyle} />
+                      <p style={{ fontSize:10.5, color:C.muted, margin:'3px 0 0', lineHeight:1.4 }}>Taxed at 20% flat (regardless of your slab).</p>
+                    </div>
+                  </>
+                )}
+
+                {/* ─── CRYPTO type fields ─── */}
+                {incomeForm.type === 'crypto' && (
+                  <>
+                    <div>
+                      <label style={labelStyle}>Net gains from crypto / VDA trading</label>
+                      <input type="text" inputMode="numeric" value={incomeForm.cryptoGains} onChange={e => update('cryptoGains', e.target.value.replace(/[^0-9]/g, ''))} placeholder="₹ 0" style={inputStyle} />
+                      <p style={{ fontSize:10.5, color:C.muted, margin:'3px 0 0', lineHeight:1.4 }}>Total profit across all crypto trades this year. Losses can't be set off against any income — enter ₹0 if you had a net loss.</p>
+                    </div>
+                    <div>
+                      <label style={labelStyle}>TDS deducted (Section 194S — usually 1% of transaction value)</label>
+                      <input type="text" inputMode="numeric" value={incomeForm.cryptoTds194S} onChange={e => update('cryptoTds194S', e.target.value.replace(/[^0-9]/g, ''))} placeholder="₹ 0" style={inputStyle} />
+                    </div>
+                  </>
+                )}
+
+                {/* ─── F&O / INTRADAY type fields ─── */}
+                {incomeForm.type === 'fno_intraday' && (
+                  <>
+                    <div>
+                      <label style={labelStyle}>Net profit from F&O / Intraday trading</label>
+                      <input type="text" inputMode="numeric" value={incomeForm.fnoNetProfit} onChange={e => update('fnoNetProfit', e.target.value.replace(/[^0-9]/g, ''))} placeholder="₹ 0" style={inputStyle} />
+                      <p style={{ fontSize:10.5, color:C.muted, margin:'3px 0 0', lineHeight:1.4 }}>Your broker's P&L statement shows this. Enter net profit after broker charges. If you had a net loss, enter ₹0.</p>
+                    </div>
+                    <div>
+                      <label style={labelStyle}>TDS deducted (if any)</label>
+                      <input type="text" inputMode="numeric" value={incomeForm.fnoTdsDeducted} onChange={e => update('fnoTdsDeducted', e.target.value.replace(/[^0-9]/g, ''))} placeholder="₹ 0" style={inputStyle} />
+                    </div>
+                  </>
+                )}
+
+                {/* ─── INTEREST / DIVIDENDS type fields ─── */}
+                {incomeForm.type === 'interest_div' && (
+                  <>
+                    <div>
+                      <label style={labelStyle}>FD interest earned this year</label>
+                      <input type="text" inputMode="numeric" value={incomeForm.fdInterest} onChange={e => update('fdInterest', e.target.value.replace(/[^0-9]/g, ''))} placeholder="₹ 0" style={inputStyle} />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Savings account interest earned this year</label>
+                      <input type="text" inputMode="numeric" value={incomeForm.savingsInterest} onChange={e => update('savingsInterest', e.target.value.replace(/[^0-9]/g, ''))} placeholder="₹ 0" style={inputStyle} />
+                      <p style={{ fontSize:10.5, color:C.muted, margin:'3px 0 0', lineHeight:1.4 }}>Up to ₹10,000 will auto-apply as a deduction (Section 80TTA) in Tax Optimiser.</p>
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Dividends received this year</label>
+                      <input type="text" inputMode="numeric" value={incomeForm.dividends} onChange={e => update('dividends', e.target.value.replace(/[^0-9]/g, ''))} placeholder="₹ 0" style={inputStyle} />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Other interest (bonds, NSC, post office)</label>
+                      <input type="text" inputMode="numeric" value={incomeForm.otherInterest} onChange={e => update('otherInterest', e.target.value.replace(/[^0-9]/g, ''))} placeholder="₹ 0" style={inputStyle} />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>TDS deducted on the above (if any)</label>
+                      <input type="text" inputMode="numeric" value={incomeForm.interestTds} onChange={e => update('interestTds', e.target.value.replace(/[^0-9]/g, ''))} placeholder="₹ 0" style={inputStyle} />
+                    </div>
+                  </>
+                )}
+
+                {previewTaxable > 0 && (
                   <div style={{ padding:'10px 12px', background:C.wl, border:`1px solid ${C.wm}`, borderRadius:5, fontSize:12, color:C.fg, display:'flex', justifyContent:'space-between' }}>
-                    <span>Taxable income from this source</span>
+                    <span>{previewLine}</span>
                     <span style={{ fontWeight:700, fontVariantNumeric:'tabular-nums' as const }}>{fmt(previewTaxable)}</span>
                   </div>
                 )}
@@ -3158,7 +3388,7 @@ function ProfileContent() {
 
               <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:18 }}>
                 <button onClick={close} style={{ padding:'9px 16px', background:'#fff', color:C.muted, border:`1px solid ${C.border}`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit' }}>Cancel</button>
-                <button onClick={saveFreelanceForm} style={{ padding:'9px 18px', background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>{freelanceForm.editingId ? 'Save changes' : 'Add income source'}</button>
+                <button onClick={saveIncomeForm} style={{ padding:'9px 18px', background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>{incomeForm.editingId ? 'Save changes' : 'Add income source'}</button>
               </div>
             </div>
           </div>
