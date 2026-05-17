@@ -309,6 +309,33 @@ interface SalaryTimeline {
   overrides: MonthOverride[]         // user-edited projected months
 }
 
+// ─── Other Income types (Build 4: non-salary income heads) ───────────────────
+type OtherIncomeType = 'freelance' | 'capital_gains' | 'rental' | 'other'
+interface OtherIncomeEntry {
+  id: string
+  type: OtherIncomeType
+  sourceName: string                                          // user label, e.g. "Consulting clients"
+  fromMonth: string                                           // "2025-04"
+  toMonth: string | null                                      // null = ongoing
+  // Freelance fields
+  grossReceipts: number
+  expenses: number                                            // 0 if presumptive
+  tdsDeducted: number                                         // 194J TDS
+  declarationMethod: 'presumptive_44ada' | 'actual'
+  createdAt: string
+}
+interface OtherIncomeStore {
+  fy: string
+  fyStartYear: number
+  entries: OtherIncomeEntry[]
+}
+// Compute taxable income from one OtherIncomeEntry
+function computeOtherIncomeTaxable(e: OtherIncomeEntry): number {
+  if (e.type !== 'freelance') return 0   // other heads not yet supported
+  if (e.declarationMethod === 'presumptive_44ada') return Math.round(e.grossReceipts * 0.5)
+  return Math.max(0, e.grossReceipts - e.expenses)
+}
+
 // Default classification of components — recurring unless name suggests one-time
 const ONE_TIME_KEYWORDS = ['BONUS', 'INCENTIVE', 'ARREAR', 'LTA', 'LEAVE TRAVEL', 'LEAVE ENCASH', 'GRATUITY', 'JOINING', 'RETENTION', 'VARIABLE', 'PERFORMANCE', 'AWARD', 'EX-GRATIA', 'EX GRATIA', 'REIMBURSEM']
 function classifyComponent(label: string): 'recurring' | 'one_time' {
@@ -689,6 +716,9 @@ function ProfileContent() {
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
   const [intelligence, setIntelligence] = useState<IntelligenceReport | null>(null)
   const [salaryTimeline, setSalaryTimeline] = useState<SalaryTimeline | null>(null)
+  const [otherIncomeStore, setOtherIncomeStore] = useState<OtherIncomeStore | null>(null)
+  const [freelanceForm, setFreelanceForm] = useState<{ open: boolean; editingId: string | null; sourceName: string; fromMonth: string; toMonth: string; ongoing: boolean; grossReceipts: string; expenses: string; tdsDeducted: string; declarationMethod: 'presumptive_44ada' | 'actual' }>({ open: false, editingId: null, sourceName: '', fromMonth: '', toMonth: '', ongoing: false, grossReceipts: '', expenses: '', tdsDeducted: '', declarationMethod: 'presumptive_44ada' })
+  const [otherIncomeMenuOpen, setOtherIncomeMenuOpen] = useState(false)
   const [salaryComponentsExpanded, setSalaryComponentsExpanded] = useState(true)
   const [salaryMonthEditor, setSalaryMonthEditor] = useState<{ open: boolean; monthKey: string | null }>({ open: false, monthKey: null })
   const [pendingMonthIntent, setPendingMonthIntent] = useState<string | null>(null)
@@ -797,6 +827,10 @@ function ProfileContent() {
       if (uc) setUserClassifications(JSON.parse(uc))
       const stl = localStorage.getItem('av_salary_timeline')
       if (stl) setSalaryTimeline(JSON.parse(stl))
+      const ois = localStorage.getItem('av_other_income')
+      if (ois) {
+        try { setOtherIncomeStore(JSON.parse(ois)) } catch {}
+      }
       const sct = localStorage.getItem('av_salary_cta')
       if (sct) {
         try {
@@ -932,6 +966,12 @@ function ProfileContent() {
       else localStorage.removeItem('av_salary_timeline')
     } catch {}
   }, [salaryTimeline])
+  useEffect(() => {
+    try {
+      if (otherIncomeStore) localStorage.setItem('av_other_income', JSON.stringify(otherIncomeStore))
+      else localStorage.removeItem('av_other_income')
+    } catch {}
+  }, [otherIncomeStore])
   useEffect(() => {
     try { localStorage.setItem('av_salary_cta', JSON.stringify(taxCta)) } catch {}
   }, [taxCta])
@@ -1482,6 +1522,68 @@ function ProfileContent() {
 
   // Add slip to timeline — auto-detects same employer / hike / new employer
   // Prompts user only when ambiguous (employer name change OR basic salary jump >5%)
+  // ─── Other Income helpers (Build 4) ─────────────────────────────────────
+  const openFreelanceForm = (gapRange?: { fromMonth: string; toMonth: string }) => {
+    const fyStart = salaryTimeline?.fyStartYear ?? new Date().getFullYear() - (new Date().getMonth() < 3 ? 1 : 0)
+    const defaultFrom = gapRange?.fromMonth || `${fyStart}-04`
+    const defaultTo = gapRange?.toMonth || `${fyStart + 1}-03`
+    setFreelanceForm({
+      open: true, editingId: null, sourceName: '',
+      fromMonth: defaultFrom, toMonth: defaultTo, ongoing: false,
+      grossReceipts: '', expenses: '', tdsDeducted: '',
+      declarationMethod: 'presumptive_44ada',
+    })
+  }
+  const openFreelanceFormForEdit = (entry: OtherIncomeEntry) => {
+    setFreelanceForm({
+      open: true, editingId: entry.id, sourceName: entry.sourceName,
+      fromMonth: entry.fromMonth, toMonth: entry.toMonth || '', ongoing: entry.toMonth === null,
+      grossReceipts: entry.grossReceipts > 0 ? String(entry.grossReceipts) : '',
+      expenses: entry.expenses > 0 ? String(entry.expenses) : '',
+      tdsDeducted: entry.tdsDeducted > 0 ? String(entry.tdsDeducted) : '',
+      declarationMethod: entry.declarationMethod,
+    })
+  }
+  const saveFreelanceForm = () => {
+    const f = freelanceForm
+    const gross = Number(f.grossReceipts) || 0
+    if (gross <= 0) { toast.error('Enter gross receipts'); return }
+    if (!f.sourceName.trim()) { toast.error('Give this income source a name'); return }
+    if (!f.ongoing && f.fromMonth > f.toMonth) { toast.error('From month must be earlier than To month'); return }
+    const expenses = Number(f.expenses) || 0
+    const tds = Number(f.tdsDeducted) || 0
+    if (f.declarationMethod === 'actual' && expenses > gross) {
+      toast.error('Expenses cannot exceed gross receipts'); return
+    }
+    const entry: OtherIncomeEntry = {
+      id: f.editingId || uid(),
+      type: 'freelance',
+      sourceName: f.sourceName.trim(),
+      fromMonth: f.fromMonth,
+      toMonth: f.ongoing ? null : f.toMonth,
+      grossReceipts: gross,
+      expenses: f.declarationMethod === 'presumptive_44ada' ? 0 : expenses,
+      tdsDeducted: tds,
+      declarationMethod: f.declarationMethod,
+      createdAt: new Date().toISOString(),
+    }
+    setOtherIncomeStore(prev => {
+      const fyStart = salaryTimeline?.fyStartYear ?? new Date().getFullYear() - (new Date().getMonth() < 3 ? 1 : 0)
+      const baseStore: OtherIncomeStore = prev || { fy: `FY ${fyStart}-${String(fyStart + 1).slice(-2)}`, fyStartYear: fyStart, entries: [] }
+      const updatedEntries = f.editingId
+        ? baseStore.entries.map(e => e.id === f.editingId ? entry : e)
+        : [...baseStore.entries, entry]
+      return { ...baseStore, entries: updatedEntries }
+    })
+    setFreelanceForm(prev => ({ ...prev, open: false }))
+    toast.success(f.editingId ? 'Income source updated' : 'Income source added')
+  }
+  const deleteOtherIncome = (id: string) => {
+    if (!confirm('Delete this income source?')) return
+    setOtherIncomeStore(prev => prev ? { ...prev, entries: prev.entries.filter(e => e.id !== id) } : prev)
+    toast.success('Removed')
+  }
+
   const addSlipToTimeline = (slip: SlipData, toastId?: string) => {
     // Reset dismissed empty-months notice — uploading a new slip may have closed a gap
     setEmptyMonthsDismissed(false)
@@ -2143,7 +2245,7 @@ function ProfileContent() {
                                   </button>
                                 )}
                                 <button onClick={() => salaryRef.current?.click()} style={{ padding:'7px 12px', background:'#fff', color:C.fg, border:`1px solid ${C.border}`, borderRadius:4, fontSize:11.5, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Different — upload slip</button>
-                                <button onClick={() => setOtherIncomeModal({ open: true })} style={{ padding:'7px 12px', background:'#fff', color:C.fg, border:`1px solid ${C.border}`, borderRadius:4, fontSize:11.5, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Other (freelance / business)</button>
+                                <button onClick={() => openFreelanceForm({ fromMonth: empty[0], toMonth: empty[empty.length - 1] })} style={{ padding:'7px 12px', background:'#fff', color:C.fg, border:`1px solid ${C.border}`, borderRadius:4, fontSize:11.5, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Other (freelance / business)</button>
                                 <button onClick={() => {
                                   // NIL: write empty-component overrides for every empty month, then dismiss notice
                                   setSalaryTimeline(prev => {
@@ -2369,6 +2471,78 @@ function ProfileContent() {
                       <div style={S.row}><span>Total earnings</span><span style={{ fontWeight:600 }}>{fmt(annual.annualGross)}</span></div>
                       <div style={S.row}><span>Total deductions</span><span style={{ fontWeight:600, color:C.danger }}>−{fmt(annual.annualDeductions)}</span></div>
                       <div style={{ ...S.row, background:C.wl, fontWeight:700 }}><span>Net annual</span><span style={{ color:'#2A7A4A' }}>{fmt(annual.annualNet)}</span></div>
+                    </div>
+
+                    {/* ── Other Income section (Build 4) ── */}
+                    <div style={S.card}>
+                      <div style={{ ...S.cardHead, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                        <span>Other Income</span>
+                        {otherIncomeStore && otherIncomeStore.entries.length > 0 && (
+                          <button onClick={() => setOtherIncomeMenuOpen(v => !v)} style={{ fontSize:11, padding:'4px 10px', background:C.fg, color:C.wheat, border:'none', borderRadius:3, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>+ Add source</button>
+                        )}
+                      </div>
+                      {(!otherIncomeStore || otherIncomeStore.entries.length === 0) && !otherIncomeMenuOpen && (
+                        <div style={{ padding:'18px 16px' }}>
+                          <p style={{ fontSize:12, color:C.muted, margin:'0 0 12px', lineHeight:1.55 }}>
+                            Have income beyond salary? Freelance, business, rental, capital gains, interest. Add it here so your tax math is accurate.
+                          </p>
+                          <button onClick={() => setOtherIncomeMenuOpen(true)} style={{ padding:'8px 14px', background:C.fg, color:C.wheat, border:'none', borderRadius:4, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>+ Add an income source</button>
+                        </div>
+                      )}
+                      {otherIncomeMenuOpen && (
+                        <div style={{ padding:'14px 16px', background:'#FAF7F2', borderTop:`1px solid ${C.border}` }}>
+                          <p style={{ fontSize:11, color:C.muted, margin:'0 0 10px', textTransform:'uppercase' as const, letterSpacing:'0.04em', fontWeight:600 }}>What type of income?</p>
+                          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                            <button onClick={() => { setOtherIncomeMenuOpen(false); openFreelanceForm() }} style={{ padding:'10px 12px', background:'#fff', border:`1px solid ${C.border}`, borderRadius:5, cursor:'pointer', fontFamily:'inherit', textAlign:'left' as const }}>
+                              <div style={{ fontSize:12.5, fontWeight:600, color:C.text, marginBottom:2 }}>Freelance / Consulting</div>
+                              <div style={{ fontSize:10.5, color:C.muted }}>Section 44ADA or actual income · 194J TDS</div>
+                            </button>
+                            <button disabled title="Coming soon" style={{ padding:'10px 12px', background:'#FAFAF8', border:`1px dashed ${C.border}`, borderRadius:5, cursor:'not-allowed', fontFamily:'inherit', textAlign:'left' as const, opacity:0.65 }}>
+                              <div style={{ fontSize:12.5, fontWeight:600, color:C.muted, marginBottom:2 }}>Capital Gains · coming soon</div>
+                              <div style={{ fontSize:10.5, color:C.muted }}>RSUs, mutual funds, stocks, property</div>
+                            </button>
+                            <button disabled title="Coming soon" style={{ padding:'10px 12px', background:'#FAFAF8', border:`1px dashed ${C.border}`, borderRadius:5, cursor:'not-allowed', fontFamily:'inherit', textAlign:'left' as const, opacity:0.65 }}>
+                              <div style={{ fontSize:12.5, fontWeight:600, color:C.muted, marginBottom:2 }}>Rental Income · coming soon</div>
+                              <div style={{ fontSize:10.5, color:C.muted }}>House property, Section 24</div>
+                            </button>
+                            <button disabled title="Coming soon" style={{ padding:'10px 12px', background:'#FAFAF8', border:`1px dashed ${C.border}`, borderRadius:5, cursor:'not-allowed', fontFamily:'inherit', textAlign:'left' as const, opacity:0.65 }}>
+                              <div style={{ fontSize:12.5, fontWeight:600, color:C.muted, marginBottom:2 }}>Interest / Dividends · coming soon</div>
+                              <div style={{ fontSize:10.5, color:C.muted }}>Savings, FD, bonds, dividends</div>
+                            </button>
+                          </div>
+                          <button onClick={() => setOtherIncomeMenuOpen(false)} style={{ marginTop:10, padding:'5px 10px', background:'transparent', border:'none', color:C.muted, fontSize:11, cursor:'pointer', fontFamily:'inherit' }}>Cancel</button>
+                        </div>
+                      )}
+                      {otherIncomeStore && otherIncomeStore.entries.map(entry => {
+                        const taxable = computeOtherIncomeTaxable(entry)
+                        return (
+                          <div key={entry.id} style={{ padding:'12px 16px', borderTop:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
+                            <div style={{ flex:1, minWidth:0 }}>
+                              <div style={{ fontSize:13, fontWeight:600, color:C.text, marginBottom:2 }}>{entry.sourceName}</div>
+                              <div style={{ fontSize:11, color:C.muted, marginBottom:3 }}>
+                                Freelance · {monthLabel(entry.fromMonth)} {entry.toMonth ? `– ${monthLabel(entry.toMonth)}` : '– ongoing'} · {entry.declarationMethod === 'presumptive_44ada' ? 'Section 44ADA (presumptive)' : 'actual income basis'}
+                              </div>
+                              <div style={{ fontSize:11, color:C.muted }}>
+                                Gross {fmt(entry.grossReceipts)}{entry.declarationMethod === 'actual' && entry.expenses > 0 ? ` · Expenses ${fmt(entry.expenses)}` : ''}{entry.tdsDeducted > 0 ? ` · TDS deducted ${fmt(entry.tdsDeducted)}` : ''}
+                              </div>
+                            </div>
+                            <div style={{ textAlign:'right' as const, flexShrink:0 }}>
+                              <div style={{ fontSize:10, color:C.muted, textTransform:'uppercase' as const, letterSpacing:'0.04em' }}>Taxable</div>
+                              <div style={{ fontSize:14, fontWeight:700, color:C.fg, fontVariantNumeric:'tabular-nums' as const }}>{fmt(taxable)}</div>
+                            </div>
+                            <div style={{ display:'flex', flexDirection:'column' as const, gap:4, flexShrink:0 }}>
+                              <button onClick={() => openFreelanceFormForEdit(entry)} style={{ fontSize:10.5, padding:'3px 8px', borderRadius:3, border:`1px solid ${C.border}`, background:C.card, color:C.fg, cursor:'pointer', fontFamily:'inherit' }}>Edit</button>
+                              <button onClick={() => deleteOtherIncome(entry.id)} style={{ fontSize:10.5, padding:'3px 8px', borderRadius:3, border:`1px solid ${C.border}`, background:C.card, color:C.danger, cursor:'pointer', fontFamily:'inherit' }}>Delete</button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                      {otherIncomeStore && otherIncomeStore.entries.length > 0 && (
+                        <div style={{ padding:'10px 16px', background:'#FAFAF8', borderTop:`1px solid ${C.border}`, fontSize:11, color:C.muted, display:'flex', justifyContent:'space-between' }}>
+                          <span>Total taxable from other income</span>
+                          <span style={{ fontWeight:700, color:C.text, fontVariantNumeric:'tabular-nums' as const }}>{fmt(otherIncomeStore.entries.reduce((s, e) => s + computeOtherIncomeTaxable(e), 0))}</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* ── CTA: continue to Tax Optimiser ── */}
@@ -2861,6 +3035,135 @@ function ProfileContent() {
           </div>
         </div>
       )}
+
+      {/* ── FREELANCE INCOME FORM MODAL (Build 4) ── */}
+      {freelanceForm.open && (() => {
+        const close = () => setFreelanceForm(prev => ({ ...prev, open: false }))
+        // Build month options for From/To dropdowns — wide range
+        const fyStart = salaryTimeline?.fyStartYear ?? new Date().getFullYear() - (new Date().getMonth() < 3 ? 1 : 0)
+        const months: string[] = []
+        for (let y = fyStart - 1; y <= fyStart + 1; y++) {
+          for (let m = 1; m <= 12; m++) months.push(`${y}-${String(m).padStart(2, '0')}`)
+        }
+        const gross = Number(freelanceForm.grossReceipts) || 0
+        const expenses = Number(freelanceForm.expenses) || 0
+        const previewTaxable = freelanceForm.declarationMethod === 'presumptive_44ada'
+          ? Math.round(gross * 0.5)
+          : Math.max(0, gross - expenses)
+        return (
+          <div style={{ position:'fixed', inset:0, background:'rgba(28,43,34,0.5)', zIndex:99, display:'flex', alignItems:'center', justifyContent:'center', padding:20, overflow:'auto' }} onClick={close}>
+            <div onClick={e=>e.stopPropagation()} style={{ background:'#fff', borderRadius:10, padding:22, maxWidth:560, width:'100%', maxHeight:'90vh', overflow:'auto', boxShadow:'0 12px 40px rgba(0,0,0,0.18)' }}>
+              <p style={{ fontSize:16, fontWeight:700, color:C.text, margin:'0 0 4px' }}>{freelanceForm.editingId ? 'Edit freelance income' : 'Add freelance income'}</p>
+              <p style={{ fontSize:11.5, color:C.muted, margin:'0 0 16px', lineHeight:1.55 }}>
+                Income from consulting, professional services, or independent work. Different tax treatment from salary.
+              </p>
+
+              <div style={{ display:'flex', flexDirection:'column' as const, gap:14 }}>
+                <div>
+                  <label style={{ display:'block', fontSize:11, color:C.muted, marginBottom:4, fontWeight:500 }}>Source name</label>
+                  <input
+                    type="text"
+                    value={freelanceForm.sourceName}
+                    onChange={e => setFreelanceForm(prev => ({ ...prev, sourceName: e.target.value }))}
+                    placeholder="e.g. Consulting clients, Writing gigs"
+                    style={{ width:'100%', padding:'8px 10px', border:`1px solid ${C.border}`, borderRadius:4, fontSize:13, fontFamily:'inherit' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display:'block', fontSize:11, color:C.muted, marginBottom:4, fontWeight:500 }}>Period</label>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                    <div>
+                      <p style={{ fontSize:10, color:C.muted, margin:'0 0 3px' }}>From</p>
+                      <select value={freelanceForm.fromMonth} onChange={e => setFreelanceForm(prev => ({ ...prev, fromMonth: e.target.value }))} style={{ width:'100%', padding:'8px 10px', border:`1px solid ${C.border}`, borderRadius:4, fontSize:13, fontFamily:'inherit', background:'#fff' }}>
+                        {months.map(mk => <option key={mk} value={mk}>{monthLabel(mk)}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <p style={{ fontSize:10, color:C.muted, margin:'0 0 3px' }}>To {freelanceForm.ongoing && <span style={{ color:C.muted, fontStyle:'italic' as const }}>(ongoing)</span>}</p>
+                      <select value={freelanceForm.toMonth} onChange={e => setFreelanceForm(prev => ({ ...prev, toMonth: e.target.value }))} disabled={freelanceForm.ongoing} style={{ width:'100%', padding:'8px 10px', border:`1px solid ${C.border}`, borderRadius:4, fontSize:13, fontFamily:'inherit', background: freelanceForm.ongoing ? '#FAFAF8' : '#fff', color: freelanceForm.ongoing ? C.muted : C.text }}>
+                        {months.map(mk => <option key={mk} value={mk}>{monthLabel(mk)}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <label style={{ display:'flex', alignItems:'center', gap:6, marginTop:8, fontSize:11.5, color:C.text, cursor:'pointer' }}>
+                    <input type="checkbox" checked={freelanceForm.ongoing} onChange={e => setFreelanceForm(prev => ({ ...prev, ongoing: e.target.checked }))} />
+                    Still ongoing
+                  </label>
+                </div>
+
+                <div>
+                  <label style={{ display:'block', fontSize:11, color:C.muted, marginBottom:4, fontWeight:500 }}>Gross receipts (total earned across period)</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={freelanceForm.grossReceipts}
+                    onChange={e => setFreelanceForm(prev => ({ ...prev, grossReceipts: e.target.value.replace(/[^0-9]/g, '') }))}
+                    placeholder="₹ 0"
+                    style={{ width:'100%', padding:'8px 10px', border:`1px solid ${C.border}`, borderRadius:4, fontSize:13, fontFamily:'inherit', fontVariantNumeric:'tabular-nums' as const }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display:'block', fontSize:11, color:C.muted, marginBottom:4, fontWeight:500 }}>TDS deducted by clients (Section 194J)</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={freelanceForm.tdsDeducted}
+                    onChange={e => setFreelanceForm(prev => ({ ...prev, tdsDeducted: e.target.value.replace(/[^0-9]/g, '') }))}
+                    placeholder="₹ 0 (leave blank if no TDS was deducted)"
+                    style={{ width:'100%', padding:'8px 10px', border:`1px solid ${C.border}`, borderRadius:4, fontSize:13, fontFamily:'inherit', fontVariantNumeric:'tabular-nums' as const }}
+                  />
+                </div>
+
+                <div style={{ padding:'12px 14px', background:'#FAF7F2', borderRadius:5, border:`1px solid ${C.border}` }}>
+                  <label style={{ display:'block', fontSize:11.5, color:C.text, marginBottom:8, fontWeight:600 }}>How do you want to declare this income?</label>
+                  <label style={{ display:'flex', alignItems:'flex-start', gap:8, marginBottom:8, cursor:'pointer' }}>
+                    <input type="radio" checked={freelanceForm.declarationMethod === 'presumptive_44ada'} onChange={() => setFreelanceForm(prev => ({ ...prev, declarationMethod: 'presumptive_44ada' }))} style={{ marginTop:3 }} />
+                    <div>
+                      <div style={{ fontSize:12, color:C.text, fontWeight:500 }}>Section 44ADA presumptive (recommended)</div>
+                      <div style={{ fontSize:10.5, color:C.muted, lineHeight:1.5 }}>Declare 50% of gross as taxable. No need to maintain books or prove expenses. Best for gross ≤ ₹75L.</div>
+                    </div>
+                  </label>
+                  <label style={{ display:'flex', alignItems:'flex-start', gap:8, cursor:'pointer' }}>
+                    <input type="radio" checked={freelanceForm.declarationMethod === 'actual'} onChange={() => setFreelanceForm(prev => ({ ...prev, declarationMethod: 'actual' }))} style={{ marginTop:3 }} />
+                    <div>
+                      <div style={{ fontSize:12, color:C.text, fontWeight:500 }}>Actual income (gross minus expenses)</div>
+                      <div style={{ fontSize:10.5, color:C.muted, lineHeight:1.5 }}>Track actual expenses (laptop, software, travel, co-working etc.) and deduct them. Need proper records.</div>
+                    </div>
+                  </label>
+
+                  {freelanceForm.declarationMethod === 'actual' && (
+                    <div style={{ marginTop:10 }}>
+                      <label style={{ display:'block', fontSize:11, color:C.muted, marginBottom:4 }}>Work-related expenses</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={freelanceForm.expenses}
+                        onChange={e => setFreelanceForm(prev => ({ ...prev, expenses: e.target.value.replace(/[^0-9]/g, '') }))}
+                        placeholder="₹ 0"
+                        style={{ width:'100%', padding:'7px 10px', border:`1px solid ${C.border}`, borderRadius:4, fontSize:12.5, fontFamily:'inherit', fontVariantNumeric:'tabular-nums' as const, background:'#fff' }}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {gross > 0 && (
+                  <div style={{ padding:'10px 12px', background:C.wl, border:`1px solid ${C.wm}`, borderRadius:5, fontSize:12, color:C.fg, display:'flex', justifyContent:'space-between' }}>
+                    <span>Taxable income from this source</span>
+                    <span style={{ fontWeight:700, fontVariantNumeric:'tabular-nums' as const }}>{fmt(previewTaxable)}</span>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:18 }}>
+                <button onClick={close} style={{ padding:'9px 16px', background:'#fff', color:C.muted, border:`1px solid ${C.border}`, borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit' }}>Cancel</button>
+                <button onClick={saveFreelanceForm} style={{ padding:'9px 18px', background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12.5, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>{freelanceForm.editingId ? 'Save changes' : 'Add income source'}</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── REVIEW PARSED SLIPS MODAL (multi-slip uploads) ── */}
       {reviewSlipsModal.open && reviewSlipsModal.slips.length > 0 && (() => {

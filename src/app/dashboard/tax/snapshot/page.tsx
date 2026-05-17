@@ -44,10 +44,12 @@ function calcHRAExempt(d: Deductions, annualGross: number): number {
 }
 
 // ─── Tax computation — duplicated from tax-page.tsx for the snapshot ────────
-function calcTax(income: number, d: Deductions) {
-  const annual = income
-  const stdDed = 75000
-  const newTaxable = Math.max(0, annual - stdDed)
+function calcTax(income: number, d: Deductions, otherTaxable: number = 0) {
+  const salaryAnnual = income
+  const totalGross = salaryAnnual + otherTaxable
+  // New regime — std ded caps at salary
+  const newStdDed = Math.min(75000, salaryAnnual)
+  const newTaxable = Math.max(0, totalGross - newStdDed)
   let newTax = 0, rem = newTaxable
   for (const [l, r] of [[300000, 0], [300000, 0.05], [300000, 0.10], [300000, 0.15], [300000, 0.20], [Infinity, 0.30]] as [number, number][]) {
     const c = Math.min(rem, l); newTax += c * r; rem -= c; if (rem <= 0) break
@@ -55,16 +57,18 @@ function calcTax(income: number, d: Deductions) {
   if (newTaxable <= 700000) newTax = 0
   newTax = Math.round(newTax * 1.04)
 
+  // Old regime — std ded caps at salary, HRA uses salary only
+  const oldStdDed = Math.min(75000, salaryAnnual)
   const c80 = clamp(d.ppf + d.elss + d.lic + d.homeLoanPrincipal + d.tuition + d.nsc + d.epf, 150000)
-  const hraExempt = calcHRAExempt(d, annual)
+  const hraExempt = calcHRAExempt(d, salaryAnnual)
   const c80D = clamp(d.selfFamily, d.selfSenior ? 50000 : 25000) + clamp(d.parents, d.parentsSenior ? 50000 : 25000)
   const c80CCD = clamp(d.nps, 50000)
   const c80TTA = clamp(d.savingsInterest, d.selfSenior ? 50000 : 10000)
   const c80G = d.donations100 + d.donations50 * 0.5
   const c24B = clamp(d.homeLoanInterest, 200000)
   const c80E = d.eduLoanInterest
-  const totalOldDed = stdDed + c80 + hraExempt + c80D + c80CCD + c80TTA + c80G + c24B + c80E
-  const oldTaxable = Math.max(0, annual - totalOldDed)
+  const totalOldDed = oldStdDed + c80 + hraExempt + c80D + c80CCD + c80TTA + c80G + c24B + c80E
+  const oldTaxable = Math.max(0, totalGross - totalOldDed)
   let oldTax = 0, rem2 = oldTaxable
   for (const [l, r] of [[250000, 0], [250000, 0.05], [500000, 0.20], [Infinity, 0.30]] as [number, number][]) {
     const c = Math.min(rem2, l); oldTax += c * r; rem2 -= c; if (rem2 <= 0) break
@@ -75,8 +79,8 @@ function calcTax(income: number, d: Deductions) {
   return {
     newTax, oldTax,
     recommended: newTax <= oldTax ? 'new' as const : 'old' as const,
-    deductions: { stdDed, c80, hraExempt, c80D, c80CCD, c80TTA, c80G, c24B, c80E, total: totalOldDed },
-    newTaxable, oldTaxable,
+    deductions: { stdDed: oldStdDed, c80, hraExempt, c80D, c80CCD, c80TTA, c80G, c24B, c80E, total: totalOldDed },
+    newTaxable, oldTaxable, salaryAnnual, otherTaxable, totalGross,
   }
 }
 
@@ -99,6 +103,10 @@ function SnapshotContent() {
   const [employeeName, setEmployeeName] = useState('')
   const [fyLabel, setFyLabel] = useState('FY ?')
   const [loadFailed, setLoadFailed] = useState(false)
+  // Other income
+  const [otherTaxable, setOtherTaxable] = useState(0)
+  const [otherTDS, setOtherTDS] = useState(0)
+  const [otherSources, setOtherSources] = useState<Array<{ sourceName: string; type: string; grossReceipts: number; expenses: number; taxable: number; tds: number; method: string; fromMonth: string; toMonth: string | null }>>([])
 
   useEffect(() => {
     try {
@@ -107,6 +115,33 @@ function SnapshotContent() {
       if (tp) {
         const d = JSON.parse(tp)
         if (d.ded) setDed({ ...defaultDed, ...d.ded })
+      }
+
+      // Other Income (Build 4)
+      const ois = localStorage.getItem('av_other_income')
+      if (ois) {
+        try {
+          const store = JSON.parse(ois)
+          let totalTaxable = 0, totalOtherTDS = 0
+          const sources: Array<{ sourceName: string; type: string; grossReceipts: number; expenses: number; taxable: number; tds: number; method: string; fromMonth: string; toMonth: string | null }> = []
+          for (const e of (store.entries || [])) {
+            if (e.type !== 'freelance') continue
+            const taxable = e.declarationMethod === 'presumptive_44ada'
+              ? Math.round(e.grossReceipts * 0.5)
+              : Math.max(0, e.grossReceipts - (e.expenses || 0))
+            totalTaxable += taxable
+            totalOtherTDS += (e.tdsDeducted || 0)
+            sources.push({
+              sourceName: e.sourceName, type: e.type,
+              grossReceipts: e.grossReceipts, expenses: e.expenses || 0,
+              taxable, tds: e.tdsDeducted || 0, method: e.declarationMethod,
+              fromMonth: e.fromMonth, toMonth: e.toMonth || null,
+            })
+          }
+          setOtherTaxable(totalTaxable)
+          setOtherTDS(totalOtherTDS)
+          setOtherSources(sources)
+        } catch {}
       }
 
       // Salary timeline (canonical) — preferred
@@ -182,15 +217,16 @@ function SnapshotContent() {
   }, [])
 
   if (loadFailed) {
-    return <ErrorState message="No salary data found. Visit the Tax Optimiser first to enter your details." onBack={() => router.push('/dashboard/tax')} />
+    return <ErrorState message="No income data found. Visit the Tax Optimiser first to enter your details." onBack={() => router.push('/dashboard/tax')} />
   }
-  if (annualGross === 0) {
+  if (annualGross === 0 && otherTaxable === 0) {
     return <div style={{ padding:40, textAlign:'center', color:C.muted, fontFamily:'"Sora",sans-serif' }}>Loading…</div>
   }
 
-  const tax = calcTax(annualGross, ded)
+  const tax = calcTax(annualGross, ded, otherTaxable)
   const recommendedTax = tax.recommended === 'new' ? tax.newTax : tax.oldTax
-  const balance = recommendedTax - totalTDS
+  const totalTDSCombined = totalTDS + otherTDS
+  const balance = recommendedTax - totalTDSCombined
 
   return (
     <>
@@ -245,6 +281,52 @@ function SnapshotContent() {
             </table>
           </Section>
 
+          {/* Section 2B: Other Income (only renders when present) */}
+          {otherSources.length > 0 && (
+            <Section title="2B · Income from Other Sources">
+              <table style={tableStyle}>
+                <thead>
+                  <tr>
+                    <Th>Source</Th>
+                    <Th style={{ width:140 }}>Method</Th>
+                    <Th style={{ textAlign:'right', width:120 }}>Gross</Th>
+                    <Th style={{ textAlign:'right', width:120 }}>Taxable</Th>
+                    <Th style={{ textAlign:'right', width:100 }}>TDS</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {otherSources.map((s, i) => (
+                    <tr key={i}>
+                      <Td>{s.sourceName}<div style={{ fontSize:10, color:C.muted, marginTop:1 }}>Freelance · {monthLabel(s.fromMonth)} {s.toMonth ? `– ${monthLabel(s.toMonth)}` : '– ongoing'}</div></Td>
+                      <Td>{s.method === 'presumptive_44ada' ? 'Section 44ADA' : 'Actual'}</Td>
+                      <Td num>{fmt(s.grossReceipts)}</Td>
+                      <Td num>{fmt(s.taxable)}</Td>
+                      <Td num>{s.tds > 0 ? fmt(s.tds) : '—'}</Td>
+                    </tr>
+                  ))}
+                  <Tr total>
+                    <Td>Total taxable from other sources</Td>
+                    <Td></Td>
+                    <Td></Td>
+                    <Td num>{fmt(otherTaxable)}</Td>
+                    <Td num>{fmt(otherTDS)}</Td>
+                  </Tr>
+                </tbody>
+              </table>
+              <p style={{ fontSize:10.5, color:C.muted, margin:'8px 0 0', fontStyle:'italic' as const, lineHeight:1.5 }}>
+                Standard deduction (₹75,000) applies to salary income only. HRA exemption applies to salary income only. Other-source income is added to taxable base for slab computation.
+              </p>
+            </Section>
+          )}
+
+          {/* Combined income summary (only renders when other income exists) */}
+          {otherSources.length > 0 && (
+            <div style={{ marginBottom:22, padding:'10px 14px', background:C.wl, border:`1px solid ${C.wm}`, borderRadius:5, display:'flex', justifyContent:'space-between', fontSize:12.5, color:C.fg }}>
+              <strong>Total annual income (salary + other sources)</strong>
+              <strong style={{ fontVariantNumeric:'tabular-nums' as const }}>{fmt(annualGross + otherTaxable)}</strong>
+            </div>
+          )}
+
           {/* Section 3: Deductions claimed */}
           <Section title="3 · Deductions Claimed (Old Regime)">
             <table style={tableStyle}>
@@ -274,8 +356,8 @@ function SnapshotContent() {
                 </tr>
               </thead>
               <tbody>
-                <Tr><Td>Gross annual income</Td><Td num>{fmt(annualGross)}</Td><Td num>{fmt(annualGross)}</Td></Tr>
-                <Tr><Td>Less: Total deductions</Td><Td num>{fmt(75000)}</Td><Td num>{fmt(tax.deductions.total)}</Td></Tr>
+                <Tr><Td>Gross annual income{otherTaxable > 0 ? ' (salary + other)' : ''}</Td><Td num>{fmt(annualGross + otherTaxable)}</Td><Td num>{fmt(annualGross + otherTaxable)}</Td></Tr>
+                <Tr><Td>Less: Total deductions</Td><Td num>{fmt(Math.min(75000, annualGross))}</Td><Td num>{fmt(tax.deductions.total)}</Td></Tr>
                 <Tr><Td>Taxable income</Td><Td num>{fmt(tax.newTaxable)}</Td><Td num>{fmt(tax.oldTaxable)}</Td></Tr>
                 <Tr total>
                   <Td>Tax liability (incl. 4% cess)</Td>
@@ -294,7 +376,9 @@ function SnapshotContent() {
             <table style={tableStyle}>
               <tbody>
                 <Tr><Td>Tax liability ({tax.recommended === 'new' ? 'New' : 'Old'} Regime — recommended)</Td><Td num>{fmt(recommendedTax)}</Td></Tr>
-                <Tr><Td>Less: TDS deducted by employer(s) so far</Td><Td num>{fmt(totalTDS)}</Td></Tr>
+                <Tr><Td>Less: TDS deducted by employer(s) — Section 192</Td><Td num>{fmt(totalTDS)}</Td></Tr>
+                {otherTDS > 0 && <Tr><Td>Less: TDS deducted by clients (Section 194J etc.)</Td><Td num>{fmt(otherTDS)}</Td></Tr>}
+                <Tr><Td>Total TDS credit available</Td><Td num>{fmt(totalTDSCombined)}</Td></Tr>
                 <Tr total>
                   <Td>{balance > 0 ? 'Balance tax payable' : balance < 0 ? 'Tax refund expected' : 'Settled (no balance)'}</Td>
                   <Td num style={{ color: balance > 0 ? C.danger : C.fg }}>{fmt(Math.abs(balance))}</Td>

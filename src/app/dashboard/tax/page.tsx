@@ -168,22 +168,28 @@ function calcHRAExempt(d: Deductions, salary: number): number {
   return Math.max(0, Math.min(rule1, Math.max(0, rule2), rule3))
 }
 
-function calcTax(income: number, deductions: Deductions, monthlyNet: number) {
-  const annual = income
+// `income` = salary income (annual). `otherTaxable` = total taxable income from other heads (freelance net, capital gains taxable, etc.)
+// Standard deduction (₹50K/75K) applies only to salary, capped at salary amount.
+// HRA exemption uses salary basic, not total. cess (4%) applies to total tax.
+function calcTax(income: number, deductions: Deductions, monthlyNet: number, otherTaxable: number = 0) {
+  const salaryAnnual = income
+  const totalGross = salaryAnnual + otherTaxable
 
   // New regime
-  const stdDed = 75000
-  const newTaxable = Math.max(0, annual - stdDed)
+  const newStdDed = Math.min(75000, salaryAnnual)   // std ded caps at salary
+  const newTaxable = Math.max(0, totalGross - newStdDed)
   let newTax = 0, rem = newTaxable
   for (const [l,r] of [[300000,0],[300000,0.05],[300000,0.10],[300000,0.15],[300000,0.20],[Infinity,0.30]] as [number,number][]) {
     const c = Math.min(rem, l); newTax += c*r; rem-=c; if(rem<=0) break
   }
+  // Section 87A rebate (New): only if total taxable income ≤ ₹7L AND user is resident individual
   if (newTaxable <= 700000) newTax = 0
   newTax = Math.round(newTax * 1.04)
 
   // Old regime deductions
+  const oldStdDed = Math.min(75000, salaryAnnual)   // std ded caps at salary (matches existing code; flagged: real-world Old Regime is ₹50K, but app uses ₹75K consistently)
   const c80 = clamp(deductions.ppf + deductions.elss + deductions.lic + deductions.homeLoanPrincipal + deductions.tuition + deductions.nsc + deductions.epf, 150000)
-  const hraExempt = calcHRAExempt(deductions, annual)
+  const hraExempt = calcHRAExempt(deductions, salaryAnnual)   // HRA uses salary only
   const c80D = clamp(deductions.selfFamily, deductions.selfSenior?50000:25000) + clamp(deductions.parents, deductions.parentsSenior?50000:25000)
   const c80CCD = clamp(deductions.nps, 50000)
   const c80TTA = clamp(deductions.savingsInterest, deductions.selfSenior?50000:10000)
@@ -191,8 +197,8 @@ function calcTax(income: number, deductions: Deductions, monthlyNet: number) {
   const c24B = clamp(deductions.homeLoanInterest, 200000)
   const c80E = deductions.eduLoanInterest
 
-  const totalOldDed = stdDed + c80 + hraExempt + c80D + c80CCD + c80TTA + c80G + c24B + c80E
-  const oldTaxable = Math.max(0, annual - totalOldDed)
+  const totalOldDed = oldStdDed + c80 + hraExempt + c80D + c80CCD + c80TTA + c80G + c24B + c80E
+  const oldTaxable = Math.max(0, totalGross - totalOldDed)
   let oldTax = 0, rem2 = oldTaxable
   for (const [l,r] of [[250000,0],[250000,0.05],[500000,0.20],[Infinity,0.30]] as [number,number][]) {
     const c = Math.min(rem2, l); oldTax += c*r; rem2-=c; if(rem2<=0) break
@@ -202,8 +208,9 @@ function calcTax(income: number, deductions: Deductions, monthlyNet: number) {
 
   return {
     newTax, oldTax, savings: Math.abs(oldTax-newTax), recommended: newTax<=oldTax?'new':'old',
-    deductionBreakdown: { c80, hraExempt, c80D, c80CCD, c80TTA, c80G, c24B, c80E, stdDed, total: totalOldDed },
-    newTaxable, oldTaxable
+    deductionBreakdown: { c80, hraExempt, c80D, c80CCD, c80TTA, c80G, c24B, c80E, stdDed: oldStdDed, total: totalOldDed },
+    newTaxable, oldTaxable,
+    salaryAnnual, otherTaxable, totalGross,
   }
 }
 
@@ -266,6 +273,31 @@ export default function TaxPage() {
   const { salary } = useAppStore()
   const [step, setStep] = useState(-1) // -1 = welcome screen
   const [ded, setDed] = useState<Deductions>(defaultDed)
+  // ─── Other Income state (Build 4) — read from av_other_income localStorage ───
+  const [otherTaxable, setOtherTaxable] = useState(0)
+  const [otherTDS, setOtherTDS] = useState(0)
+  const [otherSources, setOtherSources] = useState<Array<{ sourceName: string; type: string; taxable: number; tds: number; method: string }>>([])
+  useEffect(() => {
+    try {
+      const ois = localStorage.getItem('av_other_income')
+      if (!ois) return
+      const store = JSON.parse(ois)
+      let totalTaxable = 0, totalTDS = 0
+      const sources: Array<{ sourceName: string; type: string; taxable: number; tds: number; method: string }> = []
+      for (const e of (store.entries || [])) {
+        if (e.type !== 'freelance') continue
+        const tax = e.declarationMethod === 'presumptive_44ada'
+          ? Math.round(e.grossReceipts * 0.5)
+          : Math.max(0, e.grossReceipts - e.expenses)
+        totalTaxable += tax
+        totalTDS += (e.tdsDeducted || 0)
+        sources.push({ sourceName: e.sourceName, type: e.type, taxable: tax, tds: e.tdsDeducted || 0, method: e.declarationMethod })
+      }
+      setOtherTaxable(totalTaxable)
+      setOtherTDS(totalTDS)
+      setOtherSources(sources)
+    } catch {}
+  }, [])
   const annual = (salary?.grossSalary || 0) * 12
   const set = (k: keyof Deductions) => (v: number | boolean) => setDed(prev => ({ ...prev, [k]: v }))
 
@@ -315,7 +347,7 @@ export default function TaxPage() {
     try { localStorage.removeItem('av_tax_progress') } catch {}
   }
 
-  const tax = annual ? calcTax(annual, ded, salary?.netSalary||0) : null
+  const tax = (annual || otherTaxable) ? calcTax(annual, ded, salary?.netSalary||0, otherTaxable) : null
 
   // ─── Smart Deductions: auto-detect from profile data ──────────────────────
   const [autoDetected, setAutoDetected] = useState<{key:string; label:string; section:string; amount:number; source:string; icon:string}[]>([])
@@ -388,7 +420,7 @@ export default function TaxPage() {
   const sCard = { background:C.card, border:`1px solid ${C.border}`, borderRadius:6, overflow:'hidden', marginBottom:12 } as React.CSSProperties
   const sCH   = { padding:'9px 14px', background:C.wl, borderBottom:`1px solid ${C.border}`, fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.07em', textTransform:'uppercase' as const, display:'flex', justifyContent:'space-between', alignItems:'center' }
 
-  if (!annual) return (
+  if (!annual && otherTaxable === 0) return (
     <div style={{ fontFamily:'"Sora",-apple-system,sans-serif', maxWidth:860 }}>
       <div style={{ background:C.wl, border:`1px solid ${C.wm}`, borderRadius:6, padding:'20px 24px', textAlign:'center' }}>
         <p style={{ fontSize:14, color:C.fg, fontWeight:600, margin:'0 0 8px' }}>Complete your income profile first</p>
@@ -534,13 +566,13 @@ export default function TaxPage() {
           )}
           <div style={{ background:C.wl, border:`1px solid ${C.wm}`, borderRadius:6, padding:'14px 16px', marginBottom:14 }}>
             <p style={{ fontSize:12, fontWeight:700, color:C.fg, margin:'0 0 6px' }}>📋 Quick Regime Check</p>
-            {annual <= 1200000 ? (
+            {(annual + otherTaxable) <= 1200000 ? (
               <p style={{ fontSize:12, color:C.text, margin:0, lineHeight:1.65 }}>
-                Your gross income is {fmt(annual)}/yr — under ₹12L. <strong>New Regime gives you zero tax.</strong> But your deductions ({fmt(totalCorpusAnnual)}/yr in PF, ELSS, etc.) are still building wealth regardless of regime.
+                Your gross income is {fmt(annual + otherTaxable)}/yr{otherTaxable > 0 ? ' (salary + other income)' : ''} — under ₹12L. <strong>New Regime gives you zero tax.</strong> But your deductions ({fmt(totalCorpusAnnual)}/yr in PF, ELSS, etc.) are still building wealth regardless of regime.
               </p>
             ) : (
               <p style={{ fontSize:12, color:C.text, margin:0, lineHeight:1.65 }}>
-                Your gross income is {fmt(annual)}/yr — above ₹12L. The right regime depends on your total deductions.{tax && tax.recommended === 'old' ? ` Based on detected deductions, Old Regime could save you ${fmt(tax.savings)}.` : " New Regime is likely better, but let's verify."}
+                Your gross income is {fmt(annual + otherTaxable)}/yr{otherTaxable > 0 ? ' (salary + other income)' : ''} — above ₹12L. The right regime depends on your total deductions.{tax && tax.recommended === 'old' ? ` Based on detected deductions, Old Regime could save you ${fmt(tax.savings)}.` : " New Regime is likely better, but let's verify."}
               </p>
             )}
           </div>
@@ -569,8 +601,26 @@ export default function TaxPage() {
                 </div>
               ))}
             </div>
+            {otherSources.length > 0 && (
+              <>
+                <div style={{ padding:'10px 16px', background:'#FAF7F2', borderTop:`1px solid ${C.border}`, fontSize:11, color:C.muted, textTransform:'uppercase' as const, letterSpacing:'0.04em', fontWeight:600 }}>Other Income</div>
+                {otherSources.map((s, i) => (
+                  <div key={i} style={{ padding:'10px 16px', borderTop:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:12 }}>
+                    <div>
+                      <div style={{ color:C.text, fontWeight:500 }}>{s.sourceName}</div>
+                      <div style={{ color:C.muted, fontSize:10.5, marginTop:2 }}>Freelance · {s.method === 'presumptive_44ada' ? 'Section 44ADA (50% taxable)' : 'actual income basis'}{s.tds > 0 ? ` · TDS ${fmt(s.tds)}` : ''}</div>
+                    </div>
+                    <div style={{ fontWeight:700, color:C.text, fontVariantNumeric:'tabular-nums' as const }}>{fmt(s.taxable)}</div>
+                  </div>
+                ))}
+                <div style={{ padding:'10px 16px', borderTop:`1px solid ${C.fg}`, background:C.wl, display:'flex', justifyContent:'space-between', fontSize:12, fontWeight:700, color:C.fg }}>
+                  <span>Total annual taxable income</span>
+                  <span style={{ fontVariantNumeric:'tabular-nums' as const }}>{fmt(annual + otherTaxable)}</span>
+                </div>
+              </>
+            )}
             <div style={{ padding:'10px 14px', background:'#FAFAF8', borderTop:`1px solid ${C.border}`, fontSize:12, color:C.muted, lineHeight:1.65 }}>
-              ₹75,000 standard deduction applies to both regimes. The next steps find additional deductions for Old Regime — which may or may not save more than New Regime based on your actual investments.
+              ₹75,000 standard deduction applies to both regimes (on salary portion only). The next steps find additional deductions for Old Regime — which may or may not save more than New Regime based on your actual investments.{otherTaxable > 0 ? ' HRA exemption applies to salary income only.' : ''}
             </div>
           </div>
           <NavButtons onReset={reset} onProceed={() => goStep(2)} proceedLabel="Proceed to HRA →" />
@@ -753,7 +803,7 @@ export default function TaxPage() {
           {/* Stat strip */}
           <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:1, background:C.border, border:`1px solid ${C.border}`, borderRadius:6, overflow:'hidden', marginBottom:20 }}>
             {[
-              { l:'Gross annual income', v:fmt(annual) },
+              { l:otherTaxable > 0 ? 'Total annual income (salary + other)' : 'Gross annual income', v:fmt(annual + otherTaxable) },
               { l:`Tax — New Regime`, v:fmt(tax.newTax), col:tax.recommended==='new'?C.fg:C.danger },
               { l:`Tax — Old Regime`, v:fmt(tax.oldTax), col:tax.recommended==='old'?C.fg:C.danger },
               { l:'You save by switching', v:fmt(tax.savings), col:C.fg },
@@ -897,7 +947,7 @@ export default function TaxPage() {
               {[
                 { l:'Monthly income', v:fmt(salary?.netSalary||0) },
                 { l:`Tax/mo (${tax.recommended==='new'?'New':'Old'} — recommended)`, v:fmt(Math.min(tax.newTax,tax.oldTax)/12) },
-                { l:'Effective tax rate', v:`${((Math.min(tax.newTax,tax.oldTax)/annual)*100).toFixed(1)}%` },
+                { l:'Effective tax rate', v:`${((Math.min(tax.newTax,tax.oldTax)/(annual + otherTaxable))*100).toFixed(1)}%` },
               ].map(s => (
                 <div key={s.l} style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, padding:'10px 12px' }}>
                   <div style={{ fontSize:10, color:C.muted, marginBottom:3 }}>{s.l}</div>
