@@ -63,18 +63,24 @@ function calcTax(income: number, d: Deductions, otherBreakdown: OtherIncomeBreak
   const cryptoTax = Math.round(otherBreakdown.crypto * 0.30)
   const specialRateTax = equityLtcgTax + equityStcgTax + cryptoTax
 
-  // New regime
+  // New regime — FY 2025-26 + FY 2026-27 slabs
   const newStdDed = Math.min(75000, salaryAnnual)
   const newTaxable = Math.max(0, slabGross - newStdDed)
   let newSlabTax = 0, rem = newTaxable
-  for (const [l, r] of [[300000, 0], [300000, 0.05], [300000, 0.10], [300000, 0.15], [300000, 0.20], [Infinity, 0.30]] as [number, number][]) {
+  for (const [l, r] of [[400000, 0], [400000, 0.05], [400000, 0.10], [400000, 0.15], [400000, 0.20], [400000, 0.25], [Infinity, 0.30]] as [number, number][]) {
     const c = Math.min(rem, l); newSlabTax += c * r; rem -= c; if (rem <= 0) break
   }
-  if (newTaxable <= 700000) newSlabTax = 0
+  // 87A rebate at ₹12L + marginal relief above ₹12L
+  if (newTaxable <= 1200000) {
+    newSlabTax = 0
+  } else {
+    const excessOver12L = newTaxable - 1200000
+    if (newSlabTax > excessOver12L) newSlabTax = excessOver12L
+  }
   const newTax = Math.round((newSlabTax + specialRateTax) * 1.04)
 
-  // Old regime
-  const oldStdDed = Math.min(75000, salaryAnnual)
+  // Old regime — std ded ₹50K (not ₹75K)
+  const oldStdDed = Math.min(50000, salaryAnnual)
   const c80 = clamp(d.ppf + d.elss + d.lic + d.homeLoanPrincipal + d.tuition + d.nsc + d.epf, 150000)
   const hraExempt = calcHRAExempt(d, salaryAnnual)
   const c80D = clamp(d.selfFamily, d.selfSenior ? 50000 : 25000) + clamp(d.parents, d.parentsSenior ? 50000 : 25000)
@@ -432,7 +438,7 @@ function SnapshotContent() {
           <Section title="3 · Deductions Claimed (Old Regime)">
             <table style={tableStyle}>
               <tbody>
-                <Tr><Td>Standard deduction</Td><Td num>{fmt(tax.deductions.stdDed)}</Td><Td muted>both regimes</Td></Tr>
+                <Tr><Td>Standard deduction</Td><Td num>{fmt(tax.deductions.stdDed)}</Td><Td muted>Old Regime: ₹50K</Td></Tr>
                 {tax.deductions.hraExempt > 0 && <Tr><Td>HRA exemption (rent)</Td><Td num>{fmt(tax.deductions.hraExempt)}</Td><Td muted>Section 10(13A)</Td></Tr>}
                 {tax.deductions.c80 > 0 && <Tr><Td>Tax-saving investments</Td><Td num>{fmt(tax.deductions.c80)}</Td><Td muted>Section 80C</Td></Tr>}
                 {tax.deductions.c80D > 0 && <Tr><Td>Health insurance premiums</Td><Td num>{fmt(tax.deductions.c80D)}</Td><Td muted>Section 80D</Td></Tr>}

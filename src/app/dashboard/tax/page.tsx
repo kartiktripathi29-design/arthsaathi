@@ -198,18 +198,31 @@ function calcTax(income: number, deductions: Deductions, monthlyNet: number, oth
   const specialRateTax = equityLtcgTax + equityStcgTax + cryptoTax
 
   // ─── New regime — slab on slabGross only (special-rate income taxed separately) ──
+  // FY 2025-26 + FY 2026-27 slabs (identical, per Budget 2026)
+  // ₹0-4L: 0% · ₹4-8L: 5% · ₹8-12L: 10% · ₹12-16L: 15% · ₹16-20L: 20% · ₹20-24L: 25% · ₹24L+: 30%
   const newStdDed = Math.min(75000, salaryAnnual)
   const newTaxable = Math.max(0, slabGross - newStdDed)
   let newSlabTax = 0, rem = newTaxable
-  for (const [l,r] of [[300000,0],[300000,0.05],[300000,0.10],[300000,0.15],[300000,0.20],[Infinity,0.30]] as [number,number][]) {
+  for (const [l,r] of [[400000,0],[400000,0.05],[400000,0.10],[400000,0.15],[400000,0.20],[400000,0.25],[Infinity,0.30]] as [number,number][]) {
     const c = Math.min(rem, l); newSlabTax += c*r; rem-=c; if(rem<=0) break
   }
-  // Section 87A rebate (New): rebate applies only to slab-rate income, only if slab taxable ≤ ₹7L. Special-rate tax is NOT rebated.
-  if (newTaxable <= 700000) newSlabTax = 0
+  // Section 87A rebate (New, FY 25-26 onwards): taxable ≤ ₹12L → full rebate (zero slab tax).
+  // Special-rate income (LTCG/STCG/crypto) is NOT rebated.
+  if (newTaxable <= 1200000) {
+    newSlabTax = 0
+  } else {
+    // Marginal relief: tax on income just above ₹12L should not exceed (income - ₹12L).
+    // Applies until tax_before_relief catches up with excess_over_12L (~₹12.75L taxable).
+    const excessOver12L = newTaxable - 1200000
+    if (newSlabTax > excessOver12L) {
+      newSlabTax = excessOver12L
+    }
+  }
   const newTax = Math.round((newSlabTax + specialRateTax) * 1.04)
 
   // ─── Old regime — slab on (slabGross - deductions) ───────────────────────────
-  const oldStdDed = Math.min(75000, salaryAnnual)
+  // Std ded Old Regime is ₹50K (was wrongly ₹75K in earlier code)
+  const oldStdDed = Math.min(50000, salaryAnnual)
   const c80 = clamp(deductions.ppf + deductions.elss + deductions.lic + deductions.homeLoanPrincipal + deductions.tuition + deductions.nsc + deductions.epf, 150000)
   const hraExempt = calcHRAExempt(deductions, salaryAnnual)
   const c80D = clamp(deductions.selfFamily, deductions.selfSenior?50000:25000) + clamp(deductions.parents, deductions.parentsSenior?50000:25000)
@@ -689,13 +702,13 @@ export default function TaxPage() {
       {step === 1 && (
         <div>
           <div style={sCard}>
-            <div style={sCH}>Your income — FY 2024-25</div>
+            <div style={sCH}>Your income — FY 2026-27</div>
             <div style={{ padding:'14px 16px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
               {[
                 { l:'Gross salary / year', v:fmt(annual) },
                 { l:'Monthly take-home', v:fmt(salary?.netSalary||0) },
                 { l:'Employer', v:salary?.employerName||'—' },
-                { l:'Standard deduction (auto)', v:fmt(75000) },
+                { l:'Standard deduction (auto)', v:'₹75K (New) / ₹50K (Old)' },
               ].map(s => (
                 <div key={s.l} style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:5, padding:'10px 12px' }}>
                   <div style={{ fontSize:10, color:C.muted, marginBottom:3 }}>{s.l}</div>
@@ -731,7 +744,7 @@ export default function TaxPage() {
               </>
             )}
             <div style={{ padding:'10px 14px', background:'#FAFAF8', borderTop:`1px solid ${C.border}`, fontSize:12, color:C.muted, lineHeight:1.65 }}>
-              ₹75,000 standard deduction applies to both regimes (on salary portion only). The next steps find additional deductions for Old Regime — which may or may not save more than New Regime based on your actual investments.{otherTaxable > 0 ? ' HRA exemption applies to salary income only.' : ''}
+              Standard deduction applies to salary income only — ₹75,000 under New Regime, ₹50,000 under Old Regime. The next steps find additional deductions for Old Regime — which may or may not save more than New Regime based on your actual investments.{otherTaxable > 0 ? ' HRA exemption applies to salary income only.' : ''}
             </div>
           </div>
           <NavButtons onReset={reset} onProceed={() => goStep(2)} proceedLabel="Proceed to HRA →" />
@@ -752,9 +765,9 @@ export default function TaxPage() {
             </div>
             <Row label="How much rent do you pay each month?" sectionTag="Section 10(13A) — HRA exemption"><AmtInput value={ded.rentPaid} onChange={updateDed('rentPaid')} /></Row>
             <Row label="Monthly HRA shown in your salary slip" sectionTag="House Rent Allowance"><AmtInput value={ded.hraReceived} onChange={updateDed('hraReceived')} /></Row>
-            <Row label="Which city do you live in?" sectionTag="Metro = 50% of basic; Non-Metro = 40%">
+            <Row label="Which city do you live in?" sectionTag="Metro cities (8): Delhi, Mumbai, Chennai, Kolkata, Bengaluru, Hyderabad, Pune, Ahmedabad — get 50% of basic. All others get 40%.">
               <div style={{ display:'flex', gap:6 }}>
-                {[['Metro (Delhi, Mumbai, Chennai, Kolkata)', true], ['Non-Metro', false]].map(([l, v]) => (
+                {[['Metro (Delhi/Mumbai/Chennai/Kolkata/Bengaluru/Hyderabad/Pune/Ahmedabad)', true], ['Non-Metro', false]].map(([l, v]) => (
                   <button key={String(v)} onClick={() => updateDed('isMetro')(v as boolean)}
                     style={{ padding:'6px 12px', borderRadius:4, border:`1px solid ${ded.isMetro===v?C.fg:C.border}`, background:ded.isMetro===v?C.wl:C.card, color:ded.isMetro===v?C.fg:C.muted, fontSize:11.5, cursor:'pointer', fontFamily:'inherit', fontWeight:ded.isMetro===v?600:400 }}>
                     {String(l)}

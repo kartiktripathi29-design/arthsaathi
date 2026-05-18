@@ -25,15 +25,17 @@ export async function POST(req: NextRequest) {
 
     if (mediaType === 'application/pdf') {
       // Decode PDF and check page count
-      let doc: PDFDocument
+      let doc: PDFDocument | null = null
+      const pdfBytes = Buffer.from(base64Data, 'base64')
       try {
-        const pdfBytes = Buffer.from(base64Data, 'base64')
-        doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: false })
+        // Always ignore encryption flag. Many payroll PDFs (Zoho, Razorpay, Keka, etc.)
+        // ship with an encryption flag set but no actual password. pdf-lib refuses to load these
+        // by default. We accept them — if there's a true password, downstream parsing will fail
+        // and Claude API will surface a real error.
+        doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true })
       } catch (e: any) {
-        if (e?.message?.toLowerCase().includes('encrypted') || e?.message?.toLowerCase().includes('password')) {
-          return NextResponse.json({ error: 'PDF is password-protected. Please remove the password and re-upload.' }, { status: 422 })
-        }
-        return NextResponse.json({ error: 'Could not read PDF file. The file may be corrupted.' }, { status: 422 })
+        console.error('[parse-salary] PDF load failed:', e?.message || e)
+        return NextResponse.json({ error: 'Could not read this PDF. If it\'s password-protected, remove the password and re-upload.' }, { status: 422 })
       }
 
       const pageCount = doc.getPageCount()
@@ -48,14 +50,21 @@ export async function POST(req: NextRequest) {
         // Single page — parse as-is
         pagesToParse.push({ base64: base64Data, mediaType: 'application/pdf' })
       } else {
-        // Multi-page — split into N single-page PDFs
-        for (let i = 0; i < pageCount; i++) {
-          const newDoc = await PDFDocument.create()
-          const [copiedPage] = await newDoc.copyPages(doc, [i])
-          newDoc.addPage(copiedPage)
-          const pageBytes = await newDoc.save()
-          const pageB64 = Buffer.from(pageBytes).toString('base64')
-          pagesToParse.push({ base64: pageB64, mediaType: 'application/pdf' })
+        // Multi-page — split into N single-page PDFs.
+        // If splitting fails (rare; happens with some non-standard PDFs), fall back to
+        // sending the whole PDF — we get one slip out of it instead of none.
+        try {
+          for (let i = 0; i < pageCount; i++) {
+            const newDoc = await PDFDocument.create()
+            const [copiedPage] = await newDoc.copyPages(doc, [i])
+            newDoc.addPage(copiedPage)
+            const pageBytes = await newDoc.save()
+            const pageB64 = Buffer.from(pageBytes).toString('base64')
+            pagesToParse.push({ base64: pageB64, mediaType: 'application/pdf' })
+          }
+        } catch (splitErr: any) {
+          console.error('[parse-salary] page split failed, falling back to whole-PDF parse:', splitErr?.message || splitErr)
+          pagesToParse = [{ base64: base64Data, mediaType: 'application/pdf' }]
         }
       }
     } else if (mediaType.startsWith('image/')) {
