@@ -100,7 +100,7 @@ export async function parseSalaryFromBase64(
   }
 
   const response = await client.messages.create({
-    model: 'claude-opus-4-5',
+    model: 'claude-opus-4-7',
     max_tokens: 2000,
     system: SALARY_PARSE_SYSTEM,
     messages: [{ role: 'user', content }],
@@ -184,7 +184,7 @@ export async function parseOfferLetterFromBase64(
   }
 
   const response = await client.messages.create({
-    model: 'claude-opus-4-5',
+    model: 'claude-opus-4-7',
     max_tokens: 2000,
     system: OFFER_LETTER_PARSE_SYSTEM,
     messages: [{ role: 'user', content }],
@@ -218,7 +218,7 @@ export async function parseOfferLetterMultiPage(
   ]
 
   const response = await client.messages.create({
-    model: 'claude-opus-4-5',
+    model: 'claude-opus-4-7',
     max_tokens: 2000,
     system: OFFER_LETTER_PARSE_SYSTEM,
     messages: [{ role: 'user', content }],
@@ -261,7 +261,7 @@ export async function* streamChatResponse(
   userContext: string
 ): AsyncGenerator<string> {
   const stream = await client.messages.stream({
-    model: 'claude-sonnet-4-5',
+    model: 'claude-sonnet-4-6',
     max_tokens: 1000,
     system: buildChatSystem(userContext),
     messages,
@@ -323,7 +323,7 @@ Prioritise: emergency fund first, then tax-saving instruments (ELSS, NPS), then 
 Use only SEBI-regulated Indian products. No crypto.`
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-5',
+    model: 'claude-sonnet-4-6',
     max_tokens: 1500,
     messages: [{ role: 'user', content: prompt }],
   })
