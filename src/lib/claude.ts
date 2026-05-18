@@ -100,8 +100,8 @@ export async function parseSalaryFromBase64(
   }
 
   const response = await client.messages.create({
-    model: 'claude-opus-4-7',
-    max_tokens: 2000,
+    model: 'claude-sonnet-4-6',
+    max_tokens: 1200,
     system: SALARY_PARSE_SYSTEM,
     messages: [{ role: 'user', content }],
   })
@@ -184,8 +184,8 @@ export async function parseOfferLetterFromBase64(
   }
 
   const response = await client.messages.create({
-    model: 'claude-opus-4-7',
-    max_tokens: 2000,
+    model: 'claude-sonnet-4-6',
+    max_tokens: 1200,
     system: OFFER_LETTER_PARSE_SYSTEM,
     messages: [{ role: 'user', content }],
   })
@@ -218,8 +218,8 @@ export async function parseOfferLetterMultiPage(
   ]
 
   const response = await client.messages.create({
-    model: 'claude-opus-4-7',
-    max_tokens: 2000,
+    model: 'claude-sonnet-4-6',
+    max_tokens: 1200,
     system: OFFER_LETTER_PARSE_SYSTEM,
     messages: [{ role: 'user', content }],
   })
