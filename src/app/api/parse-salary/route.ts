@@ -84,21 +84,36 @@ export async function POST(req: NextRequest) {
     const errors: string[] = []
     settled.forEach((r, idx) => {
       if (r.status === 'fulfilled') {
+        console.log(`[parse-salary] Page ${idx + 1} parsed: gross=${r.value?.grossSalary || 0}, net=${r.value?.netSalary || 0}, month=${r.value?.month || '?'}`)
         parsedSlips.push(r.value)
       } else {
+        console.error(`[parse-salary] Page ${idx + 1} REJECTED:`, r.reason?.message || r.reason)
         errors.push(`Page ${idx + 1}: ${r.reason?.message || 'parse failed'}`)
       }
     })
 
-    if (parsedSlips.length === 0) {
-      return NextResponse.json(
-        { error: 'Could not extract salary data. Please ensure the document is a clear salary slip.', details: errors },
-        { status: 422 }
-      )
+    // ─── VALIDATE: keep only slips with usable totals ────────────────────
+    let validSlips = parsedSlips.filter(p => p && (p.grossSalary || p.netSalary))
+
+    // ─── FALLBACK: if splitting found nothing usable AND we did split, retry as whole PDF ──
+    // This handles slips where one logical slip spans multiple pages (page 1 has earnings, page 2
+    // has totals) — neither page alone has the data Claude needs, so all per-page parses come back
+    // with zero totals. Sending the whole PDF lets Claude see everything at once.
+    if (validSlips.length === 0 && mediaType === 'application/pdf' && pagesToParse.length > 1) {
+      console.log('[parse-salary] All per-page parses empty. Falling back to whole-PDF parse.')
+      try {
+        const wholeParsed = await parseSalaryFromBase64(base64Data, 'application/pdf')
+        console.log(`[parse-salary] Fallback whole-PDF parse: gross=${wholeParsed?.grossSalary || 0}, net=${wholeParsed?.netSalary || 0}`)
+        if (wholeParsed && (wholeParsed.grossSalary || wholeParsed.netSalary)) {
+          validSlips = [wholeParsed]
+          console.log('[parse-salary] Fallback succeeded — using whole-PDF parse.')
+        }
+      } catch (fallbackErr: any) {
+        console.error('[parse-salary] Fallback whole-PDF parse failed:', fallbackErr?.message || fallbackErr)
+        errors.push(`Whole-PDF fallback: ${fallbackErr?.message || 'parse failed'}`)
+      }
     }
 
-    // ─── VALIDATE + FILL COMPUTED FIELDS PER SLIP ────────────────────
-    const validSlips = parsedSlips.filter(p => p && (p.grossSalary || p.netSalary))
     if (validSlips.length === 0) {
       return NextResponse.json(
         { error: 'Could not extract salary data from any page. Please ensure the document is a clear salary slip.', details: errors },
