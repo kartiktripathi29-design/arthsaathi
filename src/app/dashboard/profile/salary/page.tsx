@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
-const C = { bg: '#FDFAF6', card: '#fff', border: '#E4DDD1', fg: '#1C2B22', muted: '#6B7770', primary: '#3A4B41', accent: '#E6CFA7' }
+const C = { bg: '#FDFAF6', card: '#fff', border: '#E4DDD1', fg: '#1C2B22', muted: '#6B7770', primary: '#3A4B41' }
 
 interface ParsedSlip {
   month: string
@@ -27,7 +27,8 @@ export default function SalaryPage() {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('av_salary_timeline')
       if (stored) {
-        setSlips(JSON.parse(stored))
+        const parsed = JSON.parse(stored)
+        setSlips(parsed)
       }
     }
   }, [])
@@ -40,7 +41,7 @@ export default function SalaryPage() {
       <div style={{ marginBottom: 24 }}>
         <h2 style={{ fontSize: 20, fontWeight: 700, color: C.fg, margin: '0 0 6px' }}>Salary Breakdown</h2>
         <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>
-          Click any month to see the detailed breakdown.
+          Click any month to see detailed breakdown.
         </p>
       </div>
 
@@ -58,7 +59,6 @@ export default function SalaryPage() {
         </div>
       ) : (
         <>
-          {/* Summary Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
               <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>Total Slips</div>
@@ -74,7 +74,6 @@ export default function SalaryPage() {
             </div>
           </div>
 
-          {/* Slips Table */}
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
@@ -116,7 +115,6 @@ export default function SalaryPage() {
             </table>
           </div>
 
-          {/* Next Button */}
           <div style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end' }}>
             <button onClick={() => router.push('/dashboard/profile/other-income')} style={{
               padding: '12px 24px', background: C.primary, color: '#fff', border: 'none',
@@ -128,7 +126,6 @@ export default function SalaryPage() {
         </>
       )}
 
-      {/* Preview Modal */}
       {selectedSlip && (
         <div onClick={() => setSelectedSlip(null)} style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -139,7 +136,6 @@ export default function SalaryPage() {
             background: C.card, borderRadius: 12, maxWidth: 700, width: '100%',
             maxHeight: '90vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
           }}>
-            {/* Modal Header */}
             <div style={{ padding: '20px 24px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <h3 style={{ fontSize: 18, fontWeight: 700, color: C.fg, margin: '0 0 4px' }}>
@@ -153,10 +149,8 @@ export default function SalaryPage() {
               }}>×</button>
             </div>
 
-            {/* Modal Body - Two Column Layout */}
             <div style={{ padding: 24 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-                {/* Left - Earnings */}
                 <div>
                   <h4 style={{ fontSize: 14, fontWeight: 600, color: C.fg, margin: '0 0 12px', paddingBottom: 8, borderBottom: `2px solid ${C.primary}` }}>
                     Earnings
@@ -175,7 +169,6 @@ export default function SalaryPage() {
                   </div>
                 </div>
 
-                {/* Right - Deductions */}
                 <div>
                   <h4 style={{ fontSize: 14, fontWeight: 600, color: C.fg, margin: '0 0 12px', paddingBottom: 8, borderBottom: `2px solid #C33` }}>
                     Deductions
@@ -195,7 +188,6 @@ export default function SalaryPage() {
                 </div>
               </div>
 
-              {/* Net Payable */}
               <div style={{
                 marginTop: 24, padding: 16, background: C.bg,
                 borderRadius: 8, border: `1px solid ${C.border}`,
