@@ -107,7 +107,9 @@ export async function parseSalaryFromBase64(
   })
 
   const text = response.content[0].type === 'text' ? response.content[0].text : ''
+  console.log('[parseSalaryFromBase64] Raw Claude response:', text)
   const jsonMatch = text.match(/\{[\s\S]*\}/)
+  console.log('[parseSalaryFromBase64] Extracted JSON:', jsonMatch?.[0])
   if (!jsonMatch) throw new Error('Could not extract JSON from Claude response')
 
   const parsed = JSON.parse(jsonMatch[0]) as ParsedSalaryData
