@@ -8,17 +8,24 @@ const C = { fg:'#3A4B41', wheat:'#E6CFA7', wl:'#F5ECD8', wm:'#D4B98A' }
 
 const FREE_NAV = [
   { href:'/dashboard', icon:'≡ƒôè', label:'Dashboard' },
-  { href:'/dashboard/profile', icon:'≡ƒæñ', label:'My Profile', submenu: true },
-  { href:'/dashboard/tax', icon:'≡ƒº«', label:'Tax Optimization' },
+  { href:'/dashboard/profile', icon:'≡ƒæñ', label:'My Profile' },
+  { href:'/dashboard/tax', icon:'≡ƒº«', label:'Tax Optimiser' },
 ]
 
-const PROFILE_SUBMENU = [
-  { key:'documents', icon:'≡ƒôü', label:'Documents', path:'/dashboard/profile/documents' },
-  { key:'salary', icon:'≡ƒÆ╝', label:'Salary', path:'/dashboard/profile/salary' },
-  { key:'other-income', icon:'≡ƒöì', label:'Other Income', path:'/dashboard/profile/other-income' },
-  { key:'exemptions', icon:'≡ƒöé', label:'Exemptions', path:'/dashboard/profile/exemptions' },
-  { key:'deductions', icon:'≡ƒôè', label:'Deductions', path:'/dashboard/profile/deductions' },
+const PROFILE_SUBNAV = [
+  { key:'documents', icon:'≡ƒôü', label:'Documents', query:'/dashboard/profile/documents' },
+  { key:'salary', icon:'≡ƒÆ╝', label:'Salary', query:'/dashboard/profile/salary' },
+  { key:'other-income', icon:'≡ƒöì', label:'Other Income', query:'/dashboard/profile/other-income' },
+  { key:'exemptions', icon:'≡ƒöé', label:'Exemptions', query:'/dashboard/profile/exemptions' },
+  { key:'deductions', icon:'≡ƒôè', label:'Deductions', query:'/dashboard/profile/deductions' },
 ]
+
+const PREMIUM_NAV = [
+  { href:'/dashboard/invest', icon:'≡ƒôê', label:'Investment Plan' },
+  { href:'/dashboard/decide', icon:'≡ƒñö', label:'Can I Buy This?' },
+  { href:'/dashboard/chat', icon:'≡ƒÆ¼', label:'AI Advisor' },
+]
+const ALL_NAV = [...FREE_NAV, ...PREMIUM_NAV]
 
 function Logo() {
   return (
@@ -38,14 +45,7 @@ function Sidebar() {
   const isActive = (href:string) => href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(href)
   const isProfile = pathname.startsWith('/dashboard/profile')
 
-  const [unlocked, setUnlocked] = useState<Record<string, boolean>>({
-    documents: true,
-    salary: false,
-    'other-income': false,
-    exemptions: false,
-    deductions: false,
-  })
-
+  const [unlocked, setUnlocked] = useState<Record<string,boolean>>({ documents:true, salary:false, 'other-income':false, exemptions:false, deductions:false })
   useEffect(() => {
     try {
       const completion = localStorage.getItem('av_profile_completion')
@@ -54,8 +54,6 @@ function Sidebar() {
       }
     } catch {}
   }, [pathname])
-
-  const allProfileTabsComplete = unlocked.documents && unlocked.salary && unlocked['other-income'] && unlocked.exemptions && unlocked.deductions
 
   return (
     <aside style={{ width:216, minHeight:'100vh', background:C.fg, display:'flex', flexDirection:'column', flexShrink:0, position:'fixed', top:0, left:0, bottom:0, zIndex:50, fontFamily:'"Sora",-apple-system,sans-serif' }}>
@@ -88,17 +86,16 @@ function Sidebar() {
               <span style={{ fontSize:15, width:20, textAlign:'center' }}>{item.icon}</span>
               {item.label}
             </Link>
-            
             {/* Sub-nav under My Profile */}
-            {item.submenu && isProfile && (
+            {item.href === '/dashboard/profile' && isProfile && (
               <div style={{ marginLeft:28, borderLeft:'1px solid rgba(230,207,167,0.15)', paddingLeft:0, marginTop:2, marginBottom:4 }}>
-                {PROFILE_SUBMENU.map(sub => {
-                  const isSubActive = pathname === sub.path
+                {PROFILE_SUBNAV.map(sub => {
+                  const isSubActive = pathname === sub.query
                   const isLocked = !unlocked[sub.key]
                   return (
                     <Link
                       key={sub.key}
-                      href={isLocked ? '#' : sub.path}
+                      href={isLocked ? '#' : sub.query}
                       onClick={e => { if (isLocked) e.preventDefault() }}
                       style={{
                         display:'flex', alignItems:'center', gap:7, padding:'7px 12px',
@@ -122,10 +119,45 @@ function Sidebar() {
             )}
           </div>
         ))}
+
+        {/* Divider */}
+        <div style={{ margin:'8px 0', borderTop:'1px solid rgba(255,255,255,0.07)' }} />
+
+        {/* Premium section */}
+        <div style={{ padding:'4px 16px 6px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <span style={{ fontSize:9, color:'rgba(230,207,167,0.3)', letterSpacing:'0.14em', textTransform:'uppercase' }}>Premium</span>
+          <span style={{ fontSize:9, background:'rgba(230,207,167,0.15)', color:C.wheat, padding:'2px 8px', borderRadius:10, fontWeight:600, letterSpacing:'0.04em' }}>≡ƒöÆ Γé╣199/mo</span>
+        </div>
+        {PREMIUM_NAV.map(item => (
+          <Link key={item.href} href={item.href} style={{
+            display:'flex', alignItems:'center', gap:9, padding:'10px 16px', textDecoration:'none',
+            fontSize:13, fontFamily:'inherit',
+            borderLeft:`2px solid ${isActive(item.href)?C.wheat:'transparent'}`,
+            background:isActive(item.href)?'rgba(230,207,167,0.1)':'transparent',
+            color:'rgba(255,255,255,0.3)',
+            fontWeight:400, transition:'all 0.15s', opacity:0.6,
+          }}>
+            <span style={{ fontSize:15, width:20, textAlign:'center' }}>{item.icon}</span>
+            {item.label}
+            <span style={{ marginLeft:'auto', fontSize:11 }}>≡ƒöÆ</span>
+          </Link>
+        ))}
       </nav>
 
       {/* User footer */}
       <div style={{ padding:10, borderTop:'1px solid rgba(230,207,167,0.08)' }}>
+        <div style={{ background:'rgba(230,207,167,0.07)', border:'1px solid rgba(230,207,167,0.14)', borderRadius:7, padding:'10px 12px', marginBottom:8 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:7 }}>
+            <div>
+              <p style={{ fontSize:11, color:'rgba(230,207,167,0.7)', fontWeight:600, margin:0 }}>Free plan</p>
+              <p style={{ fontSize:10, color:'rgba(230,207,167,0.35)', margin:0 }}>Unlock premium features</p>
+            </div>
+          </div>
+          <Link href="/upgrade" style={{ display:'block', width:'100%', padding:'7px', background:C.wheat, color:C.fg, border:'none', borderRadius:5, fontSize:11.5, fontWeight:700, cursor:'pointer', textAlign:'center', textDecoration:'none' }}>
+            Upgrade to Premium
+          </Link>
+        </div>
+
         {user && (
           <div style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 10px', marginBottom:6 }}>
             <div style={{ width:28, height:28, borderRadius:'50%', background:C.wheat, color:C.fg, fontSize:11, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{initials}</div>
@@ -145,12 +177,13 @@ function Sidebar() {
 
 function TopBar() {
   const pathname = usePathname()
-  const page = FREE_NAV.find(n => n.href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(n.href))
+  const page = ALL_NAV.find(n => n.href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(n.href))
+  const isPremium = PREMIUM_NAV.some(n => pathname.startsWith(n.href))
 
   const isProfile = pathname.startsWith('/dashboard/profile')
-  const currentSubTab = isProfile ? PROFILE_SUBMENU.find(s => pathname === s.path) : null
-  const headingLabel = currentSubTab ? currentSubTab.label : (page?.label || 'Dashboard')
-  const headingIcon = currentSubTab ? currentSubTab.icon : page?.icon
+  const currentTab = isProfile ? (PROFILE_SUBNAV.find(s => pathname === s.query)?.label || 'My Profile') : ''
+  const headingLabel = currentTab || (page?.label || 'Dashboard')
+  const headingIcon = page?.icon
 
   const [fyLabel, setFyLabel] = useState('')
   useEffect(() => {
@@ -173,14 +206,15 @@ function TopBar() {
     <header style={{ height:46, borderBottom:'1px solid #E4DDD1', background:'#fff', display:'flex', alignItems:'center', padding:'0 24px', gap:10, position:'sticky', top:0, zIndex:40, fontFamily:'"Sora",-apple-system,sans-serif' }}>
       <span style={{ fontSize:15 }}>{headingIcon}</span>
       <h1 style={{ fontSize:13, fontWeight:600, color:'#1C2B22', margin:0 }}>
-        {isProfile && currentSubTab ? (
+        {isProfile && currentTab ? (
           <>
             <span style={{ color:'#A09080', fontWeight:400 }}>My Profile</span>
             <span style={{ color:'#A09080', margin:'0 6px' }}>┬╖</span>
-            {currentSubTab.label}
+            {currentTab}
           </>
         ) : headingLabel}
       </h1>
+      {isPremium && <span style={{ fontSize:10, background:'#1E293B', color:C.wheat, padding:'2px 8px', borderRadius:20, fontWeight:600 }}>≡ƒöÆ Premium</span>}
       <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:8 }}>
         {fyLabel && <span style={{ fontSize:11, color:'#A09080' }}>FY {fyLabel}</span>}
         <span style={{ fontSize:11, background:'#F5ECD8', color:'#3A4B41', padding:'2px 9px', borderRadius:3, fontWeight:500, border:'1px solid #D4B98A' }}>ArthVo</span>
