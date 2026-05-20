@@ -1,22 +1,11 @@
 'use client'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAppStore } from '@/store/AppStore'
 
 // ─── Palette ─────────────────────────────────────────────────────────────────
 // Feldgrau: #3A4B41 | Wheat: #E6CFA7 | Off-white: #FDFAF6 | Border: #E4DDD1
-
-const TAX_NAV = [
-  { href: '/dashboard/profile', icon: '👤', label: 'My Profile' },
-  { href: '/dashboard/tax',     icon: '📊', label: 'Tax Optimiser' },
-]
-const TOOLS_NAV = [
-  { href: '/dashboard/invest',  icon: '📈', label: 'Investments' },
-  { href: '/dashboard/decide',  icon: '🤔', label: 'Can I Buy This?' },
-  { href: '/dashboard/chat',    icon: '💬', label: 'AI Advisor' },
-]
-const ALL_NAV = [...TAX_NAV, ...TOOLS_NAV]
 
 function Logo() {
   return (
@@ -32,8 +21,26 @@ function Logo() {
 function Sidebar() {
   const pathname = usePathname()
   const { user, logout } = useAppStore()
+  const [hasSalaryData, setHasSalaryData] = useState(false)
+  
   const initials = user?.name?.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase() || '?'
-  const isActive = (href: string) => pathname.startsWith(href)
+  
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const timeline = localStorage.getItem('av_salary_timeline')
+      setHasSalaryData(!!(timeline && JSON.parse(timeline).length > 0))
+    }
+  }, [pathname])
+
+  const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/')
+
+  const PROFILE_SECTIONS = [
+    { href: '/dashboard/profile/documents', label: 'Documents' },
+    { href: '/dashboard/profile/salary', label: 'Salary' },
+    { href: '/dashboard/profile/other-income', label: 'Other Income' },
+    { href: '/dashboard/profile/exemptions', label: 'Exemptions' },
+    { href: '/dashboard/profile/deductions', label: 'Deductions' },
+  ]
 
   return (
     <aside style={{
@@ -57,57 +64,64 @@ function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: '8px 0', display: 'flex', flexDirection: 'column' }}>
+      <nav style={{ flex: 1, padding: '8px 0', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
 
-        {/* Tax flow */}
+        {/* Dashboard - only visible after salary upload */}
+        {hasSalaryData && (
+          <>
+            <Link href="/dashboard" style={{
+              display: 'flex', alignItems: 'center', gap: 9,
+              padding: '10px 16px', textDecoration: 'none',
+              fontSize: 13, fontFamily: 'inherit',
+              borderLeft: `2px solid ${pathname === '/dashboard' ? '#E6CFA7' : 'transparent'}`,
+              background: pathname === '/dashboard' ? 'rgba(230,207,167,0.1)' : 'transparent',
+              color: pathname === '/dashboard' ? '#E6CFA7' : 'rgba(255,255,255,0.45)',
+              fontWeight: pathname === '/dashboard' ? 600 : 400,
+              transition: 'all 0.15s',
+            }}>
+              <span style={{ fontSize: 15, width: 20, textAlign: 'center' }}>📊</span>
+              Dashboard
+            </Link>
+            <div style={{ margin: '6px 16px', borderTop: '1px solid rgba(255,255,255,0.07)' }} />
+          </>
+        )}
+
+        {/* My Profile - always expanded */}
         <div style={{ fontSize: 9, color: 'rgba(230,207,167,0.35)', letterSpacing: '0.14em', textTransform: 'uppercase', padding: '10px 16px 5px' }}>
-          Tax Flow
+          My Profile
         </div>
-        {TAX_NAV.map(item => (
+        {PROFILE_SECTIONS.map(item => (
           <Link key={item.href} href={item.href} style={{
-            display: 'flex', alignItems: 'center', gap: 9,
-            padding: '10px 16px', textDecoration: 'none',
-            fontSize: 13, fontFamily: 'inherit',
+            display: 'flex', alignItems: 'center',
+            padding: '9px 16px 9px 26px', textDecoration: 'none',
+            fontSize: 12.5, fontFamily: 'inherit',
             borderLeft: `2px solid ${isActive(item.href) ? '#E6CFA7' : 'transparent'}`,
             background: isActive(item.href) ? 'rgba(230,207,167,0.1)' : 'transparent',
-            color: isActive(item.href) ? '#E6CFA7' : 'rgba(255,255,255,0.45)',
+            color: isActive(item.href) ? '#E6CFA7' : 'rgba(255,255,255,0.4)',
             fontWeight: isActive(item.href) ? 600 : 400,
             transition: 'all 0.15s',
           }}>
-            <span style={{ fontSize: 15, width: 20, textAlign: 'center' }}>{item.icon}</span>
             {item.label}
           </Link>
         ))}
 
         {/* Divider */}
-        <div style={{ margin: '6px 16px', borderTop: '1px solid rgba(255,255,255,0.07)' }} />
+        <div style={{ margin: '8px 16px 6px', borderTop: '1px solid rgba(255,255,255,0.07)' }} />
 
-        {/* Everyday tools proceed */}
-        <Link href="/dashboard/invest" style={{
-          margin: '2px 10px 6px', padding: '8px 12px',
-          background: 'rgba(230,207,167,0.06)', border: '1px solid rgba(230,207,167,0.14)',
-          borderRadius: 6, textDecoration: 'none',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        {/* Tax Optimizer */}
+        <Link href="/dashboard/tax" style={{
+          display: 'flex', alignItems: 'center', gap: 9,
+          padding: '10px 16px', textDecoration: 'none',
+          fontSize: 13, fontFamily: 'inherit',
+          borderLeft: `2px solid ${isActive('/dashboard/tax') ? '#E6CFA7' : 'transparent'}`,
+          background: isActive('/dashboard/tax') ? 'rgba(230,207,167,0.1)' : 'transparent',
+          color: isActive('/dashboard/tax') ? '#E6CFA7' : 'rgba(255,255,255,0.45)',
+          fontWeight: isActive('/dashboard/tax') ? 600 : 400,
+          transition: 'all 0.15s',
         }}>
-          <span style={{ fontSize: 10, color: 'rgba(230,207,167,0.55)', fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Everyday Tools</span>
-          <span style={{ fontSize: 12, color: '#E6CFA7' }}>↓</span>
+          <span style={{ fontSize: 15, width: 20, textAlign: 'center' }}>🎯</span>
+          Tax Optimizer
         </Link>
-
-        {TOOLS_NAV.map(item => (
-          <Link key={item.href} href={item.href} style={{
-            display: 'flex', alignItems: 'center', gap: 9,
-            padding: '10px 16px', textDecoration: 'none',
-            fontSize: 13, fontFamily: 'inherit',
-            borderLeft: `2px solid ${isActive(item.href) ? '#E6CFA7' : 'transparent'}`,
-            background: isActive(item.href) ? 'rgba(230,207,167,0.1)' : 'transparent',
-            color: isActive(item.href) ? '#E6CFA7' : 'rgba(255,255,255,0.45)',
-            fontWeight: isActive(item.href) ? 600 : 400,
-            transition: 'all 0.15s',
-          }}>
-            <span style={{ fontSize: 15, width: 20, textAlign: 'center' }}>{item.icon}</span>
-            {item.label}
-          </Link>
-        ))}
       </nav>
 
       {/* User footer */}
@@ -146,7 +160,24 @@ function Sidebar() {
 
 function TopBar() {
   const pathname = usePathname()
-  const page = ALL_NAV.find(n => pathname.startsWith(n.href))
+  const [selectedFY, setSelectedFY] = useState('FY 2026–27')
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('av_selected_fy')
+      if (stored) setSelectedFY(stored)
+    }
+  }, [])
+
+  const pageTitle = pathname === '/dashboard' ? 'Dashboard'
+    : pathname.startsWith('/dashboard/profile/documents') ? 'Documents'
+    : pathname.startsWith('/dashboard/profile/salary') ? 'Salary'
+    : pathname.startsWith('/dashboard/profile/other-income') ? 'Other Income'
+    : pathname.startsWith('/dashboard/profile/exemptions') ? 'Exemptions'
+    : pathname.startsWith('/dashboard/profile/deductions') ? 'Deductions'
+    : pathname.startsWith('/dashboard/tax') ? 'Tax Optimizer'
+    : 'Dashboard'
+
   return (
     <header style={{
       height: 46, borderBottom: '1px solid #E4DDD1', background: '#fff',
@@ -154,10 +185,9 @@ function TopBar() {
       position: 'sticky', top: 0, zIndex: 40,
       fontFamily: '"Sora",-apple-system,sans-serif',
     }}>
-      <span style={{ fontSize: 15 }}>{page?.icon}</span>
-      <h1 style={{ fontSize: 13, fontWeight: 600, color: '#1C2B22', margin: 0 }}>{page?.label || 'Dashboard'}</h1>
+      <h1 style={{ fontSize: 13, fontWeight: 600, color: '#1C2B22', margin: 0 }}>{pageTitle}</h1>
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 11, color: '#A09080' }}>FY 2024–25</span>
+        <span style={{ fontSize: 11, color: '#A09080' }}>{selectedFY}</span>
         <span style={{
           fontSize: 11, background: '#F5ECD8', color: '#3A4B41',
           padding: '2px 9px', borderRadius: 3, fontWeight: 500,
