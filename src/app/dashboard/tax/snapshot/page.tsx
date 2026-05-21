@@ -1,587 +1,396 @@
 'use client'
-import { Suspense, useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
-// ─── Inline types (must match Tax Optimiser's local state) ─────────────────
-interface Deductions {
-  rentPaid: number; hraReceived: number; isMetro: boolean
-  basic: number
-  ppf: number; elss: number; lic: number; homeLoanPrincipal: number; tuition: number; nsc: number; epf: number
-  selfFamily: number; parents: number; parentsSenior: boolean; selfSenior: boolean
-  nps: number
-  savingsInterest: number
-  donations100: number; donations50: number
-  homeLoanInterest: number
-  eduLoanInterest: number
-}
-const defaultDed: Deductions = { rentPaid:0, hraReceived:0, isMetro:true, basic:0, ppf:0, elss:0, lic:0, homeLoanPrincipal:0, tuition:0, nsc:0, epf:0, selfFamily:0, parents:0, parentsSenior:false, selfSenior:false, nps:0, savingsInterest:0, donations100:0, donations50:0, homeLoanInterest:0, eduLoanInterest:0 }
+const C = { bg: '#FDFAF6', card: '#fff', border: '#E4DDD1', fg: '#1C2B22', muted: '#6B7770', primary: '#3A4B41', danger: '#B94040' }
+const fmt = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`
 
-// ─── Colour palette (matches the rest of the app) ──────────────────────────
-const C = { fg:'#3A4B41', wheat:'#E6CFA7', wl:'#F5ECD8', wm:'#D4B98A', border:'#E4DDD1', text:'#1C2B22', muted:'#7A8A7E', danger:'#D85A30' }
-
-// ─── Helpers ────────────────────────────────────────────────────────────────
-function fmt(n: number): string {
-  if (!isFinite(n) || isNaN(n)) return '—'
-  return `₹${Math.round(n).toLocaleString('en-IN')}`
-}
-function clamp(n: number, max: number): number { return Math.min(Math.max(0, n), max) }
-function monthLabel(monthKey: string): string {
-  const [y, m] = monthKey.split('-')
-  const names = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-  return `${names[Number(m)]} ${y.slice(2)}`
-}
-
-// ─── HRA exemption (must match tax page math) ──────────────────────────────
-function calcHRAExempt(d: Deductions, annualGross: number): number {
-  if (d.rentPaid === 0 || d.hraReceived === 0) return 0
-  const rentAnnual = d.rentPaid * 12
-  const hraAnnual = d.hraReceived * 12
-  const basicAnnual = (d.basic > 0 ? d.basic : annualGross * 0.4) * (d.basic > 0 ? 12 : 1)
-  const rule1 = hraAnnual
-  const rule2 = rentAnnual - 0.1 * basicAnnual
-  const rule3 = d.isMetro ? 0.5 * basicAnnual : 0.4 * basicAnnual
-  return Math.max(0, Math.min(rule1, Math.max(0, rule2), rule3))
-}
-
-// ─── Tax computation — duplicated from tax-page.tsx ────────
-interface OtherIncomeBreakdown {
+interface TaxResult {
+  newTax: number
+  oldTax: number
+  savings: number
+  recommended: 'new' | 'old'
+  newTaxable: number
+  oldTaxable: number
+  salaryAnnual: number
   slabOther: number
-  equityLtcg: number
-  equityStcg: number
-  crypto: number
-}
-function calcTax(income: number, d: Deductions, otherBreakdown: OtherIncomeBreakdown = { slabOther: 0, equityLtcg: 0, equityStcg: 0, crypto: 0 }) {
-  const salaryAnnual = income
-  const savingsInterestIncome = d.savingsInterest || 0
-  const slabOtherTotal = otherBreakdown.slabOther + savingsInterestIncome
-  const slabGross = salaryAnnual + slabOtherTotal
-
-  // Special-rate tax
-  const equityLtcgTaxable = Math.max(0, otherBreakdown.equityLtcg - 125000)
-  const equityLtcgTax = Math.round(equityLtcgTaxable * 0.125)
-  const equityStcgTax = Math.round(otherBreakdown.equityStcg * 0.20)
-  const cryptoTax = Math.round(otherBreakdown.crypto * 0.30)
-  const specialRateTax = equityLtcgTax + equityStcgTax + cryptoTax
-
-  // New regime — FY 2025-26 + FY 2026-27 slabs
-  const newStdDed = Math.min(75000, salaryAnnual)
-  const newTaxable = Math.max(0, slabGross - newStdDed)
-  let newSlabTax = 0, rem = newTaxable
-  for (const [l, r] of [[400000, 0], [400000, 0.05], [400000, 0.10], [400000, 0.15], [400000, 0.20], [400000, 0.25], [Infinity, 0.30]] as [number, number][]) {
-    const c = Math.min(rem, l); newSlabTax += c * r; rem -= c; if (rem <= 0) break
-  }
-  // 87A rebate at ₹12L + marginal relief above ₹12L
-  if (newTaxable <= 1200000) {
-    newSlabTax = 0
-  } else {
-    const excessOver12L = newTaxable - 1200000
-    if (newSlabTax > excessOver12L) newSlabTax = excessOver12L
-  }
-  const newTax = Math.round((newSlabTax + specialRateTax) * 1.04)
-
-  // Old regime — std ded ₹50K (not ₹75K)
-  const oldStdDed = Math.min(50000, salaryAnnual)
-  const c80 = clamp(d.ppf + d.elss + d.lic + d.homeLoanPrincipal + d.tuition + d.nsc + d.epf, 150000)
-  const hraExempt = calcHRAExempt(d, salaryAnnual)
-  const c80D = clamp(d.selfFamily, d.selfSenior ? 50000 : 25000) + clamp(d.parents, d.parentsSenior ? 50000 : 25000)
-  const c80CCD = clamp(d.nps, 50000)
-  const c80TTA = clamp(d.savingsInterest, d.selfSenior ? 50000 : 10000)
-  const c80G = d.donations100 + d.donations50 * 0.5
-  const c24B = clamp(d.homeLoanInterest, 200000)
-  const c80E = d.eduLoanInterest
-  const totalOldDed = oldStdDed + c80 + hraExempt + c80D + c80CCD + c80TTA + c80G + c24B + c80E
-  const oldTaxable = Math.max(0, slabGross - totalOldDed)
-  let oldSlabTax = 0, rem2 = oldTaxable
-  for (const [l, r] of [[250000, 0], [250000, 0.05], [500000, 0.20], [Infinity, 0.30]] as [number, number][]) {
-    const c = Math.min(rem2, l); oldSlabTax += c * r; rem2 -= c; if (rem2 <= 0) break
-  }
-  if (oldTaxable <= 500000) oldSlabTax = 0
-  const oldTax = Math.round((oldSlabTax + specialRateTax) * 1.04)
-
-  const totalGross = salaryAnnual + slabOtherTotal + otherBreakdown.equityLtcg + otherBreakdown.equityStcg + otherBreakdown.crypto
-
-  return {
-    newTax, oldTax,
-    recommended: newTax <= oldTax ? 'new' as const : 'old' as const,
-    deductions: { stdDed: oldStdDed, c80, hraExempt, c80D, c80CCD, c80TTA, c80G, c24B, c80E, total: totalOldDed },
-    newTaxable, oldTaxable, salaryAnnual, slabOther: slabOtherTotal, totalGross,
-    equityLtcg: otherBreakdown.equityLtcg, equityStcg: otherBreakdown.equityStcg, crypto: otherBreakdown.crypto,
-    equityLtcgTax, equityStcgTax, cryptoTax, specialRateTax,
-  }
+  totalGross: number
 }
 
-// ─── ITR recommendation (mirrors tax-page.tsx) ──────────────────────────────
-function recommendITRForm(input: {
-  hasFreelancePresumptive: boolean; hasFreelanceActual: boolean; hasFNOIntraday: boolean
-  hasEquityGains: boolean; hasCrypto: boolean; totalIncome: number
-}): { form: string; reasonDetail: string } {
-  const { hasFreelancePresumptive, hasFreelanceActual, hasFNOIntraday, hasEquityGains, hasCrypto, totalIncome } = input
-  const hasBusinessIncome = hasFNOIntraday || hasFreelanceActual
-  const hasPresumptiveOnly = hasFreelancePresumptive && !hasBusinessIncome
-  const hasCapitalGains = hasEquityGains || hasCrypto
-  if (hasBusinessIncome) {
-    const trigger = hasFNOIntraday ? 'F&O / Intraday trading' : 'Freelance income declared on actual basis'
-    return { form: 'ITR-3', reasonDetail: `You need ITR-3 because of: ${trigger}.` }
-  }
-  if (hasPresumptiveOnly && totalIncome < 5000000 && !hasCapitalGains) {
-    return { form: 'ITR-4', reasonDetail: 'ITR-4 (Sugam) — simplified form for salaried users with presumptive freelance income under Section 44ADA.' }
-  }
-  if (hasCapitalGains) {
-    const heads: string[] = []
-    if (hasEquityGains) heads.push('equity gains')
-    if (hasCrypto) heads.push('crypto gains')
-    if (hasPresumptiveOnly) heads.push('presumptive freelance')
-    return { form: 'ITR-2', reasonDetail: `ITR-2 — salary + capital gains (${heads.join(', ')}).` }
-  }
-  return { form: 'ITR-1', reasonDetail: 'ITR-1 (Sahaj) — salary, one house property, and interest income.' }
-}
-
-// ─── Main page ──────────────────────────────────────────────────────────────
 export default function TaxSnapshotPage() {
-  return (
-    <Suspense fallback={<div style={{ padding:40, textAlign:'center', color:C.muted, fontFamily:'"Sora",sans-serif' }}>Loading…</div>}>
-      <SnapshotContent />
-    </Suspense>
-  )
-}
-
-function SnapshotContent() {
   const router = useRouter()
-  const [ded, setDed] = useState<Deductions>(defaultDed)
-  const [annualGross, setAnnualGross] = useState(0)
-  const [annualNet, setAnnualNet] = useState(0)
-  const [totalTDS, setTotalTDS] = useState(0)
-  const [employerNames, setEmployerNames] = useState<string[]>([])
-  const [employeeName, setEmployeeName] = useState('')
-  const [fyLabel, setFyLabel] = useState('FY ?')
-  const [loadFailed, setLoadFailed] = useState(false)
-  // Other income — full breakdown + flags for ITR recommendation
-  const [otherBreakdown, setOtherBreakdown] = useState<OtherIncomeBreakdown>({ slabOther: 0, equityLtcg: 0, equityStcg: 0, crypto: 0 })
-  const [otherTDS, setOtherTDS] = useState(0)
-  const [otherSources, setOtherSources] = useState<Array<{
-    sourceName: string; type: string; slab: number; ltcg: number; stcg: number; crypto: number; tds: number; method: string; fromMonth: string; toMonth: string | null
-    grossReceipts: number; expenses: number
-  }>>([])
-  const [hasFreelancePresumptive, setHasFreelancePresumptive] = useState(false)
-  const [hasFreelanceActual, setHasFreelanceActual] = useState(false)
-  const [hasFNOIntraday, setHasFNOIntraday] = useState(false)
-  const [hasEquityGains, setHasEquityGains] = useState(false)
-  const [hasCrypto, setHasCrypto] = useState(false)
+  const [result, setResult] = useState<TaxResult | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    try {
-      // Tax deductions
-      const tp = localStorage.getItem('av_tax_progress')
-      if (tp) {
-        const d = JSON.parse(tp)
-        if (d.ded) setDed({ ...defaultDed, ...d.ded })
-      }
+    // Fetch all data from localStorage
+    const salaryData = localStorage.getItem('av_salary_timeline')
+    const otherIncomeData = localStorage.getItem('av_other_income')
+    const exemptionsData = localStorage.getItem('av_exemptions')
+    const deductionsData = localStorage.getItem('av_deductions')
 
-      // Other Income — all 5 types
-      const ois = localStorage.getItem('av_other_income')
-      if (ois) {
-        try {
-          const store = JSON.parse(ois)
-          const breakdown: OtherIncomeBreakdown = { slabOther: 0, equityLtcg: 0, equityStcg: 0, crypto: 0 }
-          let totOtherTDS = 0
-          const sources: Array<typeof otherSources[number]> = []
-          let hPresump = false, hActual = false, hFNO = false, hEquity = false, hCrypto = false
-          for (const e of (store.entries || [])) {
-            let slab = 0, ltcg = 0, stcg = 0, crypto = 0, tds = 0, method = ''
-            if (e.type === 'freelance') {
-              slab = e.declarationMethod === 'presumptive_44ada'
-                ? Math.round(e.grossReceipts * 0.5)
-                : Math.max(0, e.grossReceipts - (e.expenses || 0))
-              tds = e.tdsDeducted || 0
-              method = e.declarationMethod
-              if (e.declarationMethod === 'presumptive_44ada') hPresump = true; else hActual = true
-            } else if (e.type === 'equity') {
-              ltcg = e.ltcgGains || 0
-              stcg = e.stcgGains || 0
-              if (ltcg > 0 || stcg > 0) hEquity = true
-            } else if (e.type === 'crypto') {
-              crypto = e.cryptoGains || 0
-              tds = e.cryptoTds194S || 0
-              if (crypto > 0) hCrypto = true
-            } else if (e.type === 'fno_intraday') {
-              slab = e.fnoNetProfit || 0
-              tds = e.fnoTdsDeducted || 0
-              if (slab > 0) hFNO = true
-            } else if (e.type === 'interest_div') {
-              slab = (e.fdInterest || 0) + (e.savingsInterest || 0) + (e.dividends || 0) + (e.otherInterest || 0)
-              tds = e.interestTds || 0
-            }
-            breakdown.slabOther += slab
-            breakdown.equityLtcg += ltcg
-            breakdown.equityStcg += stcg
-            breakdown.crypto += crypto
-            totOtherTDS += tds
-            sources.push({
-              sourceName: e.sourceName, type: e.type,
-              slab, ltcg, stcg, crypto, tds, method,
-              fromMonth: e.fromMonth, toMonth: e.toMonth || null,
-              grossReceipts: e.grossReceipts || 0, expenses: e.expenses || 0,
-            })
-          }
-          setOtherBreakdown(breakdown)
-          setOtherTDS(totOtherTDS)
-          setOtherSources(sources)
-          setHasFreelancePresumptive(hPresump); setHasFreelanceActual(hActual)
-          setHasFNOIntraday(hFNO); setHasEquityGains(hEquity); setHasCrypto(hCrypto)
-        } catch {}
-      }
-
-      // Salary timeline (canonical) — preferred
-      const stl = localStorage.getItem('av_salary_timeline')
-      if (stl) {
-        const t = JSON.parse(stl)
-        setFyLabel(t.fy || 'FY ?')
-        // Compute annual gross by summing each FY month using the rollup math
-        // We don't have rollupMonth here, so we'll approximate from slips:
-        // For each employment, average its slips' gross × months covered (closed end → toMonth; open → projected to FY end)
-        // Easier path: sum of slip grosses + project recurring to remaining months under same employment
-        // Simplest honest path: derive from `av_salary_breakdown` if available (Tax Optimiser feeds from it)
-        // Otherwise approximate naively here
-        let gross = 0, net = 0, tds = 0
-        const employers = new Set<string>()
-        let empName = ''
-        for (const emp of (t.employments || [])) {
-          employers.add(emp.employerName)
-          // Find emp's date range in months
-          const [fy, fm] = emp.fromMonth.split('-').map(Number)
-          const toMonth = emp.toMonth || `${t.fyStartYear + 1}-03`   // assume current employment runs to end of FY
-          const [ty, tm] = toMonth.split('-').map(Number)
-          const monthsCovered = (ty - fy) * 12 + (tm - fm) + 1
-          // Use the most recent slip as recurring baseline
-          const sortedSlips = (emp.slips || []).slice().sort((a:any,b:any) => a.monthKey.localeCompare(b.monthKey))
-          if (sortedSlips.length === 0) continue
-          const latest = sortedSlips[sortedSlips.length - 1]
-          if (!empName) empName = (latest?.parsed as any)?.employeeName || ''
-          const slipGross = latest?.parsed?.grossSalary || 0
-          const slipNet = latest?.parsed?.netSalary || 0
-          const slipTDS = latest?.parsed?.tdsDeducted || 0
-          // Use ACTUAL slip data where we have it; project for the rest
-          const slipMonthSet = new Set(sortedSlips.map((s:any) => s.monthKey))
-          // sum actual slips
-          for (const s of sortedSlips) {
-            gross += s.parsed?.grossSalary || 0
-            net += s.parsed?.netSalary || 0
-            tds += s.parsed?.tdsDeducted || 0
-          }
-          // remaining projected months
-          const remaining = Math.max(0, monthsCovered - sortedSlips.length)
-          gross += remaining * slipGross
-          net += remaining * slipNet
-          tds += remaining * slipTDS
-        }
-        setAnnualGross(gross)
-        setAnnualNet(net)
-        setTotalTDS(tds)
-        setEmployerNames(Array.from(employers))
-        setEmployeeName(empName)
-        return
-      }
-
-      // Fallback to old salary breakdown
-      const sb = localStorage.getItem('av_salary_breakdown')
-      if (sb) {
-        const b = JSON.parse(sb)
-        const monthlyGross = b.netSalary + b.employeePF + (b.employerPF || 0) + (b.bonus || 0) + (b.otherBenefits || 0)
-        setAnnualGross(monthlyGross * 12)
-        setAnnualNet(b.netSalary * 12)
-        setEmployerNames(b.employerName ? [b.employerName] : [])
-        // FY label derived from current date
-        const d = new Date()
-        const fyStart = d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1
-        setFyLabel(`FY ${fyStart}-${String(fyStart + 1).slice(-2)}`)
-        return
-      }
-
-      setLoadFailed(true)
-    } catch {
-      setLoadFailed(true)
+    if (!salaryData) {
+      setLoading(false)
+      return
     }
+
+    const salary = JSON.parse(salaryData)
+    const otherIncome = otherIncomeData ? JSON.parse(otherIncomeData) : []
+    const exemptions = exemptionsData ? JSON.parse(exemptionsData) : { hra: { hraReceived: 0, rentPaid: 0, isMetro: false } }
+    const deductions = deductionsData ? JSON.parse(deductionsData) : {}
+
+    // Calculate annual salary
+    const salaryAnnual = salary.reduce((sum: number, slip: any) => sum + (slip.grossSalary || 0), 0)
+
+    // Calculate HRA exemption
+    const hra = exemptions.hra || { hraReceived: 0, rentPaid: 0, isMetro: false }
+    let hraExemption = 0
+    if (hra.hraReceived && hra.rentPaid) {
+      const actual = hra.hraReceived
+      const rentMinus10Percent = hra.rentPaid - hra.hraReceived * 0.1
+      const cityLimit = hra.isMetro ? hra.hraReceived * 0.5 : hra.hraReceived * 0.4
+      hraExemption = Math.max(0, Math.min(actual, rentMinus10Percent, cityLimit))
+    }
+
+    // Calculate 80C deductions (capped at 1.5L)
+    const sec80C = Math.min(
+      (deductions.ppf || 0) +
+        (deductions.elss || 0) +
+        (deductions.lic || 0) +
+        (deductions.tuition || 0) +
+        (deductions.nsc || 0),
+      150000
+    )
+
+    // Calculate 80D deductions
+    const sec80DSelfLimit = deductions.selfSenior ? 50000 : 25000
+    const sec80DSelf = Math.min(deductions.selfFamily || 0, sec80DSelfLimit)
+    const sec80DParentsLimit = deductions.parentsSenior ? 50000 : 25000
+    const sec80DParents = Math.min(deductions.parents || 0, sec80DParentsLimit)
+    const sec80D = sec80DSelf + sec80DParents
+
+    // Other deductions
+    const sec24B = Math.min(deductions.homeLoanInterest || 0, 200000)
+    const sec80CCD1B = Math.min(deductions.nps || 0, 50000)
+
+    // Standard deduction
+    const stdDed = 75000
+
+    // Income after HRA exemption and standard deduction
+    const incomeAfterHRA = salaryAnnual - hraExemption
+    const incomeAfterStdDed = incomeAfterHRA - stdDed
+
+    // Taxable income for both regimes
+    const oldDedTotal = sec80C + sec80D + sec24B + sec80CCD1B
+    const oldTaxable = Math.max(0, incomeAfterHRA - stdDed - oldDedTotal)
+    const newTaxable = incomeAfterStdDed
+
+    // Tax calculation (simplified new regime slabs)
+    function calcNewRegimeTax(income: number): number {
+      let tax = 0
+      const slabs = [
+        { min: 0, max: 400000, rate: 0 },
+        { min: 400000, max: 800000, rate: 0.05 },
+        { min: 800000, max: 1200000, rate: 0.1 },
+        { min: 1200000, max: 1600000, rate: 0.15 },
+        { min: 1600000, max: 2000000, rate: 0.2 },
+        { min: 2000000, max: 2400000, rate: 0.25 },
+        { min: 2400000, max: Infinity, rate: 0.3 },
+      ]
+
+      let rem = income
+      for (const slab of slabs) {
+        if (rem <= 0) break
+        const taxableInSlab = Math.min(rem, slab.max - slab.min)
+        tax += taxableInSlab * slab.rate
+        rem -= taxableInSlab
+      }
+
+      // Rebate 87A: if taxable ≤ 7L, tax = 0
+      if (income <= 700000) {
+        tax = 0
+      }
+
+      // Cess 4%
+      return Math.round(tax * 1.04)
+    }
+
+    function calcOldRegimeTax(income: number): number {
+      let tax = 0
+      const slabs = [
+        { min: 0, max: 250000, rate: 0 },
+        { min: 250000, max: 500000, rate: 0.05 },
+        { min: 500000, max: 1000000, rate: 0.2 },
+        { min: 1000000, max: Infinity, rate: 0.3 },
+      ]
+
+      let rem = income
+      for (const slab of slabs) {
+        if (rem <= 0) break
+        const taxableInSlab = Math.min(rem, slab.max - slab.min)
+        tax += taxableInSlab * slab.rate
+        rem -= taxableInSlab
+      }
+
+      // Rebate 87A: if taxable ≤ 5L, tax = 0
+      if (income <= 500000) {
+        tax = 0
+      }
+
+      // Cess 4%
+      return Math.round(tax * 1.04)
+    }
+
+    const newTax = calcNewRegimeTax(newTaxable)
+    const oldTax = calcOldRegimeTax(oldTaxable)
+
+    setResult({
+      newTax,
+      oldTax,
+      savings: Math.abs(newTax - oldTax),
+      recommended: newTax <= oldTax ? 'new' : 'old',
+      newTaxable,
+      oldTaxable,
+      salaryAnnual,
+      slabOther: otherIncome.reduce((sum: number, inc: any) => sum + (inc.amount || 0), 0),
+      totalGross: salaryAnnual + otherIncome.reduce((sum: number, inc: any) => sum + (inc.amount || 0), 0),
+    })
+
+    setLoading(false)
   }, [])
 
-  const otherTaxable = otherBreakdown.slabOther + otherBreakdown.equityLtcg + otherBreakdown.equityStcg + otherBreakdown.crypto
-  if (loadFailed) {
-    return <ErrorState message="No income data found. Visit the Tax Optimiser first to enter your details." onBack={() => router.push('/dashboard/tax')} />
-  }
-  if (annualGross === 0 && otherTaxable === 0) {
-    return <div style={{ padding:40, textAlign:'center', color:C.muted, fontFamily:'"Sora",sans-serif' }}>Loading…</div>
+  // Determine ITR form
+  function getITRForm() {
+    const otherIncomeData = localStorage.getItem('av_other_income')
+    const otherIncome = otherIncomeData ? JSON.parse(otherIncomeData) : []
+
+    const hasFreelance = otherIncome.some((inc: any) => inc.type === 'freelance')
+    const hasEquity = otherIncome.some((inc: any) => inc.type === 'equity')
+    const hasCrypto = otherIncome.some((inc: any) => inc.type === 'crypto')
+    const hasFNO = otherIncome.some((inc: any) => inc.type === 'fno')
+
+    if (hasFNO) {
+      return {
+        form: 'ITR-3',
+        title: 'ITR-3 (Business/Professional)',
+        reason: 'F&O trading income',
+        details: 'ITR-3 covers salary + business/professional income. Required for F&O trading.',
+      }
+    }
+
+    if (hasEquity || hasCrypto) {
+      return {
+        form: 'ITR-2',
+        title: 'ITR-2 (Capital Gains)',
+        reason: 'Equity or crypto gains',
+        details: 'ITR-2 is for salary + capital gains (equity, crypto, mutual funds, etc.).',
+      }
+    }
+
+    if (hasFreelance) {
+      return {
+        form: 'ITR-4',
+        title: 'ITR-4 (Sugam)',
+        reason: 'Presumptive freelance income (44ADA)',
+        details: 'ITR-4 (simplified form) for salaried + freelance income under ₹50L. No capital gains.',
+      }
+    }
+
+    return {
+      form: 'ITR-1',
+      title: 'ITR-1 (Sahaj)',
+      reason: 'Salary only',
+      details: 'ITR-1 (simplest form) for salaried users with salary, interest, no capital gains or business income.',
+    }
   }
 
-  const tax = calcTax(annualGross, ded, otherBreakdown)
-  const recommendedTax = tax.recommended === 'new' ? tax.newTax : tax.oldTax
-  const totalTDSCombined = totalTDS + otherTDS
-  const balance = recommendedTax - totalTDSCombined
-  const itrRec = recommendITRForm({
-    hasFreelancePresumptive, hasFreelanceActual, hasFNOIntraday, hasEquityGains, hasCrypto,
-    totalIncome: annualGross + otherTaxable,
-  })
+  const itrForm = getITRForm()
+
+  if (loading) {
+    return (
+      <div style={{ maxWidth: 900, margin: '0 auto', padding: '40px 20px', textAlign: 'center' }}>
+        <p style={{ fontSize: 16, color: C.muted }}>Loading tax calculation...</p>
+      </div>
+    )
+  }
+
+  if (!result) {
+    return (
+      <div style={{ maxWidth: 900, margin: '0 auto', padding: '40px 20px' }}>
+        <div style={{ background: '#FEE8E8', border: `1px solid ${C.danger}`, borderRadius: 8, padding: 20 }}>
+          <p style={{ fontSize: 14, color: C.danger, margin: 0 }}>
+            ⚠ No salary data found. Please upload a salary slip first.
+          </p>
+        </div>
+        <button
+          onClick={() => router.push('/dashboard/profile/documents')}
+          style={{
+            marginTop: 16,
+            padding: '12px 20px',
+            background: C.primary,
+            color: '#fff',
+            border: 'none',
+            borderRadius: 6,
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+          }}
+        >
+          Upload Salary Slip
+        </button>
+      </div>
+    )
+  }
 
   return (
-    <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&display=swap');
-        * { box-sizing: border-box; }
-        body { margin: 0; }
-        @media print {
-          body { background: #fff !important; padding: 0 !important; }
-          .page-header, .legend-bar, .no-print { display: none !important; }
-          .form-container { box-shadow: none !important; border: none !important; padding: 0 !important; margin: 0 !important; max-width: 100% !important; background: #fff !important; }
-          @page { margin: 1.5cm; size: A4; }
-        }
-      `}</style>
+    <div style={{ maxWidth: 900, margin: '0 auto', padding: '20px 0' }}>
+      <div style={{ marginBottom: 24 }}>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 6px' }}>Tax Summary</h2>
+        <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>FY 2025-26</p>
+      </div>
 
-      <div style={{ minHeight:'100vh', background:'#FDFAF6', fontFamily:'"Sora",-apple-system,sans-serif', padding:24, color:C.text }}>
+      {/* Income Breakdown */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 16 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 600, color: C.fg, margin: '0 0 16px' }}>Income Breakdown</h3>
 
-        {/* Header — hidden in print */}
-        <div className="page-header" style={{ maxWidth:820, margin:'0 auto 16px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <h2 style={{ margin:0, fontSize:15, color:C.fg }}>📄 Tax Computation Snapshot · {fyLabel}</h2>
-          <div style={{ display:'flex', gap:8 }}>
-            <button onClick={() => router.push('/dashboard/tax')} style={{ padding:'8px 14px', borderRadius:5, border:`1px solid ${C.border}`, background:'#fff', fontSize:12, fontFamily:'inherit', cursor:'pointer', color:C.fg }}>← Back to Tax Optimiser</button>
-            <button onClick={() => window.print()} style={{ padding:'8px 14px', borderRadius:5, border:`1px solid ${C.fg}`, background:C.fg, color:C.wheat, fontSize:12, fontFamily:'inherit', cursor:'pointer', fontWeight:600 }}>🖨️ Print / Save as PDF</button>
-          </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 12, borderBottom: `1px solid ${C.border}`, marginBottom: 12 }}>
+          <span style={{ fontSize: 13, color: C.text }}>Gross Salary</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: C.fg }}>{fmt(result.salaryAnnual)}</span>
         </div>
 
-        {/* The form */}
-        <div className="form-container" style={{ maxWidth:820, margin:'0 auto', background:'#fff', padding:'40px 48px', border:`1px solid ${C.border}`, borderRadius:6, boxShadow:'0 2px 8px rgba(0,0,0,0.04)' }}>
-
-          <div style={{ textAlign:'center', borderBottom:'2px solid #1C2B22', paddingBottom:16, marginBottom:24 }}>
-            <h1 style={{ fontSize:18, margin:'0 0 4px', letterSpacing:'0.05em' }}>TAX COMPUTATION SNAPSHOT</h1>
-            <div style={{ fontSize:12, color:C.muted }}>Self-computed estimate · {fyLabel}</div>
-            <div style={{ fontSize:10.5, color:C.muted, marginTop:6, fontStyle:'italic' as const }}>Not an Income Tax Return. For personal reference only.</div>
+        {result.slabOther > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 12, borderBottom: `1px solid ${C.border}`, marginBottom: 12 }}>
+            <span style={{ fontSize: 13, color: C.text }}>Other Income</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: C.fg }}>{fmt(result.slabOther)}</span>
           </div>
+        )}
 
-          {/* Section 1: Person */}
-          <Section title="1 · Personal Details">
-            <RowGrid>
-              <Label>Employee name</Label><Value>{employeeName || '—'}</Value>
-              <Label>Financial Year</Label><Value>{fyLabel}</Value>
-              <Label>Employer{employerNames.length > 1 ? 's' : ''} during FY</Label><Value>{employerNames.length > 0 ? employerNames.join(' · ') : '—'}</Value>
-            </RowGrid>
-          </Section>
-
-          {/* Section 2: Income */}
-          <Section title="2 · Income from Salary">
-            <table style={tableStyle}>
-              <tbody>
-                <Tr><Td>Gross annual salary</Td><Td num>{fmt(annualGross)}</Td></Tr>
-                <Tr><Td>Net annual take-home</Td><Td num>{fmt(annualNet)}</Td></Tr>
-              </tbody>
-            </table>
-          </Section>
-
-          {/* Section 2B: Other Income (only renders when present) */}
-          {otherSources.length > 0 && (
-            <Section title="2B · Income from Other Sources">
-              <table style={tableStyle}>
-                <thead>
-                  <tr>
-                    <Th>Source</Th>
-                    <Th style={{ width:170 }}>Type</Th>
-                    <Th style={{ textAlign:'right', width:120 }}>Amount</Th>
-                    <Th style={{ textAlign:'right', width:100 }}>TDS</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {otherSources.map((s, i) => {
-                    let typeLabel = ''
-                    let amount = s.slab + s.ltcg + s.stcg + s.crypto
-                    if (s.type === 'freelance') typeLabel = `Freelance · ${s.method === 'presumptive_44ada' ? '44ADA' : 'Actual'}`
-                    else if (s.type === 'equity') typeLabel = `Equity · LTCG ${fmt(s.ltcg)} · STCG ${fmt(s.stcg)}`
-                    else if (s.type === 'crypto') typeLabel = `Crypto / VDA · 30% flat`
-                    else if (s.type === 'fno_intraday') typeLabel = `F&O / Intraday · slab rate`
-                    else if (s.type === 'interest_div') typeLabel = `Interest & Dividends · slab rate`
-                    return (
-                      <tr key={i}>
-                        <Td>{s.sourceName}{(s.type === 'freelance' || s.type === 'fno_intraday') && s.fromMonth && <div style={{ fontSize:10, color:C.muted, marginTop:1 }}>{monthLabel(s.fromMonth)} {s.toMonth ? `– ${monthLabel(s.toMonth)}` : '– ongoing'}</div>}</Td>
-                        <Td><div style={{ fontSize:11 }}>{typeLabel}</div></Td>
-                        <Td num>{fmt(amount)}</Td>
-                        <Td num>{s.tds > 0 ? fmt(s.tds) : '—'}</Td>
-                      </tr>
-                    )
-                  })}
-                  <Tr total>
-                    <Td>Total</Td>
-                    <Td></Td>
-                    <Td num>{fmt(otherTaxable)}</Td>
-                    <Td num>{fmt(otherTDS)}</Td>
-                  </Tr>
-                </tbody>
-              </table>
-              {(otherBreakdown.equityLtcg > 0 || otherBreakdown.equityStcg > 0 || otherBreakdown.crypto > 0) && (
-                <div style={{ marginTop:10, padding:'10px 12px', background:'#FAF7F2', borderRadius:5, border:`1px solid ${C.border}`, fontSize:11, color:C.text, lineHeight:1.6 }}>
-                  <strong>Special-rate income tax (computed separately from slab):</strong>
-                  {otherBreakdown.equityLtcg > 0 && <div>· Equity LTCG: {fmt(otherBreakdown.equityLtcg)} → tax {fmt(tax.equityLtcgTax)} (12.5% after ₹1.25L exemption)</div>}
-                  {otherBreakdown.equityStcg > 0 && <div>· Equity STCG: {fmt(otherBreakdown.equityStcg)} → tax {fmt(tax.equityStcgTax)} (20% flat)</div>}
-                  {otherBreakdown.crypto > 0 && <div>· Crypto: {fmt(otherBreakdown.crypto)} → tax {fmt(tax.cryptoTax)} (30% flat)</div>}
-                  <div style={{ marginTop:4, fontWeight:700 }}>Total special-rate tax: {fmt(tax.specialRateTax)}</div>
-                </div>
-              )}
-              <p style={{ fontSize:10.5, color:C.muted, margin:'8px 0 0', fontStyle:'italic' as const, lineHeight:1.5 }}>
-                Standard deduction and HRA exemption apply to salary income only. Slab-rate other income (freelance, F&O, interest, dividends) is added to slab base. Capital gains and crypto are taxed at special rates separately.
-              </p>
-            </Section>
-          )}
-
-          {/* Combined income summary (only renders when other income exists) */}
-          {otherSources.length > 0 && (
-            <div style={{ marginBottom:22, padding:'10px 14px', background:C.wl, border:`1px solid ${C.wm}`, borderRadius:5, display:'flex', justifyContent:'space-between', fontSize:12.5, color:C.fg }}>
-              <strong>Total annual income (salary + other sources)</strong>
-              <strong style={{ fontVariantNumeric:'tabular-nums' as const }}>{fmt(annualGross + otherTaxable)}</strong>
-            </div>
-          )}
-
-          {/* Section 3: Deductions claimed */}
-          <Section title="3 · Deductions Claimed (Old Regime)">
-            <table style={tableStyle}>
-              <tbody>
-                <Tr><Td>Standard deduction</Td><Td num>{fmt(tax.deductions.stdDed)}</Td><Td muted>Old Regime: ₹50K</Td></Tr>
-                {tax.deductions.hraExempt > 0 && <Tr><Td>HRA exemption (rent)</Td><Td num>{fmt(tax.deductions.hraExempt)}</Td><Td muted>Section 10(13A)</Td></Tr>}
-                {tax.deductions.c80 > 0 && <Tr><Td>Tax-saving investments</Td><Td num>{fmt(tax.deductions.c80)}</Td><Td muted>Section 80C</Td></Tr>}
-                {tax.deductions.c80D > 0 && <Tr><Td>Health insurance premiums</Td><Td num>{fmt(tax.deductions.c80D)}</Td><Td muted>Section 80D</Td></Tr>}
-                {tax.deductions.c80CCD > 0 && <Tr><Td>NPS additional</Td><Td num>{fmt(tax.deductions.c80CCD)}</Td><Td muted>Section 80CCD(1B)</Td></Tr>}
-                {tax.deductions.c80TTA > 0 && <Tr><Td>Savings interest exempt</Td><Td num>{fmt(tax.deductions.c80TTA)}</Td><Td muted>{ded.selfSenior ? 'Section 80TTB' : 'Section 80TTA'}</Td></Tr>}
-                {tax.deductions.c24B > 0 && <Tr><Td>Home loan interest</Td><Td num>{fmt(tax.deductions.c24B)}</Td><Td muted>Section 24(b)</Td></Tr>}
-                {tax.deductions.c80E > 0 && <Tr><Td>Education loan interest</Td><Td num>{fmt(tax.deductions.c80E)}</Td><Td muted>Section 80E</Td></Tr>}
-                {tax.deductions.c80G > 0 && <Tr><Td>Donations</Td><Td num>{fmt(tax.deductions.c80G)}</Td><Td muted>Section 80G</Td></Tr>}
-                <Tr total><Td>Total deductions (Old Regime)</Td><Td num>{fmt(tax.deductions.total)}</Td><Td></Td></Tr>
-              </tbody>
-            </table>
-          </Section>
-
-          {/* Section 4: Regime comparison */}
-          <Section title="4 · Regime Comparison">
-            <table style={tableStyle}>
-              <thead>
-                <tr>
-                  <Th>Particulars</Th>
-                  <Th style={{ textAlign:'right', width:150 }}>New Regime</Th>
-                  <Th style={{ textAlign:'right', width:150 }}>Old Regime</Th>
-                </tr>
-              </thead>
-              <tbody>
-                <Tr><Td>Gross annual income{otherTaxable > 0 ? ' (salary + other)' : ''}</Td><Td num>{fmt(annualGross + otherTaxable)}</Td><Td num>{fmt(annualGross + otherTaxable)}</Td></Tr>
-                <Tr><Td>Less: Total deductions</Td><Td num>{fmt(Math.min(75000, annualGross))}</Td><Td num>{fmt(tax.deductions.total)}</Td></Tr>
-                <Tr><Td>Taxable income</Td><Td num>{fmt(tax.newTaxable)}</Td><Td num>{fmt(tax.oldTaxable)}</Td></Tr>
-                <Tr total>
-                  <Td>Tax liability (incl. 4% cess)</Td>
-                  <Td num style={{ background: tax.recommended === 'new' ? C.fg : 'inherit', color: tax.recommended === 'new' ? C.wheat : 'inherit' }}>{fmt(tax.newTax)}</Td>
-                  <Td num style={{ background: tax.recommended === 'old' ? C.fg : 'inherit', color: tax.recommended === 'old' ? C.wheat : 'inherit' }}>{fmt(tax.oldTax)}</Td>
-                </Tr>
-              </tbody>
-            </table>
-            <div style={{ marginTop:10, padding:'10px 14px', background:C.wl, border:`1px solid ${C.wm}`, borderRadius:5, fontSize:12, color:C.fg }}>
-              <strong>Recommendation:</strong> {tax.recommended === 'new' ? 'New Regime' : 'Old Regime'} — saves you {fmt(Math.abs(tax.newTax - tax.oldTax))} this year.
-            </div>
-          </Section>
-
-          {/* Section 5: TDS reconciliation */}
-          <Section title="5 · TDS Reconciliation">
-            <table style={tableStyle}>
-              <tbody>
-                <Tr><Td>Tax liability ({tax.recommended === 'new' ? 'New' : 'Old'} Regime — recommended)</Td><Td num>{fmt(recommendedTax)}</Td></Tr>
-                <Tr><Td>Less: TDS deducted by employer(s) — Section 192</Td><Td num>{fmt(totalTDS)}</Td></Tr>
-                {otherTDS > 0 && <Tr><Td>Less: TDS deducted by clients (Section 194J etc.)</Td><Td num>{fmt(otherTDS)}</Td></Tr>}
-                <Tr><Td>Total TDS credit available</Td><Td num>{fmt(totalTDSCombined)}</Td></Tr>
-                <Tr total>
-                  <Td>{balance > 0 ? 'Balance tax payable' : balance < 0 ? 'Tax refund expected' : 'Settled (no balance)'}</Td>
-                  <Td num style={{ color: balance > 0 ? C.danger : C.fg }}>{fmt(Math.abs(balance))}</Td>
-                </Tr>
-              </tbody>
-            </table>
-            {balance > 0 && (
-              <p style={{ fontSize:11, color:C.muted, margin:'10px 0 0', lineHeight:1.5 }}>
-                You owe {fmt(balance)} more in tax. To avoid Section 234B/234C interest, pay via self-assessment before 31 July of the assessment year, ideally in advance tax installments.
-              </p>
-            )}
-            {balance < 0 && (
-              <p style={{ fontSize:11, color:C.muted, margin:'10px 0 0', lineHeight:1.5 }}>
-                You'll likely receive a refund of {fmt(Math.abs(balance))} after filing your ITR.
-              </p>
-            )}
-          </Section>
-
-          {/* Section 6: ITR Form Recommendation */}
-          <Section title="6 · Recommended ITR Form">
-            <div style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 14px', background:'#FAF7F2', border:`1px solid ${C.border}`, borderRadius:5 }}>
-              <div style={{ flexShrink:0, padding:'10px 14px', background:C.fg, color:C.wheat, borderRadius:5, fontSize:18, fontWeight:700, letterSpacing:'0.02em' }}>
-                {itrRec.form}
-              </div>
-              <div style={{ flex:1, fontSize:12, color:C.text, lineHeight:1.55 }}>
-                {itrRec.reasonDetail}
-              </div>
-            </div>
-            <p style={{ fontSize:10.5, color:C.muted, margin:'8px 0 0', fontStyle:'italic' as const, lineHeight:1.5 }}>
-              Recommendation based on income heads captured here. If you also have rental income, property sales, or foreign income, your ITR form may differ — verify with a CA.
-            </p>
-          </Section>
-
-          {/* Footer disclaimer */}
-          <div style={{ marginTop:28, padding:'14px 16px', background:'#FAF7F2', borderLeft:`3px solid ${C.fg}`, fontSize:11, lineHeight:1.6, color:C.fg }}>
-            <strong>Important:</strong> This is a self-computed tax estimate by ArthVo based on the salary data and deductions you've entered. It is <strong>not an official Income Tax Return</strong>. Please verify all figures and consult a chartered accountant before filing your return on the Income Tax e-filing portal.
-          </div>
-
-          <div style={{ marginTop:32, display:'grid', gridTemplateColumns:'1fr 1fr', gap:32, fontSize:11 }}>
-            <div>
-              <div style={{ borderBottom:'1px solid #1C2B22', height:38, marginBottom:4 }}></div>
-              <div style={{ color:C.muted, fontSize:10, textTransform:'uppercase' as const, letterSpacing:'0.06em' }}>Signature</div>
-            </div>
-            <div>
-              <div style={{ borderBottom:'1px solid #1C2B22', height:38, marginBottom:4 }}></div>
-              <div style={{ color:C.muted, fontSize:10, textTransform:'uppercase' as const, letterSpacing:'0.06em' }}>Place & Date</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom note — hidden in print */}
-        <div className="legend-bar" style={{ maxWidth:820, margin:'16px auto 0', padding:'12px 16px', background:'#FAF7F2', border:`1px solid ${C.border}`, borderRadius:5, fontSize:11, color:C.muted, lineHeight:1.6 }}>
-          <strong style={{ color:C.fg }}>How to use this:</strong> Click "Print / Save as PDF" to save a clean copy for your records or to share with your CA. The page header and this note won't appear in the printed version.
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12 }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: C.fg }}>Gross Total Income</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: C.primary }}>{fmt(result.totalGross)}</span>
         </div>
       </div>
-    </>
-  )
-}
 
-// ─── Sub-components ─────────────────────────────────────────────────────────
-function ErrorState({ message, onBack }: { message: string; onBack: () => void }) {
-  return (
-    <div style={{ minHeight:'100vh', background:'#FDFAF6', fontFamily:'"Sora",-apple-system,sans-serif', padding:40, display:'flex', alignItems:'center', justifyContent:'center' }}>
-      <div style={{ maxWidth:420, padding:24, background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, textAlign:'center' as const }}>
-        <p style={{ fontSize:14, color:C.text, margin:'0 0 16px' }}>{message}</p>
-        <button onClick={onBack} style={{ padding:'9px 18px', borderRadius:5, border:`1px solid ${C.fg}`, background:C.fg, color:C.wheat, fontSize:12.5, fontFamily:'inherit', cursor:'pointer', fontWeight:600 }}>← Back to Tax Optimiser</button>
+      {/* Regime Comparison */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+        {/* New Regime */}
+        <div
+          style={{
+            background: result.recommended === 'new' ? '#F0F9F7' : C.card,
+            border: `2px solid ${result.recommended === 'new' ? C.primary : C.border}`,
+            borderRadius: 8,
+            padding: 16,
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 600, color: C.fg, margin: 0 }}>New Regime</h3>
+            {result.recommended === 'new' && <span style={{ fontSize: 11, fontWeight: 700, color: C.primary, background: '#E8F5F2', padding: '4px 8px', borderRadius: 4 }}>✓ RECOMMENDED</span>}
+          </div>
+
+          <div style={{ paddingBottom: 12, borderBottom: `1px solid ${C.border}`, marginBottom: 12 }}>
+            <p style={{ fontSize: 12, color: C.muted, margin: '0 0 6px' }}>Taxable Income</p>
+            <p style={{ fontSize: 16, fontWeight: 700, color: C.fg, margin: 0 }}>{fmt(result.newTaxable)}</p>
+          </div>
+
+          <div style={{ paddingBottom: 12, borderBottom: `1px solid ${C.border}`, marginBottom: 12 }}>
+            <p style={{ fontSize: 12, color: C.muted, margin: '0 0 6px' }}>Tax Payable</p>
+            <p style={{ fontSize: 18, fontWeight: 700, color: result.recommended === 'new' ? C.primary : C.fg, margin: 0 }}>{fmt(result.newTax)}</p>
+          </div>
+
+          <p style={{ fontSize: 11, color: C.muted, margin: 0 }}>Standard deduction: ₹75,000</p>
+        </div>
+
+        {/* Old Regime */}
+        <div
+          style={{
+            background: result.recommended === 'old' ? '#FEF4E8' : C.card,
+            border: `2px solid ${result.recommended === 'old' ? '#D4B98A' : C.border}`,
+            borderRadius: 8,
+            padding: 16,
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 600, color: C.fg, margin: 0 }}>Old Regime</h3>
+            {result.recommended === 'old' && <span style={{ fontSize: 11, fontWeight: 700, color: '#C4863E', background: '#FEF4E8', padding: '4px 8px', borderRadius: 4 }}>✓ RECOMMENDED</span>}
+          </div>
+
+          <div style={{ paddingBottom: 12, borderBottom: `1px solid ${C.border}`, marginBottom: 12 }}>
+            <p style={{ fontSize: 12, color: C.muted, margin: '0 0 6px' }}>Taxable Income</p>
+            <p style={{ fontSize: 16, fontWeight: 700, color: C.fg, margin: 0 }}>{fmt(result.oldTaxable)}</p>
+          </div>
+
+          <div style={{ paddingBottom: 12, borderBottom: `1px solid ${C.border}`, marginBottom: 12 }}>
+            <p style={{ fontSize: 12, color: C.muted, margin: '0 0 6px' }}>Tax Payable</p>
+            <p style={{ fontSize: 18, fontWeight: 700, color: result.recommended === 'old' ? '#C4863E' : C.fg, margin: 0 }}>{fmt(result.oldTax)}</p>
+          </div>
+
+          <p style={{ fontSize: 11, color: C.muted, margin: 0 }}>With 80C/80D/24b deductions</p>
+        </div>
+      </div>
+
+      {/* Savings */}
+      <div style={{ background: '#F0F9F7', border: `1px solid #D1E8E4`, borderRadius: 8, padding: 20, marginBottom: 24, textAlign: 'center' }}>
+        <p style={{ fontSize: 12, color: C.muted, margin: '0 0 8px' }}>Tax Savings</p>
+        <p style={{ fontSize: 28, fontWeight: 700, color: C.primary, margin: 0 }}>{fmt(result.savings)}</p>
+        <p style={{ fontSize: 12, color: C.muted, margin: '8px 0 0' }}>by choosing {result.recommended === 'new' ? 'New' : 'Old'} Regime</p>
+      </div>
+
+      {/* ITR Form Recommendation */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 24 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 600, color: C.fg, margin: '0 0 12px' }}>ITR Form to File</h3>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+          <div>
+            <p style={{ fontSize: 13, fontWeight: 600, color: C.primary, margin: '0 0 4px' }}>{itrForm.form}</p>
+            <p style={{ fontSize: 12, color: C.fg, margin: '0 0 6px' }}>{itrForm.title}</p>
+            <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>{itrForm.reason}</p>
+          </div>
+          <div style={{ fontSize: 24, fontWeight: 700, color: C.primary }}>{itrForm.form}</div>
+        </div>
+
+        <div style={{ background: '#F9F7F4', border: `1px solid ${C.border}`, borderRadius: 6, padding: 12, marginTop: 12 }}>
+          <p style={{ fontSize: 12, color: C.text, margin: 0, lineHeight: 1.6 }}>{itrForm.details}</p>
+        </div>
+      </div>
+
+      {/* Navigation */}
+      <div style={{ display: 'flex', gap: 12 }}>
+        <button
+          onClick={() => router.push('/dashboard/profile/deductions')}
+          style={{
+            flex: 1,
+            padding: '12px',
+            background: 'transparent',
+            color: C.primary,
+            border: `1px solid ${C.border}`,
+            borderRadius: 6,
+            fontSize: 14,
+            fontWeight: 500,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+          }}
+        >
+          ← Edit Deductions
+        </button>
+        <button
+          onClick={() => router.push('/dashboard')}
+          style={{
+            flex: 1,
+            padding: '12px',
+            background: C.primary,
+            color: '#fff',
+            border: 'none',
+            borderRadius: 6,
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+          }}
+        >
+          Back to Dashboard
+        </button>
       </div>
     </div>
   )
-}
-function Section({ title, children }: { title: string; children?: React.ReactNode }) {
-  return (
-    <div style={{ marginBottom:22 }}>
-      <div style={{ fontSize:12, fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase' as const, color:C.fg, marginBottom:8, paddingBottom:4, borderBottom:`1px solid ${C.border}` }}>{title}</div>
-      {children}
-    </div>
-  )
-}
-function RowGrid({ children }: { children?: React.ReactNode }) {
-  return <div style={{ display:'grid', gridTemplateColumns:'220px 1fr', gap:'6px 12px', fontSize:12 }}>{children}</div>
-}
-function Label({ children }: { children?: React.ReactNode }) {
-  return <div style={{ color:C.muted, padding:'4px 0' }}>{children}</div>
-}
-function Value({ children }: { children?: React.ReactNode }) {
-  return <div style={{ color:C.text, fontWeight:500, padding:'4px 8px', background:C.wl, borderRadius:3, border:`1px solid ${C.border}` }}>{children}</div>
-}
-
-const tableStyle: React.CSSProperties = { width:'100%', borderCollapse:'collapse' as const, fontSize:12, marginTop:4 }
-function Th({ children, style }: { children?: React.ReactNode; style?: React.CSSProperties }) {
-  return <th style={{ padding:'7px 10px', border:`1px solid ${C.border}`, textAlign:'left' as const, background:C.wl, color:C.fg, fontSize:10, textTransform:'uppercase' as const, letterSpacing:'0.06em', fontWeight:700, ...style }}>{children}</th>
-}
-function Tr({ children, total }: { children?: React.ReactNode; total?: boolean }) {
-  const style: React.CSSProperties = total ? { background:'#FAF7F2', fontWeight:700 } : {}
-  return <tr style={style}>{children}</tr>
-}
-function Td({ children, num, muted, style }: { children?: React.ReactNode; num?: boolean; muted?: boolean; style?: React.CSSProperties }) {
-  return <td style={{ padding:'7px 10px', border:`1px solid ${C.border}`, textAlign: num ? 'right' as const : 'left' as const, fontVariantNumeric:'tabular-nums' as const, fontWeight: num ? 500 : 400, color: muted ? C.muted : 'inherit', fontSize: muted ? 11 : 12, ...style }}>{children}</td>
 }
