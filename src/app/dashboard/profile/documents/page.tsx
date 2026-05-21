@@ -37,23 +37,40 @@ export default function DocumentsPage() {
         localStorage.setItem('av_uploaded_docs', JSON.stringify(docs))
       }
 
-      const formData = new FormData()
-      formData.append('file', salaryFile)
+      const reader = new FileReader()
+      reader.onload = async (e) => {
+        try {
+          const base64 = (e.target?.result as string).split(',')[1]
+          const mediaType = salaryFile.type as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' | 'application/pdf'
+          
+          console.log('[Documents] Sending to API with mediaType:', mediaType)
+          const res = await fetch('/api/parse-salary', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ base64Data: base64, mediaType })
+          })
 
-      const res = await fetch('/api/parse-salary', {
-        method: 'POST',
-        body: formData,
-      })
+          console.log('[Documents] API response status:', res.status)
+          if (!res.ok) {
+            const err = await res.json()
+            console.error('[Documents] API error:', err)
+            throw new Error(err.error || 'Parse failed')
+          }
 
-      if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.error || 'Parse failed')
+          const parsed = await res.json()
+          console.log('[Documents] Parse successful, data:', parsed)
+          setParsedData(parsed)
+          setShowFYSelector(true)
+          setUploading(false)
+        } catch (err: any) {
+          console.error('[Documents] Error:', err)
+          alert(err.message || 'Upload failed')
+          setUploading(false)
+        }
       }
-
-      const parsed = await res.json()
-      setParsedData(parsed)
-      setShowFYSelector(true)
+      reader.readAsDataURL(salaryFile)
     } catch (e: any) {
+      console.error('[Documents] Outer error:', e)
       alert(e.message || 'Upload failed')
       setUploading(false)
     }
@@ -62,7 +79,7 @@ export default function DocumentsPage() {
   const handleFYSelect = (fy: string) => {
     localStorage.setItem('av_selected_fy', fy)
     const existing = JSON.parse(localStorage.getItem('av_salary_timeline') || '[]')
-    localStorage.setItem('av_salary_timeline', JSON.stringify([...existing, ...parsedData.slips]))
+    localStorage.setItem('av_salary_timeline', JSON.stringify([...existing, ...parsedData.data]))
     router.push('/dashboard/profile/salary')
   }
 
@@ -183,10 +200,10 @@ export default function DocumentsPage() {
         </button>
       </div>
       
-      {showFYSelector && parsedData?.slips?.[0] && (
+      {showFYSelector && parsedData?.data?.[0] && (
         <FYSelector
-          month={parsedData.slips[0].month}
-          year={parsedData.slips[0].year}
+          month={parsedData.data[0].month}
+          year={parsedData.data[0].year}
           onSelect={handleFYSelect}
         />
       )}
