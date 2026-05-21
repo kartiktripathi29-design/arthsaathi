@@ -2,137 +2,291 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
-const C = { bg: '#FDFAF6', card: '#fff', border: '#E4DDD1', fg: '#1C2B22', muted: '#6B7770', primary: '#3A4B41', accent: '#E6CFA7' }
+const C = { bg: '#FDFAF6', card: '#fff', border: '#E4DDD1', fg: '#1C2B22', muted: '#6B7770', primary: '#3A4B41' }
+
+interface Tooltip {
+  key: string | null
+  text: string
+}
 
 export default function ExemptionsPage() {
   const router = useRouter()
-  const [hraData, setHRAData] = useState({
-    hraReceived: 0,
-    rentPaid: 0,
-    isMetro: false,
-  })
+  const [tooltip, setTooltip] = useState<Tooltip>({ key: null, text: '' })
+  const [hra, setHra] = useState({ hraReceived: 0, rentPaid: 0, isMetro: false })
+  const [calculatedExemption, setCalculatedExemption] = useState(0)
+
+  const tooltips: Record<string, string> = {
+    hra: 'House Rent Allowance received from your employer. Enter the annual amount.',
+    rent: 'Total rent paid annually for your residence. Include all rent payments.',
+    metro: 'Metro cities: Delhi, Mumbai, Chennai, Kolkata, Bangalore, Hyderabad. Non-metro gets lower exemption limit.',
+  }
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('av_exemptions')
-      if (stored) {
-        const data = JSON.parse(stored)
-        setHRAData(data.hra || hraData)
+    const saved = localStorage.getItem('av_exemptions')
+    if (saved) {
+      const data = JSON.parse(saved)
+      setHra(data.hra || { hraReceived: 0, rentPaid: 0, isMetro: false })
+    }
+
+    // Auto-fill HRA from salary slip
+    const salary = localStorage.getItem('av_salary_timeline')
+    if (salary) {
+      const slips = JSON.parse(salary)
+      if (slips.length > 0 && slips[0].hra) {
+        setHra(prev => ({ ...prev, hraReceived: slips[0].hra * 12 }))
       }
     }
   }, [])
 
-  const handleSave = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('av_exemptions', JSON.stringify({ hra: hraData }))
+  useEffect(() => {
+    // Calculate HRA exemption
+    if (!hra.hraReceived || !hra.rentPaid) {
+      setCalculatedExemption(0)
+      return
     }
-    router.push('/dashboard/profile/deductions')
+
+    const actual = hra.hraReceived
+    const rentMinus10Percent = hra.rentPaid - hra.hraReceived * 0.1
+    const cityLimit = hra.isMetro ? hra.hraReceived * 0.5 : hra.hraReceived * 0.4
+
+    const exemption = Math.min(actual, rentMinus10Percent, cityLimit)
+    setCalculatedExemption(Math.max(exemption, 0))
+  }, [hra])
+
+  const saveExemptions = (updated: typeof hra) => {
+    setHra(updated)
+    localStorage.setItem('av_exemptions', JSON.stringify({ hra: updated }))
   }
 
   return (
-    <div style={{ maxWidth: 700, margin: '0 auto' }}>
+    <div style={{ maxWidth: 800, margin: '0 auto', padding: '20px 0' }}>
       <div style={{ marginBottom: 24 }}>
         <h2 style={{ fontSize: 20, fontWeight: 700, color: C.fg, margin: '0 0 6px' }}>Exemptions</h2>
-        <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>
-          Claim HRA exemption if you're paying rent.
-        </p>
+        <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>Claim HRA exemption if you're paying rent.</p>
       </div>
 
-      {/* HRA Section */}
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24, marginBottom: 24 }}>
-        <h3 style={{ fontSize: 16, fontWeight: 600, color: C.fg, margin: '0 0 16px' }}>
-          House Rent Allowance (HRA)
-        </h3>
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20 }}>
+        <h3 style={{ fontSize: 16, fontWeight: 600, color: C.fg, margin: '0 0 16px' }}>House Rent Allowance (HRA)</h3>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* HRA Received */}
-          <div>
-            <label style={{ fontSize: 13, fontWeight: 500, color: C.fg, display: 'block', marginBottom: 6 }}>
-              HRA Received (Annual)
-            </label>
+        {/* HRA Received */}
+        <div style={{ marginBottom: 16 }}>
+          <label
+            style={{
+              fontSize: 13,
+              fontWeight: 500,
+              color: C.fg,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              marginBottom: 6,
+            }}
+          >
+            Do you receive HRA
+            <span
+              style={{ fontSize: 11, cursor: 'pointer', color: C.primary }}
+              onMouseEnter={() => setTooltip({ key: 'hra', text: tooltips.hra })}
+              onMouseLeave={() => setTooltip({ key: null, text: '' })}
+            >
+              ⁱ
+            </span>
+            ?
+          </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 12, color: C.muted }}>₹</span>
             <input
               type="number"
-              value={hraData.hraReceived || ''}
-              onChange={e => setHRAData({ ...hraData, hraReceived: parseFloat(e.target.value) || 0 })}
-              placeholder="₹0"
+              value={hra.hraReceived || ''}
+              onChange={e => saveExemptions({ ...hra, hraReceived: parseFloat(e.target.value) || 0 })}
+              placeholder="Annual HRA amount"
               style={{
-                width: '100%', padding: '10px 12px', fontSize: 14, border: `1px solid ${C.border}`,
-                borderRadius: 6, fontFamily: 'inherit', background: C.bg,
+                flex: 1,
+                padding: '8px 12px',
+                border: `1px solid ${C.border}`,
+                borderRadius: 6,
+                fontSize: 13,
+                fontFamily: 'inherit',
               }}
             />
           </div>
+          <p style={{ fontSize: 11, color: C.muted, margin: '6px 0 0' }}>Auto-filled from salary slip if available</p>
+        </div>
 
-          {/* Rent Paid */}
-          <div>
-            <label style={{ fontSize: 13, fontWeight: 500, color: C.fg, display: 'block', marginBottom: 6 }}>
-              Annual Rent Paid
-            </label>
+        {/* Rent Paid */}
+        <div style={{ marginBottom: 16 }}>
+          <label
+            style={{
+              fontSize: 13,
+              fontWeight: 500,
+              color: C.fg,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              marginBottom: 6,
+            }}
+          >
+            How much rent do you pay annually
+            <span
+              style={{ fontSize: 11, cursor: 'pointer', color: C.primary }}
+              onMouseEnter={() => setTooltip({ key: 'rent', text: tooltips.rent })}
+              onMouseLeave={() => setTooltip({ key: null, text: '' })}
+            >
+              ⁱ
+            </span>
+            ?
+          </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 12, color: C.muted }}>₹</span>
             <input
               type="number"
-              value={hraData.rentPaid || ''}
-              onChange={e => setHRAData({ ...hraData, rentPaid: parseFloat(e.target.value) || 0 })}
-              placeholder="₹0"
+              value={hra.rentPaid || ''}
+              onChange={e => saveExemptions({ ...hra, rentPaid: parseFloat(e.target.value) || 0 })}
+              placeholder="Total annual rent"
               style={{
-                width: '100%', padding: '10px 12px', fontSize: 14, border: `1px solid ${C.border}`,
-                borderRadius: 6, fontFamily: 'inherit', background: C.bg,
+                flex: 1,
+                padding: '8px 12px',
+                border: `1px solid ${C.border}`,
+                borderRadius: 6,
+                fontSize: 13,
+                fontFamily: 'inherit',
               }}
             />
           </div>
+        </div>
 
-          {/* Metro / Non-Metro */}
-          <div>
-            <label style={{ fontSize: 13, fontWeight: 500, color: C.fg, display: 'block', marginBottom: 8 }}>
-              City Type
-            </label>
-            <div style={{ display: 'flex', gap: 10 }}>
-              {[
-                { label: 'Metro (Delhi/Mumbai/Chennai/Kolkata/Bengaluru/Hyderabad/Pune/Ahmedabad)', value: true },
-                { label: 'Non-Metro', value: false },
-              ].map(opt => (
-                <button
-                  key={String(opt.value)}
-                  onClick={() => setHRAData({ ...hraData, isMetro: opt.value })}
-                  style={{
-                    flex: 1, padding: '10px 14px', background: hraData.isMetro === opt.value ? C.primary : C.bg,
-                    color: hraData.isMetro === opt.value ? '#fff' : C.fg,
-                    border: `1px solid ${hraData.isMetro === opt.value ? C.primary : C.border}`,
-                    borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit',
-                  }}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            <p style={{ fontSize: 11, color: C.muted, margin: '6px 0 0', lineHeight: 1.4 }}>
-              Metro cities get 50% of basic as HRA exemption cap. Non-metro get 40%.
-            </p>
+        {/* City Type */}
+        <div style={{ marginBottom: 16 }}>
+          <label
+            style={{
+              fontSize: 13,
+              fontWeight: 500,
+              color: C.fg,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              marginBottom: 12,
+            }}
+          >
+            Which city do you live in
+            <span
+              style={{ fontSize: 11, cursor: 'pointer', color: C.primary }}
+              onMouseEnter={() => setTooltip({ key: 'metro', text: tooltips.metro })}
+              onMouseLeave={() => setTooltip({ key: null, text: '' })}
+            >
+              ⁱ
+            </span>
+            ?
+          </label>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button
+              onClick={() => saveExemptions({ ...hra, isMetro: true })}
+              style={{
+                flex: 1,
+                padding: '10px',
+                background: hra.isMetro ? C.primary : C.bg,
+                color: hra.isMetro ? '#fff' : C.fg,
+                border: `1px solid ${hra.isMetro ? C.primary : C.border}`,
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              Metro (50%)
+            </button>
+            <button
+              onClick={() => saveExemptions({ ...hra, isMetro: false })}
+              style={{
+                flex: 1,
+                padding: '10px',
+                background: !hra.isMetro ? C.primary : C.bg,
+                color: !hra.isMetro ? '#fff' : C.fg,
+                border: `1px solid ${!hra.isMetro ? C.primary : C.border}`,
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              Non-Metro (40%)
+            </button>
           </div>
         </div>
-      </div>
 
-      {/* Section 10(14) Placeholder */}
-      <div style={{ background: '#FFF9E6', border: '1px solid #FFE066', borderRadius: 8, padding: 16, marginBottom: 24 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: '#856404', marginBottom: 4 }}>
-          🚧 Coming Soon: Section 10(14) Allowances
+        {/* Calculated Exemption */}
+        <div
+          style={{
+            background: '#F0F9F7',
+            border: `1px solid #D1E8E4`,
+            borderRadius: 6,
+            padding: 12,
+            marginTop: 16,
+          }}
+        >
+          <p style={{ fontSize: 12, color: C.muted, margin: '0 0 4px' }}>Calculated HRA Exemption</p>
+          <p style={{ fontSize: 18, fontWeight: 700, color: C.primary, margin: 0 }}>
+            ₹{calculatedExemption.toLocaleString('en-IN')}
+          </p>
         </div>
-        <p style={{ fontSize: 12, color: '#856404', margin: 0 }}>
-          Children Education, Helper, Books & Periodicals, and other tax-exempt allowances will be added here.
+
+        <p style={{ fontSize: 11, color: C.muted, margin: '12px 0 0', lineHeight: 1.6 }}>
+          HRA exemption = minimum of: (1) Actual HRA received, (2) Rent paid minus 10% of basic salary, (3) 50% of basic (metro) or 40% (non-metro)
         </p>
       </div>
 
-      {/* Navigation */}
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <button onClick={() => router.push('/dashboard/profile/other-income')} style={{
-          padding: '12px 24px', background: 'transparent', color: C.primary,
-          border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500,
-          cursor: 'pointer', fontFamily: 'inherit',
-        }}>
+      {/* Tooltip */}
+      {tooltip.key && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 20,
+            left: 20,
+            right: 20,
+            background: C.fg,
+            color: '#fff',
+            padding: 12,
+            borderRadius: 6,
+            fontSize: 12,
+            zIndex: 50,
+          }}
+        >
+          {tooltip.text}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+        <button
+          onClick={() => router.back()}
+          style={{
+            padding: '12px 20px',
+            background: 'transparent',
+            color: C.primary,
+            border: `1px solid ${C.border}`,
+            borderRadius: 6,
+            fontSize: 14,
+            fontWeight: 500,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+          }}
+        >
           ← Back
         </button>
-        <button onClick={handleSave} style={{
-          padding: '12px 24px', background: C.primary, color: '#fff', border: 'none',
-          borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-        }}>
+        <button
+          onClick={() => router.push('/dashboard/profile/deductions')}
+          style={{
+            flex: 1,
+            padding: '12px',
+            background: C.primary,
+            color: '#fff',
+            border: 'none',
+            borderRadius: 6,
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+          }}
+        >
           Next: Deductions →
         </button>
       </div>

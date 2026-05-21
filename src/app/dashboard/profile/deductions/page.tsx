@@ -4,148 +4,696 @@ import { useRouter } from 'next/navigation'
 
 const C = { bg: '#FDFAF6', card: '#fff', border: '#E4DDD1', fg: '#1C2B22', muted: '#6B7770', primary: '#3A4B41' }
 
+interface Tooltip {
+  key: string | null
+  text: string
+}
+
 export default function DeductionsPage() {
   const router = useRouter()
-  const [expanded, setExpanded] = useState<string[]>([])
+  const [tooltip, setTooltip] = useState<Tooltip>({ key: null, text: '' })
+  const [expanded, setExpanded] = useState<string[]>(['80c'])
   const [ded, setDed] = useState({
-    ppf: 0, elss: 0, lic: 0, tuition: 0, nsc: 0,
-    selfFamily: 0, parents: 0, selfSenior: false, parentsSenior: false,
+    ppf: 0,
+    elss: 0,
+    lic: 0,
+    tuition: 0,
+    nsc: 0,
+    selfFamily: 0,
+    parents: 0,
+    selfSenior: false,
+    parentsSenior: false,
     homeLoanInterest: 0,
     nps: 0,
   })
 
+  const tooltips: Record<string, string> = {
+    ppf: 'Public Provident Fund. Invest ₹X, get ₹X tax deduction. 15-year lock-in. ₹1.5L/year limit.',
+    elss: 'Equity Linked Savings Scheme. Mutual funds with tax benefits. Invest ₹X, deduct ₹X. 3-year lock-in.',
+    lic: 'Life Insurance Premium from LIC or private insurers. Both provide ₹X investment = ₹X deduction.',
+    tuition: 'Tuition fees paid for education of your 2 children. ₹X paid = ₹X deduction.',
+    nsc: 'National Savings Certificate or Tax Saver FD. ₹X invested = ₹X deduction.',
+    '80c': 'Section 80C allows deduction up to ₹1,50,000 for investments in PPF, ELSS, LIC, tuition, NSC.',
+    '80d': 'Section 80D allows deduction for health insurance premiums. Self+family: ₹25k (or ₹50k if senior). Parents: ₹25k (or ₹50k if senior).',
+    selfFamily: 'Health insurance premium for yourself, spouse, and children. Limit: ₹25,000 (or ₹50,000 if you/spouse is 60+).',
+    parents: 'Health insurance premium for your parents. Limit: ₹25,000 (or ₹50,000 if they are 60+).',
+    selfSenior: 'If you or your spouse is 60 years or older, health insurance limit increases from ₹25k to ₹50k.',
+    parentsSenior: 'If your parents are 60 years or older, health insurance limit increases from ₹25k to ₹50k.',
+    homeLoan: 'Interest paid on home loan for self-occupied property. Maximum deduction: ₹2,00,000 per IT Act Section 24(b).',
+    nps: 'National Pension Scheme contribution under Section 80CCD(1B). Additional ₹50,000 over Section 80C limit.',
+  }
+
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('av_deductions')
-      if (stored) setDed(JSON.parse(stored))
-    }
+    const saved = localStorage.getItem('av_deductions')
+    if (saved) setDed(JSON.parse(saved))
   }, [])
 
-  const toggle = (key: string) => {
-    setExpanded(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
+  const saveDeductions = (updated: typeof ded) => {
+    setDed(updated)
+    localStorage.setItem('av_deductions', JSON.stringify(updated))
   }
 
-  const handleSave = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('av_deductions', JSON.stringify(ded))
+  const toggle = (section: string) => {
+    setExpanded(prev =>
+      prev.includes(section) ? prev.filter(s => s !== section) : [...prev, section]
+    )
+  }
+
+  const sec80CTotal = ded.ppf + ded.elss + ded.lic + ded.tuition + ded.nsc
+  const sec80CCapped = Math.min(sec80CTotal, 150000)
+
+  const sec80DSelfLimit = ded.selfSenior ? 50000 : 25000
+  const sec80DSelf = Math.min(ded.selfFamily, sec80DSelfLimit)
+  const sec80DParentsLimit = ded.parentsSenior ? 50000 : 25000
+  const sec80DParents = Math.min(ded.parents, sec80DParentsLimit)
+  const sec80DTotal = sec80DSelf + sec80DParents
+
+  const homeLoanCapped = Math.min(ded.homeLoanInterest, 200000)
+  const npsCapped = Math.min(ded.nps, 50000)
+
+  const handleProceed = () => {
+    const capped = {
+      ...ded,
+      ppf: Math.min(ded.ppf, 150000 - (ded.elss + ded.lic + ded.tuition + ded.nsc)),
+      elss: Math.min(ded.elss, 150000 - (ded.ppf + ded.lic + ded.tuition + ded.nsc)),
+      lic: Math.min(ded.lic, 150000 - (ded.ppf + ded.elss + ded.tuition + ded.nsc)),
+      tuition: Math.min(ded.tuition, 150000 - (ded.ppf + ded.elss + ded.lic + ded.nsc)),
+      nsc: Math.min(ded.nsc, 150000 - (ded.ppf + ded.elss + ded.lic + ded.tuition)),
+      selfFamily: sec80DSelf,
+      parents: sec80DParents,
+      homeLoanInterest: homeLoanCapped,
+      nps: npsCapped,
     }
-    router.push('/dashboard/tax')
-  }
 
-  const sec80C = ded.ppf + ded.elss + ded.lic + ded.tuition + ded.nsc
-  const sec80D = ded.selfFamily + ded.parents
+    if (homeLoanCapped < ded.homeLoanInterest) {
+      alert(`Home loan interest capped at ₹${homeLoanCapped.toLocaleString('en-IN')} per IT Act Section 24(b)`)
+    }
+
+    saveDeductions(capped)
+    router.push('/dashboard/tax/snapshot')
+  }
 
   return (
-    <div style={{ maxWidth: 700, margin: '0 auto' }}>
-      <h2 style={{ fontSize: 20, fontWeight: 700, color: C.fg, marginBottom: 24 }}>Deductions</h2>
+    <div style={{ maxWidth: 800, margin: '0 auto', padding: '20px 0' }}>
+      <div style={{ marginBottom: 24 }}>
+        <h2 style={{ fontSize: 20, fontWeight: 700, color: C.fg, margin: '0 0 6px' }}>Deductions</h2>
+        <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>Reduce your taxable income with investments and payments.</p>
+      </div>
 
-      {/* 80C */}
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 16, overflow: 'hidden' }}>
-        <button onClick={() => toggle('80c')} style={{
-          width: '100%', padding: '16px 20px', background: 'transparent', border: 'none',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', fontFamily: 'inherit',
-        }}>
-          <div style={{ textAlign: 'left' }}>
-            <div style={{ fontSize: 15, fontWeight: 600, color: C.fg }}>Section 80C (Max ₹1.5L)</div>
-            <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>Total: ₹{sec80C.toLocaleString('en-IN')}</div>
+      {/* ─── SECTION 80C ─── */}
+      <div
+        onClick={() => toggle('80c')}
+        style={{
+          background: C.card,
+          border: `1px solid ${C.border}`,
+          borderRadius: 8,
+          padding: 16,
+          marginBottom: 12,
+          cursor: 'pointer',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
+        <div>
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 600,
+              color: C.fg,
+              marginBottom: 4,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            {expanded.includes('80c') ? '▼' : '▶'} Section 80C
+            <span
+              style={{ fontSize: 12, cursor: 'pointer', color: C.primary, fontWeight: 700 }}
+              onMouseEnter={() => setTooltip({ key: '80c', text: tooltips['80c'] })}
+              onMouseLeave={() => setTooltip({ key: null, text: '' })}
+            >
+              ⁱ
+            </span>
           </div>
-          <span style={{ fontSize: 18, color: C.fg }}>{expanded.includes('80c') ? '−' : '+'}</span>
+          <div style={{ fontSize: 12, color: C.muted }}>Max ₹1,50,000</div>
+        </div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: C.fg }}>₹{sec80CCapped.toLocaleString('en-IN')}</div>
+      </div>
+
+      {expanded.includes('80c') && (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16, marginBottom: 16 }}>
+          {/* PPF */}
+          <div style={{ marginBottom: 12 }}>
+            <label
+              style={{
+                fontSize: 13,
+                fontWeight: 500,
+                color: C.fg,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                marginBottom: 6,
+              }}
+            >
+              PPF
+              <span
+                style={{ fontSize: 11, cursor: 'pointer', color: C.primary }}
+                onMouseEnter={() => setTooltip({ key: 'ppf', text: tooltips.ppf })}
+                onMouseLeave={() => setTooltip({ key: null, text: '' })}
+              >
+                ⁱ
+              </span>
+            </label>
+            <input
+              type="number"
+              value={ded.ppf || ''}
+              onChange={e => saveDeductions({ ...ded, ppf: parseFloat(e.target.value) || 0 })}
+              placeholder="₹0"
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: `1px solid ${C.border}`,
+                borderRadius: 6,
+                fontSize: 13,
+                fontFamily: 'inherit',
+              }}
+            />
+          </div>
+
+          {/* ELSS */}
+          <div style={{ marginBottom: 12 }}>
+            <label
+              style={{
+                fontSize: 13,
+                fontWeight: 500,
+                color: C.fg,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                marginBottom: 6,
+              }}
+            >
+              ELSS Mutual Funds
+              <span
+                style={{ fontSize: 11, cursor: 'pointer', color: C.primary }}
+                onMouseEnter={() => setTooltip({ key: 'elss', text: tooltips.elss })}
+                onMouseLeave={() => setTooltip({ key: null, text: '' })}
+              >
+                ⁱ
+              </span>
+            </label>
+            <input
+              type="number"
+              value={ded.elss || ''}
+              onChange={e => saveDeductions({ ...ded, elss: parseFloat(e.target.value) || 0 })}
+              placeholder="₹0"
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: `1px solid ${C.border}`,
+                borderRadius: 6,
+                fontSize: 13,
+                fontFamily: 'inherit',
+              }}
+            />
+          </div>
+
+          {/* LIC */}
+          <div style={{ marginBottom: 12 }}>
+            <label
+              style={{
+                fontSize: 13,
+                fontWeight: 500,
+                color: C.fg,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                marginBottom: 6,
+              }}
+            >
+              Life Insurance Premium
+              <span
+                style={{ fontSize: 11, cursor: 'pointer', color: C.primary }}
+                onMouseEnter={() => setTooltip({ key: 'lic', text: tooltips.lic })}
+                onMouseLeave={() => setTooltip({ key: null, text: '' })}
+              >
+                ⁱ
+              </span>
+            </label>
+            <input
+              type="number"
+              value={ded.lic || ''}
+              onChange={e => saveDeductions({ ...ded, lic: parseFloat(e.target.value) || 0 })}
+              placeholder="₹0"
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: `1px solid ${C.border}`,
+                borderRadius: 6,
+                fontSize: 13,
+                fontFamily: 'inherit',
+              }}
+            />
+          </div>
+
+          {/* Tuition */}
+          <div style={{ marginBottom: 12 }}>
+            <label
+              style={{
+                fontSize: 13,
+                fontWeight: 500,
+                color: C.fg,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                marginBottom: 6,
+              }}
+            >
+              Tuition Fees (Children)
+              <span
+                style={{ fontSize: 11, cursor: 'pointer', color: C.primary }}
+                onMouseEnter={() => setTooltip({ key: 'tuition', text: tooltips.tuition })}
+                onMouseLeave={() => setTooltip({ key: null, text: '' })}
+              >
+                ⁱ
+              </span>
+            </label>
+            <input
+              type="number"
+              value={ded.tuition || ''}
+              onChange={e => saveDeductions({ ...ded, tuition: parseFloat(e.target.value) || 0 })}
+              placeholder="₹0"
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: `1px solid ${C.border}`,
+                borderRadius: 6,
+                fontSize: 13,
+                fontFamily: 'inherit',
+              }}
+            />
+          </div>
+
+          {/* NSC */}
+          <div style={{ marginBottom: 12 }}>
+            <label
+              style={{
+                fontSize: 13,
+                fontWeight: 500,
+                color: C.fg,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                marginBottom: 6,
+              }}
+            >
+              NSC / Tax Saver FD
+              <span
+                style={{ fontSize: 11, cursor: 'pointer', color: C.primary }}
+                onMouseEnter={() => setTooltip({ key: 'nsc', text: tooltips.nsc })}
+                onMouseLeave={() => setTooltip({ key: null, text: '' })}
+              >
+                ⁱ
+              </span>
+            </label>
+            <input
+              type="number"
+              value={ded.nsc || ''}
+              onChange={e => saveDeductions({ ...ded, nsc: parseFloat(e.target.value) || 0 })}
+              placeholder="₹0"
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: `1px solid ${C.border}`,
+                borderRadius: 6,
+                fontSize: 13,
+                fontFamily: 'inherit',
+              }}
+            />
+          </div>
+
+          <div style={{ fontSize: 11, color: C.muted, background: '#FEF9F0', padding: 8, borderRadius: 4, marginTop: 12 }}>
+            ⚠ Total capped at ₹1,50,000. Current: ₹{sec80CTotal.toLocaleString('en-IN')}
+          </div>
+        </div>
+      )}
+
+      {/* ─── SECTION 80D ─── */}
+      <div
+        onClick={() => toggle('80d')}
+        style={{
+          background: C.card,
+          border: `1px solid ${C.border}`,
+          borderRadius: 8,
+          padding: 16,
+          marginBottom: 12,
+          cursor: 'pointer',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
+        <div>
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 600,
+              color: C.fg,
+              marginBottom: 4,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            {expanded.includes('80d') ? '▼' : '▶'} Section 80D
+            <span
+              style={{ fontSize: 12, cursor: 'pointer', color: C.primary, fontWeight: 700 }}
+              onMouseEnter={() => setTooltip({ key: '80d', text: tooltips['80d'] })}
+              onMouseLeave={() => setTooltip({ key: null, text: '' })}
+            >
+              ⁱ
+            </span>
+          </div>
+          <div style={{ fontSize: 12, color: C.muted }}>Health Insurance</div>
+        </div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: C.fg }}>₹{sec80DTotal.toLocaleString('en-IN')}</div>
+      </div>
+
+      {expanded.includes('80d') && (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16, marginBottom: 16 }}>
+          <label
+            style={{
+              fontSize: 13,
+              fontWeight: 500,
+              color: C.fg,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              marginBottom: 6,
+            }}
+          >
+            Self + Family
+            <span
+              style={{ fontSize: 11, cursor: 'pointer', color: C.primary }}
+              onMouseEnter={() => setTooltip({ key: 'selfFamily', text: tooltips.selfFamily })}
+              onMouseLeave={() => setTooltip({ key: null, text: '' })}
+            >
+              ⁱ
+            </span>
+          </label>
+          <input
+            type="number"
+            value={ded.selfFamily || ''}
+            onChange={e => saveDeductions({ ...ded, selfFamily: parseFloat(e.target.value) || 0 })}
+            placeholder="₹0"
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              border: `1px solid ${C.border}`,
+              borderRadius: 6,
+              fontSize: 13,
+              fontFamily: 'inherit',
+              marginBottom: 12,
+            }}
+          />
+
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 13,
+              color: C.fg,
+              marginBottom: 12,
+              cursor: 'pointer',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={ded.selfSenior}
+              onChange={e => saveDeductions({ ...ded, selfSenior: e.target.checked })}
+              style={{ cursor: 'pointer' }}
+            />
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              You/Spouse is 60+ years
+              <span
+                style={{ fontSize: 11, cursor: 'pointer', color: C.primary }}
+                onMouseEnter={() => setTooltip({ key: 'selfSenior', text: tooltips.selfSenior })}
+                onMouseLeave={() => setTooltip({ key: null, text: '' })}
+              >
+                ⁱ
+              </span>
+            </span>
+          </label>
+
+          <label
+            style={{
+              fontSize: 13,
+              fontWeight: 500,
+              color: C.fg,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              marginBottom: 6,
+              marginTop: 16,
+            }}
+          >
+            Parents
+            <span
+              style={{ fontSize: 11, cursor: 'pointer', color: C.primary }}
+              onMouseEnter={() => setTooltip({ key: 'parents', text: tooltips.parents })}
+              onMouseLeave={() => setTooltip({ key: null, text: '' })}
+            >
+              ⁱ
+            </span>
+          </label>
+          <input
+            type="number"
+            value={ded.parents || ''}
+            onChange={e => saveDeductions({ ...ded, parents: parseFloat(e.target.value) || 0 })}
+            placeholder="₹0"
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              border: `1px solid ${C.border}`,
+              borderRadius: 6,
+              fontSize: 13,
+              fontFamily: 'inherit',
+              marginBottom: 12,
+            }}
+          />
+
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 13,
+              color: C.fg,
+              cursor: 'pointer',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={ded.parentsSenior}
+              onChange={e => saveDeductions({ ...ded, parentsSenior: e.target.checked })}
+              style={{ cursor: 'pointer' }}
+            />
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              Parents are 60+ years
+              <span
+                style={{ fontSize: 11, cursor: 'pointer', color: C.primary }}
+                onMouseEnter={() => setTooltip({ key: 'parentsSenior', text: tooltips.parentsSenior })}
+                onMouseLeave={() => setTooltip({ key: null, text: '' })}
+              >
+                ⁱ
+              </span>
+            </span>
+          </label>
+        </div>
+      )}
+
+      {/* ─── HOME LOAN INTEREST ─── */}
+      <div
+        onClick={() => toggle('homeLoan')}
+        style={{
+          background: C.card,
+          border: `1px solid ${C.border}`,
+          borderRadius: 8,
+          padding: 16,
+          marginBottom: 12,
+          cursor: 'pointer',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
+        <div>
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 600,
+              color: C.fg,
+              marginBottom: 4,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            {expanded.includes('homeLoan') ? '▼' : '▶'} Home Loan Interest
+            <span
+              style={{ fontSize: 12, cursor: 'pointer', color: C.primary, fontWeight: 700 }}
+              onMouseEnter={() => setTooltip({ key: 'homeLoan', text: tooltips.homeLoan })}
+              onMouseLeave={() => setTooltip({ key: null, text: '' })}
+            >
+              ⁱ
+            </span>
+          </div>
+          <div style={{ fontSize: 12, color: C.muted }}>Section 24(b)</div>
+        </div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: C.fg }}>₹{homeLoanCapped.toLocaleString('en-IN')}</div>
+      </div>
+
+      {expanded.includes('homeLoan') && (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16, marginBottom: 16 }}>
+          <input
+            type="number"
+            value={ded.homeLoanInterest || ''}
+            onChange={e => saveDeductions({ ...ded, homeLoanInterest: parseFloat(e.target.value) || 0 })}
+            placeholder="₹0"
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              border: `1px solid ${C.border}`,
+              borderRadius: 6,
+              fontSize: 13,
+              fontFamily: 'inherit',
+            }}
+          />
+          <div style={{ fontSize: 11, color: C.muted, background: '#FEF9F0', padding: 8, borderRadius: 4, marginTop: 12 }}>
+            ⚠ Max deduction: ₹2,00,000 for self-occupied property
+          </div>
+        </div>
+      )}
+
+      {/* ─── NPS ─── */}
+      <div
+        onClick={() => toggle('nps')}
+        style={{
+          background: C.card,
+          border: `1px solid ${C.border}`,
+          borderRadius: 8,
+          padding: 16,
+          marginBottom: 12,
+          cursor: 'pointer',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
+        <div>
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 600,
+              color: C.fg,
+              marginBottom: 4,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            {expanded.includes('nps') ? '▼' : '▶'} NPS
+            <span
+              style={{ fontSize: 12, cursor: 'pointer', color: C.primary, fontWeight: 700 }}
+              onMouseEnter={() => setTooltip({ key: 'nps', text: tooltips.nps })}
+              onMouseLeave={() => setTooltip({ key: null, text: '' })}
+            >
+              ⁱ
+            </span>
+          </div>
+          <div style={{ fontSize: 12, color: C.muted }}>Section 80CCD(1B)</div>
+        </div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: C.fg }}>₹{npsCapped.toLocaleString('en-IN')}</div>
+      </div>
+
+      {expanded.includes('nps') && (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16, marginBottom: 16 }}>
+          <input
+            type="number"
+            value={ded.nps || ''}
+            onChange={e => saveDeductions({ ...ded, nps: parseFloat(e.target.value) || 0 })}
+            placeholder="₹0"
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              border: `1px solid ${C.border}`,
+              borderRadius: 6,
+              fontSize: 13,
+              fontFamily: 'inherit',
+            }}
+          />
+          <div style={{ fontSize: 11, color: C.muted, background: '#FEF9F0', padding: 8, borderRadius: 4, marginTop: 12 }}>
+            ℹ Additional ₹50,000 over Section 80C limit. Total 80C + NPS = ₹2,00,000 max.
+          </div>
+        </div>
+      )}
+
+      {/* Tooltip */}
+      {tooltip.key && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 20,
+            left: 20,
+            right: 20,
+            background: C.fg,
+            color: '#fff',
+            padding: 12,
+            borderRadius: 6,
+            fontSize: 12,
+            zIndex: 50,
+          }}
+        >
+          {tooltip.text}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+        <button
+          onClick={() => router.back()}
+          style={{
+            padding: '12px 20px',
+            background: 'transparent',
+            color: C.primary,
+            border: `1px solid ${C.border}`,
+            borderRadius: 6,
+            fontSize: 14,
+            fontWeight: 500,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+          }}
+        >
+          ← Back
         </button>
-        {expanded.includes('80c') && (
-          <div style={{ padding: '0 20px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {[
-              { key: 'ppf', label: 'PPF' },
-              { key: 'elss', label: 'ELSS Mutual Funds' },
-              { key: 'lic', label: 'Life Insurance Premium' },
-              { key: 'tuition', label: 'Tuition Fees' },
-              { key: 'nsc', label: 'NSC / Tax Saver FD' },
-            ].map(item => (
-              <div key={item.key}>
-                <label style={{ fontSize: 12, color: C.muted, display: 'block', marginBottom: 4 }}>{item.label}</label>
-                <input type="number" value={(ded[item.key as 'ppf'|'elss'|'lic'|'tuition'|'nsc'] as number) || ''} onChange={e => setDed({...ded, [item.key]: parseFloat(e.target.value)||0})} placeholder="₹0" style={{
-                  width: '100%', padding: '8px 10px', fontSize: 13, border: `1px solid ${C.border}`,
-                  borderRadius: 5, fontFamily: 'inherit', background: C.bg,
-                }} />
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* 80D */}
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 16, overflow: 'hidden' }}>
-        <button onClick={() => toggle('80d')} style={{
-          width: '100%', padding: '16px 20px', background: 'transparent', border: 'none',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', fontFamily: 'inherit',
-        }}>
-          <div style={{ textAlign: 'left' }}>
-            <div style={{ fontSize: 15, fontWeight: 600, color: C.fg }}>Section 80D (Health Insurance)</div>
-            <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>Total: ₹{sec80D.toLocaleString('en-IN')}</div>
-          </div>
-          <span style={{ fontSize: 18, color: C.fg }}>{expanded.includes('80d') ? '−' : '+'}</span>
+        <button
+          onClick={handleProceed}
+          style={{
+            flex: 1,
+            padding: '12px',
+            background: C.primary,
+            color: '#fff',
+            border: 'none',
+            borderRadius: 6,
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+          }}
+        >
+          Next: Tax Optimizer →
         </button>
-        {expanded.includes('80d') && (
-          <div style={{ padding: '0 20px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div>
-              <label style={{ fontSize: 12, color: C.muted, display: 'block', marginBottom: 4 }}>Self + Family Premium</label>
-              <input type="number" value={ded.selfFamily || ''} onChange={e => setDed({...ded, selfFamily: parseFloat(e.target.value)||0})} placeholder="₹0" style={{
-                width: '100%', padding: '8px 10px', fontSize: 13, border: `1px solid ${C.border}`,
-                borderRadius: 5, fontFamily: 'inherit', background: C.bg,
-              }} />
-            </div>
-            <div>
-              <label style={{ fontSize: 12, color: C.muted, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                <input type="checkbox" checked={ded.selfSenior} onChange={e => setDed({...ded, selfSenior: e.target.checked})} />
-                Self or spouse is senior citizen (60+)
-              </label>
-            </div>
-            <div>
-              <label style={{ fontSize: 12, color: C.muted, display: 'block', marginBottom: 4 }}>Parents Premium</label>
-              <input type="number" value={ded.parents || ''} onChange={e => setDed({...ded, parents: parseFloat(e.target.value)||0})} placeholder="₹0" style={{
-                width: '100%', padding: '8px 10px', fontSize: 13, border: `1px solid ${C.border}`,
-                borderRadius: 5, fontFamily: 'inherit', background: C.bg,
-              }} />
-            </div>
-            <div>
-              <label style={{ fontSize: 12, color: C.muted, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <input type="checkbox" checked={ded.parentsSenior} onChange={e => setDed({...ded, parentsSenior: e.target.checked})} />
-                Parents are senior citizens (60+)
-              </label>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Home Loan */}
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 16 }}>
-        <label style={{ fontSize: 15, fontWeight: 600, color: C.fg, display: 'block', marginBottom: 12 }}>Home Loan Interest (24b)</label>
-        <input type="number" value={ded.homeLoanInterest || ''} onChange={e => setDed({...ded, homeLoanInterest: parseFloat(e.target.value)||0})} placeholder="₹0" style={{
-          width: '100%', padding: '10px 12px', fontSize: 14, border: `1px solid ${C.border}`,
-          borderRadius: 6, fontFamily: 'inherit', background: C.bg,
-        }} />
-        <p style={{ fontSize: 11, color: C.muted, margin: '6px 0 0' }}>Max ₹2L deduction</p>
-      </div>
-
-      {/* NPS */}
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 24 }}>
-        <label style={{ fontSize: 15, fontWeight: 600, color: C.fg, display: 'block', marginBottom: 12 }}>NPS - Section 80CCD(1B)</label>
-        <input type="number" value={ded.nps || ''} onChange={e => setDed({...ded, nps: parseFloat(e.target.value)||0})} placeholder="₹0" style={{
-          width: '100%', padding: '10px 12px', fontSize: 14, border: `1px solid ${C.border}`,
-          borderRadius: 6, fontFamily: 'inherit', background: C.bg,
-        }} />
-        <p style={{ fontSize: 11, color: C.muted, margin: '6px 0 0' }}>Additional ₹50K (over 80C)</p>
-      </div>
-
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <button onClick={() => router.push('/dashboard/profile/exemptions')} style={{
-          padding: '12px 24px', background: 'transparent', color: C.primary,
-          border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500,
-          cursor: 'pointer', fontFamily: 'inherit',
-        }}>← Back</button>
-        <button onClick={handleSave} style={{
-          padding: '12px 24px', background: C.primary, color: '#fff', border: 'none',
-          borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-        }}>Next: Tax Optimizer →</button>
       </div>
     </div>
   )
