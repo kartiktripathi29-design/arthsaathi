@@ -140,6 +140,9 @@ export async function POST(req: NextRequest) {
     })
   } catch (error: any) {
     console.error('Salary parse error:', error)
+    console.log('Full error stack:', error.stack)
+    console.log('Error message:', error.message)
+    console.log('Error type:', error.constructor.name)
     return NextResponse.json(
       { error: error.message || 'Failed to parse salary slip' },
       { status: 500 }

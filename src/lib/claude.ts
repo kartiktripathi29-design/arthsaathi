@@ -100,16 +100,14 @@ export async function parseSalaryFromBase64(
   }
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: 'claude-3-5-sonnet-20241022',
     max_tokens: 1200,
     system: SALARY_PARSE_SYSTEM,
     messages: [{ role: 'user', content }],
   })
 
   const text = response.content[0].type === 'text' ? response.content[0].text : ''
-  console.log('[parseSalaryFromBase64] Raw Claude response:', text)
   const jsonMatch = text.match(/\{[\s\S]*\}/)
-  console.log('[parseSalaryFromBase64] Extracted JSON:', jsonMatch?.[0])
   if (!jsonMatch) throw new Error('Could not extract JSON from Claude response')
 
   const parsed = JSON.parse(jsonMatch[0]) as ParsedSalaryData
@@ -186,7 +184,7 @@ export async function parseOfferLetterFromBase64(
   }
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: 'claude-3-5-sonnet-20241022',
     max_tokens: 1200,
     system: OFFER_LETTER_PARSE_SYSTEM,
     messages: [{ role: 'user', content }],
@@ -220,7 +218,7 @@ export async function parseOfferLetterMultiPage(
   ]
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: 'claude-3-5-sonnet-20241022',
     max_tokens: 1200,
     system: OFFER_LETTER_PARSE_SYSTEM,
     messages: [{ role: 'user', content }],
@@ -263,7 +261,7 @@ export async function* streamChatResponse(
   userContext: string
 ): AsyncGenerator<string> {
   const stream = await client.messages.stream({
-    model: 'claude-sonnet-4-6',
+    model: 'claude-3-5-sonnet-20241022',
     max_tokens: 1000,
     system: buildChatSystem(userContext),
     messages,
@@ -325,7 +323,7 @@ Prioritise: emergency fund first, then tax-saving instruments (ELSS, NPS), then 
 Use only SEBI-regulated Indian products. No crypto.`
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: 'claude-3-5-sonnet-20241022',
     max_tokens: 1500,
     messages: [{ role: 'user', content: prompt }],
   })
