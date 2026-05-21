@@ -144,7 +144,7 @@ export default function DeductionsPage() {
       {expanded.includes('80c') && (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16, marginBottom: 16 }}>
           {/* PPF */}
-          <div style={{ marginBottom: 12 }}>
+          <div style={{ marginBottom: 16 }}>
             <label
               style={{
                 fontSize: 13,
@@ -156,7 +156,7 @@ export default function DeductionsPage() {
                 marginBottom: 6,
               }}
             >
-              PPF
+              Did you invest in PPF
               <span
                 style={{ fontSize: 11, cursor: 'pointer', color: C.primary }}
                 onMouseEnter={() => setTooltip({ key: 'ppf', text: tooltips.ppf })}
@@ -164,25 +164,29 @@ export default function DeductionsPage() {
               >
                 ⁱ
               </span>
+              this year?
             </label>
-            <input
-              type="number"
-              value={ded.ppf || ''}
-              onChange={e => saveDeductions({ ...ded, ppf: parseFloat(e.target.value) || 0 })}
-              placeholder="₹0"
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                border: `1px solid ${C.border}`,
-                borderRadius: 6,
-                fontSize: 13,
-                fontFamily: 'inherit',
-              }}
-            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12, color: C.muted }}>₹</span>
+              <input
+                type="number"
+                value={ded.ppf || ''}
+                onChange={e => saveDeductions({ ...ded, ppf: parseFloat(e.target.value) || 0 })}
+                placeholder="Amount invested"
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 6,
+                  fontSize: 13,
+                  fontFamily: 'inherit',
+                }}
+              />
+            </div>
           </div>
 
           {/* ELSS */}
-          <div style={{ marginBottom: 12 }}>
+          <div style={{ marginBottom: 16 }}>
             <label
               style={{
                 fontSize: 13,
@@ -194,7 +198,7 @@ export default function DeductionsPage() {
                 marginBottom: 6,
               }}
             >
-              ELSS Mutual Funds
+              Did you buy ELSS Mutual Funds
               <span
                 style={{ fontSize: 11, cursor: 'pointer', color: C.primary }}
                 onMouseEnter={() => setTooltip({ key: 'elss', text: tooltips.elss })}
@@ -202,25 +206,29 @@ export default function DeductionsPage() {
               >
                 ⁱ
               </span>
+              ?
             </label>
-            <input
-              type="number"
-              value={ded.elss || ''}
-              onChange={e => saveDeductions({ ...ded, elss: parseFloat(e.target.value) || 0 })}
-              placeholder="₹0"
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                border: `1px solid ${C.border}`,
-                borderRadius: 6,
-                fontSize: 13,
-                fontFamily: 'inherit',
-              }}
-            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12, color: C.muted }}>₹</span>
+              <input
+                type="number"
+                value={ded.elss || ''}
+                onChange={e => saveDeductions({ ...ded, elss: parseFloat(e.target.value) || 0 })}
+                placeholder="Amount invested"
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 6,
+                  fontSize: 13,
+                  fontFamily: 'inherit',
+                }}
+              />
+            </div>
           </div>
 
           {/* LIC */}
-          <div style={{ marginBottom: 12 }}>
+          <div style={{ marginBottom: 16 }}>
             <label
               style={{
                 fontSize: 13,
@@ -232,7 +240,7 @@ export default function DeductionsPage() {
                 marginBottom: 6,
               }}
             >
-              Life Insurance Premium
+              Did you pay Life Insurance Premium
               <span
                 style={{ fontSize: 11, cursor: 'pointer', color: C.primary }}
                 onMouseEnter={() => setTooltip({ key: 'lic', text: tooltips.lic })}
@@ -240,25 +248,29 @@ export default function DeductionsPage() {
               >
                 ⁱ
               </span>
+              ?
             </label>
-            <input
-              type="number"
-              value={ded.lic || ''}
-              onChange={e => saveDeductions({ ...ded, lic: parseFloat(e.target.value) || 0 })}
-              placeholder="₹0"
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                border: `1px solid ${C.border}`,
-                borderRadius: 6,
-                fontSize: 13,
-                fontFamily: 'inherit',
-              }}
-            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12, color: C.muted }}>₹</span>
+              <input
+                type="number"
+                value={ded.lic || ''}
+                onChange={e => saveDeductions({ ...ded, lic: parseFloat(e.target.value) || 0 })}
+                placeholder="Amount paid"
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 6,
+                  fontSize: 13,
+                  fontFamily: 'inherit',
+                }}
+              />
+            </div>
           </div>
 
           {/* Tuition */}
-          <div style={{ marginBottom: 12 }}>
+          <div style={{ marginBottom: 16 }}>
             <label
               style={{
                 fontSize: 13,
@@ -270,7 +282,7 @@ export default function DeductionsPage() {
                 marginBottom: 6,
               }}
             >
-              Tuition Fees (Children)
+              Did you pay Tuition Fees for your children
               <span
                 style={{ fontSize: 11, cursor: 'pointer', color: C.primary }}
                 onMouseEnter={() => setTooltip({ key: 'tuition', text: tooltips.tuition })}
@@ -278,25 +290,29 @@ export default function DeductionsPage() {
               >
                 ⁱ
               </span>
+              ?
             </label>
-            <input
-              type="number"
-              value={ded.tuition || ''}
-              onChange={e => saveDeductions({ ...ded, tuition: parseFloat(e.target.value) || 0 })}
-              placeholder="₹0"
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                border: `1px solid ${C.border}`,
-                borderRadius: 6,
-                fontSize: 13,
-                fontFamily: 'inherit',
-              }}
-            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12, color: C.muted }}>₹</span>
+              <input
+                type="number"
+                value={ded.tuition || ''}
+                onChange={e => saveDeductions({ ...ded, tuition: parseFloat(e.target.value) || 0 })}
+                placeholder="Amount paid"
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 6,
+                  fontSize: 13,
+                  fontFamily: 'inherit',
+                }}
+              />
+            </div>
           </div>
 
           {/* NSC */}
-          <div style={{ marginBottom: 12 }}>
+          <div style={{ marginBottom: 16 }}>
             <label
               style={{
                 fontSize: 13,
@@ -308,7 +324,7 @@ export default function DeductionsPage() {
                 marginBottom: 6,
               }}
             >
-              NSC / Tax Saver FD
+              Did you invest in NSC or Tax Saver FD
               <span
                 style={{ fontSize: 11, cursor: 'pointer', color: C.primary }}
                 onMouseEnter={() => setTooltip({ key: 'nsc', text: tooltips.nsc })}
@@ -316,21 +332,25 @@ export default function DeductionsPage() {
               >
                 ⁱ
               </span>
+              ?
             </label>
-            <input
-              type="number"
-              value={ded.nsc || ''}
-              onChange={e => saveDeductions({ ...ded, nsc: parseFloat(e.target.value) || 0 })}
-              placeholder="₹0"
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                border: `1px solid ${C.border}`,
-                borderRadius: 6,
-                fontSize: 13,
-                fontFamily: 'inherit',
-              }}
-            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12, color: C.muted }}>₹</span>
+              <input
+                type="number"
+                value={ded.nsc || ''}
+                onChange={e => saveDeductions({ ...ded, nsc: parseFloat(e.target.value) || 0 })}
+                placeholder="Amount invested"
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 6,
+                  fontSize: 13,
+                  fontFamily: 'inherit',
+                }}
+              />
+            </div>
           </div>
 
           <div style={{ fontSize: 11, color: C.muted, background: '#FEF9F0', padding: 8, borderRadius: 4, marginTop: 12 }}>
@@ -393,7 +413,7 @@ export default function DeductionsPage() {
               marginBottom: 6,
             }}
           >
-            Self + Family
+            Do you have health insurance for Self + Family
             <span
               style={{ fontSize: 11, cursor: 'pointer', color: C.primary }}
               onMouseEnter={() => setTooltip({ key: 'selfFamily', text: tooltips.selfFamily })}
@@ -401,22 +421,25 @@ export default function DeductionsPage() {
             >
               ⁱ
             </span>
+            ?
           </label>
-          <input
-            type="number"
-            value={ded.selfFamily || ''}
-            onChange={e => saveDeductions({ ...ded, selfFamily: parseFloat(e.target.value) || 0 })}
-            placeholder="₹0"
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              border: `1px solid ${C.border}`,
-              borderRadius: 6,
-              fontSize: 13,
-              fontFamily: 'inherit',
-              marginBottom: 12,
-            }}
-          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 12, color: C.muted }}>₹</span>
+            <input
+              type="number"
+              value={ded.selfFamily || ''}
+              onChange={e => saveDeductions({ ...ded, selfFamily: parseFloat(e.target.value) || 0 })}
+              placeholder="Premium amount"
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                border: `1px solid ${C.border}`,
+                borderRadius: 6,
+                fontSize: 13,
+                fontFamily: 'inherit',
+              }}
+            />
+          </div>
 
           <label
             style={{
@@ -425,7 +448,7 @@ export default function DeductionsPage() {
               gap: 8,
               fontSize: 13,
               color: C.fg,
-              marginBottom: 12,
+              marginBottom: 16,
               cursor: 'pointer',
             }}
           >
@@ -436,7 +459,7 @@ export default function DeductionsPage() {
               style={{ cursor: 'pointer' }}
             />
             <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              You/Spouse is 60+ years
+              Are you or your spouse 60+ years old
               <span
                 style={{ fontSize: 11, cursor: 'pointer', color: C.primary }}
                 onMouseEnter={() => setTooltip({ key: 'selfSenior', text: tooltips.selfSenior })}
@@ -444,6 +467,7 @@ export default function DeductionsPage() {
               >
                 ⁱ
               </span>
+              ?
             </span>
           </label>
 
@@ -459,7 +483,7 @@ export default function DeductionsPage() {
               marginTop: 16,
             }}
           >
-            Parents
+            Do you have health insurance for your Parents
             <span
               style={{ fontSize: 11, cursor: 'pointer', color: C.primary }}
               onMouseEnter={() => setTooltip({ key: 'parents', text: tooltips.parents })}
@@ -467,22 +491,25 @@ export default function DeductionsPage() {
             >
               ⁱ
             </span>
+            ?
           </label>
-          <input
-            type="number"
-            value={ded.parents || ''}
-            onChange={e => saveDeductions({ ...ded, parents: parseFloat(e.target.value) || 0 })}
-            placeholder="₹0"
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              border: `1px solid ${C.border}`,
-              borderRadius: 6,
-              fontSize: 13,
-              fontFamily: 'inherit',
-              marginBottom: 12,
-            }}
-          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 12, color: C.muted }}>₹</span>
+            <input
+              type="number"
+              value={ded.parents || ''}
+              onChange={e => saveDeductions({ ...ded, parents: parseFloat(e.target.value) || 0 })}
+              placeholder="Premium amount"
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                border: `1px solid ${C.border}`,
+                borderRadius: 6,
+                fontSize: 13,
+                fontFamily: 'inherit',
+              }}
+            />
+          </div>
 
           <label
             style={{
@@ -501,7 +528,7 @@ export default function DeductionsPage() {
               style={{ cursor: 'pointer' }}
             />
             <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              Parents are 60+ years
+              Are your parents 60+ years old
               <span
                 style={{ fontSize: 11, cursor: 'pointer', color: C.primary }}
                 onMouseEnter={() => setTooltip({ key: 'parentsSenior', text: tooltips.parentsSenior })}
@@ -509,6 +536,7 @@ export default function DeductionsPage() {
               >
                 ⁱ
               </span>
+              ?
             </span>
           </label>
         </div>
@@ -557,20 +585,44 @@ export default function DeductionsPage() {
 
       {expanded.includes('homeLoan') && (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16, marginBottom: 16 }}>
-          <input
-            type="number"
-            value={ded.homeLoanInterest || ''}
-            onChange={e => saveDeductions({ ...ded, homeLoanInterest: parseFloat(e.target.value) || 0 })}
-            placeholder="₹0"
+          <label
             style={{
-              width: '100%',
-              padding: '8px 12px',
-              border: `1px solid ${C.border}`,
-              borderRadius: 6,
               fontSize: 13,
-              fontFamily: 'inherit',
+              fontWeight: 500,
+              color: C.fg,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              marginBottom: 6,
             }}
-          />
+          >
+            How much home loan interest did you pay
+            <span
+              style={{ fontSize: 11, cursor: 'pointer', color: C.primary }}
+              onMouseEnter={() => setTooltip({ key: 'homeLoan', text: tooltips.homeLoan })}
+              onMouseLeave={() => setTooltip({ key: null, text: '' })}
+            >
+              ⁱ
+            </span>
+            ?
+          </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 12, color: C.muted }}>₹</span>
+            <input
+              type="number"
+              value={ded.homeLoanInterest || ''}
+              onChange={e => saveDeductions({ ...ded, homeLoanInterest: parseFloat(e.target.value) || 0 })}
+              placeholder="Annual interest paid"
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                border: `1px solid ${C.border}`,
+                borderRadius: 6,
+                fontSize: 13,
+                fontFamily: 'inherit',
+              }}
+            />
+          </div>
           <div style={{ fontSize: 11, color: C.muted, background: '#FEF9F0', padding: 8, borderRadius: 4, marginTop: 12 }}>
             ⚠ Max deduction: ₹2,00,000 for self-occupied property
           </div>
@@ -620,20 +672,44 @@ export default function DeductionsPage() {
 
       {expanded.includes('nps') && (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16, marginBottom: 16 }}>
-          <input
-            type="number"
-            value={ded.nps || ''}
-            onChange={e => saveDeductions({ ...ded, nps: parseFloat(e.target.value) || 0 })}
-            placeholder="₹0"
+          <label
             style={{
-              width: '100%',
-              padding: '8px 12px',
-              border: `1px solid ${C.border}`,
-              borderRadius: 6,
               fontSize: 13,
-              fontFamily: 'inherit',
+              fontWeight: 500,
+              color: C.fg,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              marginBottom: 6,
             }}
-          />
+          >
+            Did you contribute to NPS
+            <span
+              style={{ fontSize: 11, cursor: 'pointer', color: C.primary }}
+              onMouseEnter={() => setTooltip({ key: 'nps', text: tooltips.nps })}
+              onMouseLeave={() => setTooltip({ key: null, text: '' })}
+            >
+              ⁱ
+            </span>
+            ?
+          </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 12, color: C.muted }}>₹</span>
+            <input
+              type="number"
+              value={ded.nps || ''}
+              onChange={e => saveDeductions({ ...ded, nps: parseFloat(e.target.value) || 0 })}
+              placeholder="Amount contributed"
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                border: `1px solid ${C.border}`,
+                borderRadius: 6,
+                fontSize: 13,
+                fontFamily: 'inherit',
+              }}
+            />
+          </div>
           <div style={{ fontSize: 11, color: C.muted, background: '#FEF9F0', padding: 8, borderRadius: 4, marginTop: 12 }}>
             ℹ Additional ₹50,000 over Section 80C limit. Total 80C + NPS = ₹2,00,000 max.
           </div>

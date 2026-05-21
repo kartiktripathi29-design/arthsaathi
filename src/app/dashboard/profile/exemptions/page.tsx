@@ -66,10 +66,10 @@ export default function ExemptionsPage() {
       </div>
 
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20 }}>
-        <h3 style={{ fontSize: 16, fontWeight: 600, color: C.fg, margin: '0 0 16px' }}>House Rent Allowance (HRA)</h3>
+        <h3 style={{ fontSize: 16, fontWeight: 600, color: C.fg, margin: '0 0 20px' }}>House Rent Allowance (HRA)</h3>
 
         {/* HRA Received */}
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 20 }}>
           <label
             style={{
               fontSize: 13,
@@ -78,7 +78,7 @@ export default function ExemptionsPage() {
               display: 'flex',
               alignItems: 'center',
               gap: 4,
-              marginBottom: 6,
+              marginBottom: 8,
             }}
           >
             Do you receive HRA
@@ -89,7 +89,7 @@ export default function ExemptionsPage() {
             >
               ⁱ
             </span>
-            ?
+            from your employer?
           </label>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 12, color: C.muted }}>₹</span>
@@ -112,7 +112,7 @@ export default function ExemptionsPage() {
         </div>
 
         {/* Rent Paid */}
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 20 }}>
           <label
             style={{
               fontSize: 13,
@@ -121,7 +121,7 @@ export default function ExemptionsPage() {
               display: 'flex',
               alignItems: 'center',
               gap: 4,
-              marginBottom: 6,
+              marginBottom: 8,
             }}
           >
             How much rent do you pay annually
@@ -154,7 +154,7 @@ export default function ExemptionsPage() {
         </div>
 
         {/* City Type */}
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 20 }}>
           <label
             style={{
               fontSize: 13,
@@ -221,7 +221,7 @@ export default function ExemptionsPage() {
             border: `1px solid #D1E8E4`,
             borderRadius: 6,
             padding: 12,
-            marginTop: 16,
+            marginTop: 20,
           }}
         >
           <p style={{ fontSize: 12, color: C.muted, margin: '0 0 4px' }}>Calculated HRA Exemption</p>
