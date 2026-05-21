@@ -18,12 +18,19 @@ const fyMonths = (fyStartYear: number) => {
   return months
 }
 
+interface Earning {
+  label: string
+  amount: number
+}
+
 interface MonthData {
   monthKey: string
   gross: number
   net: number
   deductions: number
   source: 'actual' | 'projected' | 'edited'
+  earnings?: Earning[]
+  deductionsList?: Earning[]
 }
 
 interface Employment {
@@ -32,31 +39,46 @@ interface Employment {
   fromMonth: string
   toMonth: string
   months: MonthData[]
+  baseGross?: number
+  baseNet?: number
+}
+
+interface WizardData {
+  employmentChanges: number | null
+  changeMonth: string
+  employer1HasSlips: string
+  employer1IncrementMonth: string
+  employer1IncrementPercent: number
+  employer1Retroactive: boolean
+  employer2UseBase: boolean | null
 }
 
 type WizardStep = 'step1' | 'step2a' | 'step2b-employer1' | 'step2b-employer2' | 'step3' | 'review'
 
-export default function SalaryPageCompleteWizard() {
+export default function SalaryPageCompleteFinal() {
   const router = useRouter()
   const [slips, setSlips] = useState<any[]>([])
   const [fyStartYear, setFyStartYear] = useState(2025)
   const [wizardStep, setWizardStep] = useState<WizardStep>('step1')
   const [employments, setEmployments] = useState<Employment[]>([])
   const [expandedEmployment, setExpandedEmployment] = useState<string | null>(null)
+  const [previewMonth, setPreviewMonth] = useState<string | null>(null)
+  const [previewEmploymentId, setPreviewEmploymentId] = useState<string | null>(null)
   const [editingMonth, setEditingMonth] = useState<string | null>(null)
   const [editEmploymentId, setEditEmploymentId] = useState<string | null>(null)
   const [editGross, setEditGross] = useState(0)
   const [editNet, setEditNet] = useState(0)
   const [loading, setLoading] = useState(true)
 
-  // Wizard state
-  const [employmentChanges, setEmploymentChanges] = useState<number | null>(null)
-  const [changeMonth, setChangeMonth] = useState('')
-  const [employer1HasSlips, setEmployer1HasSlips] = useState<string>('')
-  const [employer1IncrementMonth, setEmployer1IncrementMonth] = useState('')
-  const [employer1IncrementPercent, setEmployer1IncrementPercent] = useState(0)
-  const [employer1Retroactive, setEmployer1Retroactive] = useState(false)
-  const [employer2UseBase, setEmployer2UseBase] = useState<boolean | null>(null)
+  const [wizard, setWizard] = useState<WizardData>({
+    employmentChanges: null,
+    changeMonth: '',
+    employer1HasSlips: '',
+    employer1IncrementMonth: '',
+    employer1IncrementPercent: 0,
+    employer1Retroactive: false,
+    employer2UseBase: null,
+  })
 
   useEffect(() => {
     const data = localStorage.getItem('av_salary_timeline')
@@ -95,127 +117,188 @@ export default function SalaryPageCompleteWizard() {
   const buildEmploymentsFromWizard = () => {
     if (!slips || slips.length === 0) return
 
-    const changeMonthNum = parseInt(changeMonth.split('-')[1])
+    const changeMonthNum = parseInt(wizard.changeMonth.split('-')[1])
     const allFYMonths = fyMonths(fyStartYear)
 
-    // Find slips for each employer
+    // Separate slips by employment period
     const employer1Slips = slips.filter(s => monthToNum(s.month) < changeMonthNum)
     const employer2Slips = slips.filter(s => monthToNum(s.month) >= changeMonthNum)
 
     const newEmployments: Employment[] = []
 
-    // Employer 1
-    if (employer1Slips.length > 0 || changeMonthNum > 4) {
-      const e1Name = employer1Slips[0]?.employerName || 'Employer 1'
-      const e1From = `${fyStartYear}-04`
-      const e1To = `${fyStartYear}-${String(changeMonthNum - 1).padStart(2, '0')}`
+    // EMPLOYER 1 (Apr - before change month)
+    const e1From = `${fyStartYear}-04`
+    const e1To = `${fyStartYear}-${String(changeMonthNum - 1).padStart(2, '0')}`
+    const e1Name = employer1Slips.length > 0 ? (employer1Slips[0].employerName || 'Employer 1') : 'Employer 1'
 
-      const e1Months: MonthData[] = allFYMonths.map(mk => {
-        const mkNum = parseInt(mk.split('-')[1])
-        
-        if (mkNum >= changeMonthNum) {
-          return { monthKey: mk, gross: 0, net: 0, deductions: 0, source: 'projected' }
+    const e1BaseSlip = employer1Slips.length > 0 ? employer1Slips[0] : null
+    const e1BaseGross = e1BaseSlip?.grossSalary || e1BaseSlip?.basicSalary || 0
+    const e1BaseNet = e1BaseSlip?.netSalary || e1BaseSlip?.basicSalary || 0
+    const e1BaseEarnings = e1BaseSlip?.components?.filter((c: any) => c.type === 'earning') || []
+    const e1BaseDeductions = e1BaseSlip?.components?.filter((c: any) => c.type === 'deduction') || []
+
+    const e1Months: MonthData[] = allFYMonths.map(mk => {
+      const mkNum = parseInt(mk.split('-')[1])
+
+      if (mkNum >= changeMonthNum) {
+        return {
+          monthKey: mk,
+          gross: 0,
+          net: 0,
+          deductions: 0,
+          source: 'projected',
+          earnings: [],
+          deductionsList: [],
         }
+      }
 
-        const slip = employer1Slips.find(s => {
-          const slipKey = `${s.year}-${String(monthToNum(s.month)).padStart(2, '0')}`
-          return slipKey === mk
-        })
-
-        if (slip) {
-          return {
-            monthKey: mk,
-            gross: slip.grossSalary || slip.basicSalary || 0,
-            net: slip.netSalary || slip.basicSalary || 0,
-            deductions: (slip.grossSalary || 0) - (slip.netSalary || 0),
-            source: 'actual',
-          }
-        }
-
-        // Apply increment logic
-        if (employer1Slips.length > 0) {
-          const baseSlip = employer1Slips[0]
-          const baseSalary = baseSlip.grossSalary || baseSlip.basicSalary || 0
-          const incrementFactor = 1 + (employer1IncrementPercent / 100)
-          const incrementMonthNum = employer1IncrementMonth ? parseInt(employer1IncrementMonth.split('-')[1]) : null
-
-          let grossSalary = baseSalary
-          if (incrementMonthNum && mkNum >= incrementMonthNum) {
-            grossSalary = Math.round(baseSalary * incrementFactor)
-          } else if (employer1Retroactive && incrementMonthNum && mkNum >= 4) {
-            grossSalary = Math.round(baseSalary * incrementFactor)
-          }
-
-          return {
-            monthKey: mk,
-            gross: grossSalary,
-            net: grossSalary - ((baseSlip.grossSalary || 0) - (baseSlip.netSalary || 0)),
-            deductions: (baseSlip.grossSalary || 0) - (baseSlip.netSalary || 0),
-            source: 'projected',
-          }
-        }
-
-        return { monthKey: mk, gross: 0, net: 0, deductions: 0, source: 'projected' }
+      const slip = employer1Slips.find(s => {
+        const slipKey = `${s.year}-${String(monthToNum(s.month)).padStart(2, '0')}`
+        return slipKey === mk
       })
 
+      if (slip) {
+        return {
+          monthKey: mk,
+          gross: slip.grossSalary || slip.basicSalary || 0,
+          net: slip.netSalary || slip.basicSalary || 0,
+          deductions: (slip.grossSalary || 0) - (slip.netSalary || 0),
+          source: 'actual',
+          earnings: slip.components?.filter((c: any) => c.type === 'earning') || [],
+          deductionsList: slip.components?.filter((c: any) => c.type === 'deduction') || [],
+        }
+      }
+
+      // Project for missing months with increment logic
+      if (e1BaseGross > 0) {
+        const incrementMonthNum = wizard.employer1IncrementMonth ? parseInt(wizard.employer1IncrementMonth.split('-')[1]) : null
+        const incrementFactor = 1 + (wizard.employer1IncrementPercent / 100)
+
+        let grossSalary = e1BaseGross
+        let netSalary = e1BaseNet
+
+        if (incrementMonthNum) {
+          if (wizard.employer1Retroactive) {
+            // Retroactive: applies from Apr onwards
+            grossSalary = Math.round(e1BaseGross * incrementFactor)
+            netSalary = Math.round(e1BaseNet * (incrementFactor))
+          } else if (mkNum >= incrementMonthNum) {
+            // Non-retroactive: applies from increment month onwards
+            grossSalary = Math.round(e1BaseGross * incrementFactor)
+            netSalary = Math.round(e1BaseNet * (incrementFactor))
+          }
+        }
+
+        return {
+          monthKey: mk,
+          gross: grossSalary,
+          net: netSalary,
+          deductions: grossSalary - netSalary,
+          source: 'projected',
+          earnings: e1BaseEarnings,
+          deductionsList: e1BaseDeductions,
+        }
+      }
+
+      return {
+        monthKey: mk,
+        gross: 0,
+        net: 0,
+        deductions: 0,
+        source: 'projected',
+        earnings: [],
+        deductionsList: [],
+      }
+    })
+
+    if (changeMonthNum > 4 || employer1Slips.length > 0) {
       newEmployments.push({
         id: 'emp-1',
         name: e1Name,
         fromMonth: e1From,
         toMonth: e1To,
         months: e1Months,
+        baseGross: e1BaseGross,
+        baseNet: e1BaseNet,
       })
     }
 
-    // Employer 2
-    if (employer2Slips.length > 0 || changeMonthNum <= 12) {
-      const e2Name = employer2Slips[0]?.employerName || 'Employer 2'
-      const e2From = changeMonth
-      const e2To = `${fyStartYear + 1}-03`
+    // EMPLOYER 2 (from change month to Mar)
+    const e2From = wizard.changeMonth
+    const e2To = `${fyStartYear + 1}-03`
+    const e2Name = employer2Slips.length > 0 ? (employer2Slips[0].employerName || 'Employer 2') : 'Employer 2'
 
-      const baseSlip = employer2Slips[employer2Slips.length - 1]
-      const baseSalary = baseSlip?.grossSalary || baseSlip?.basicSalary || 0
-      const deductions = (baseSlip?.grossSalary || 0) - (baseSlip?.netSalary || 0)
+    const e2BaseSlip = employer2Slips[employer2Slips.length - 1]
+    const e2BaseGross = e2BaseSlip?.grossSalary || e2BaseSlip?.basicSalary || 0
+    const e2BaseNet = e2BaseSlip?.netSalary || e2BaseSlip?.basicSalary || 0
+    const e2BaseEarnings = e2BaseSlip?.components?.filter((c: any) => c.type === 'earning') || []
+    const e2BaseDeductions = e2BaseSlip?.components?.filter((c: any) => c.type === 'deduction') || []
 
-      const e2Months: MonthData[] = allFYMonths.map(mk => {
-        const mkNum = parseInt(mk.split('-')[1])
+    const e2Months: MonthData[] = allFYMonths.map(mk => {
+      const mkNum = parseInt(mk.split('-')[1])
 
-        if (mkNum < changeMonthNum) {
-          return { monthKey: mk, gross: 0, net: 0, deductions: 0, source: 'projected' }
-        }
-
-        const slip = employer2Slips.find(s => {
-          const slipKey = `${s.year}-${String(monthToNum(s.month)).padStart(2, '0')}`
-          return slipKey === mk
-        })
-
-        if (slip) {
-          return {
-            monthKey: mk,
-            gross: slip.grossSalary || slip.basicSalary || 0,
-            net: slip.netSalary || slip.basicSalary || 0,
-            deductions: (slip.grossSalary || 0) - (slip.netSalary || 0),
-            source: 'actual',
-          }
-        }
-
+      if (mkNum < changeMonthNum) {
         return {
           monthKey: mk,
-          gross: baseSalary,
-          net: baseSalary - deductions,
-          deductions,
+          gross: 0,
+          net: 0,
+          deductions: 0,
           source: 'projected',
+          earnings: [],
+          deductionsList: [],
         }
+      }
+
+      const slip = employer2Slips.find(s => {
+        const slipKey = `${s.year}-${String(monthToNum(s.month)).padStart(2, '0')}`
+        return slipKey === mk
       })
 
-      newEmployments.push({
-        id: 'emp-2',
-        name: e2Name,
-        fromMonth: e2From,
-        toMonth: e2To,
-        months: e2Months,
-      })
-    }
+      if (slip) {
+        return {
+          monthKey: mk,
+          gross: slip.grossSalary || slip.basicSalary || 0,
+          net: slip.netSalary || slip.basicSalary || 0,
+          deductions: (slip.grossSalary || 0) - (slip.netSalary || 0),
+          source: 'actual',
+          earnings: slip.components?.filter((c: any) => c.type === 'earning') || [],
+          deductionsList: slip.components?.filter((c: any) => c.type === 'deduction') || [],
+        }
+      }
+
+      // Project using base salary
+      if (wizard.employer2UseBase && e2BaseGross > 0) {
+        return {
+          monthKey: mk,
+          gross: e2BaseGross,
+          net: e2BaseNet,
+          deductions: e2BaseGross - e2BaseNet,
+          source: 'projected',
+          earnings: e2BaseEarnings,
+          deductionsList: e2BaseDeductions,
+        }
+      }
+
+      return {
+        monthKey: mk,
+        gross: 0,
+        net: 0,
+        deductions: 0,
+        source: 'projected',
+        earnings: [],
+        deductionsList: [],
+      }
+    })
+
+    newEmployments.push({
+      id: 'emp-2',
+      name: e2Name,
+      fromMonth: e2From,
+      toMonth: e2To,
+      months: e2Months,
+      baseGross: e2BaseGross,
+      baseNet: e2BaseNet,
+    })
 
     setEmployments(newEmployments)
   }
@@ -237,6 +320,10 @@ export default function SalaryPageCompleteWizard() {
       })
     )
     setEditingMonth(null)
+  }
+
+  const getMonthData = (employmentId: string, monthKey: string): MonthData | undefined => {
+    return employments.find(e => e.id === employmentId)?.months.find(m => m.monthKey === monthKey)
   }
 
   const annualGross = employments.reduce((total, emp) => {
@@ -273,9 +360,9 @@ export default function SalaryPageCompleteWizard() {
             <p style={{ fontSize: 13, color: C.muted, margin: '0 0 20px' }}>Between Apr {fyStartYear} and Mar {fyStartYear + 1}, did you change jobs?</p>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
-              <button onClick={() => { setEmploymentChanges(0); setWizardStep('step3') }} style={{ padding: 16, background: employmentChanges === 0 ? C.wl : '#fff', border: `1px solid ${employmentChanges === 0 ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, textAlign: 'left', fontWeight: 500, color: C.text }}>No, same employer</button>
-              <button onClick={() => { setEmploymentChanges(1); setWizardStep('step2a') }} style={{ padding: 16, background: employmentChanges === 1 ? C.wl : '#fff', border: `1px solid ${employmentChanges === 1 ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, textAlign: 'left', fontWeight: 500, color: C.text }}>Yes, 1 change (2 employers)</button>
-              <button onClick={() => { setEmploymentChanges(2); setWizardStep('step2a') }} style={{ padding: 16, background: employmentChanges === 2 ? C.wl : '#fff', border: `1px solid ${employmentChanges === 2 ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, textAlign: 'left', fontWeight: 500, color: C.text }}>Yes, 2+ changes (3+ employers)</button>
+              <button onClick={() => { setWizard({ ...wizard, employmentChanges: 0 }); setWizardStep('step3') }} style={{ padding: 16, background: wizard.employmentChanges === 0 ? C.wl : '#fff', border: `1px solid ${wizard.employmentChanges === 0 ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, textAlign: 'left', fontWeight: 500, color: C.text }}>No, same employer</button>
+              <button onClick={() => { setWizard({ ...wizard, employmentChanges: 1 }); setWizardStep('step2a') }} style={{ padding: 16, background: wizard.employmentChanges === 1 ? C.wl : '#fff', border: `1px solid ${wizard.employmentChanges === 1 ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, textAlign: 'left', fontWeight: 500, color: C.text }}>Yes, 1 change (2 employers)</button>
+              <button onClick={() => { setWizard({ ...wizard, employmentChanges: 2 }); setWizardStep('step2a') }} style={{ padding: 16, background: wizard.employmentChanges === 2 ? C.wl : '#fff', border: `1px solid ${wizard.employmentChanges === 2 ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, textAlign: 'left', fontWeight: 500, color: C.text }}>Yes, 2+ changes (3+ employers)</button>
             </div>
           </div>
         )}
@@ -285,7 +372,7 @@ export default function SalaryPageCompleteWizard() {
             <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 16px' }}>When did you change employers?</h2>
             <p style={{ fontSize: 13, color: C.muted, margin: '0 0 20px' }}>Select the month when you switched.</p>
             
-            <select value={changeMonth} onChange={(e) => setChangeMonth(e.target.value)} style={{ width: '100%', padding: '12px', fontSize: 13, borderRadius: 6, border: `1px solid ${C.border}`, fontFamily: 'inherit', marginBottom: 24 }}>
+            <select value={wizard.changeMonth} onChange={(e) => setWizard({ ...wizard, changeMonth: e.target.value })} style={{ width: '100%', padding: '12px', fontSize: 13, borderRadius: 6, border: `1px solid ${C.border}`, fontFamily: 'inherit', marginBottom: 24 }}>
               <option value="">-- Select month --</option>
               {['apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec', 'jan', 'feb'].map((m, i) => (
                 <option key={i} value={`${fyStartYear}-${String((i + 4) % 12 || 12).padStart(2, '0')}`}>{m.charAt(0).toUpperCase() + m.slice(1)} {i < 9 ? fyStartYear : fyStartYear + 1}</option>
@@ -294,7 +381,7 @@ export default function SalaryPageCompleteWizard() {
 
             <div style={{ display: 'flex', gap: 12 }}>
               <button onClick={() => setWizardStep('step1')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
-              <button onClick={() => setWizardStep('step2b-employer1')} disabled={!changeMonth} style={{ flex: 1, padding: '12px', background: changeMonth ? C.fg : '#ccc', color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: changeMonth ? 'pointer' : 'default', fontFamily: 'inherit', opacity: changeMonth ? 1 : 0.5 }}>Next →</button>
+              <button onClick={() => setWizardStep('step2b-employer1')} disabled={!wizard.changeMonth} style={{ flex: 1, padding: '12px', background: wizard.changeMonth ? C.fg : '#ccc', color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: wizard.changeMonth ? 'pointer' : 'default', fontFamily: 'inherit', opacity: wizard.changeMonth ? 1 : 0.5 }}>Next →</button>
             </div>
           </div>
         )}
@@ -302,34 +389,34 @@ export default function SalaryPageCompleteWizard() {
         {wizardStep === 'step2b-employer1' && (
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24 }}>
             <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 16px' }}>Employer 1: Do you have salary slips?</h2>
-            <p style={{ fontSize: 13, color: C.muted, margin: '0 0 20px' }}>For Apr {fyStartYear} to {monthLabel(changeMonth).split(' ')[0]} {fyStartYear}, which months do you have slips for?</p>
+            <p style={{ fontSize: 13, color: C.muted, margin: '0 0 20px' }}>For Apr {fyStartYear} to {monthLabel(wizard.changeMonth).split(' ')[0]} {fyStartYear}, which months do you have slips for?</p>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
-              <button onClick={() => setEmployer1HasSlips('all')} style={{ padding: 16, background: employer1HasSlips === 'all' ? C.wl : '#fff', border: `1px solid ${employer1HasSlips === 'all' ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, textAlign: 'left', fontWeight: 500, color: C.text }}>All months</button>
-              <button onClick={() => setEmployer1HasSlips('some')} style={{ padding: 16, background: employer1HasSlips === 'some' ? C.wl : '#fff', border: `1px solid ${employer1HasSlips === 'some' ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, textAlign: 'left', fontWeight: 500, color: C.text }}>Only some months</button>
+              <button onClick={() => setWizard({ ...wizard, employer1HasSlips: 'all' })} style={{ padding: 16, background: wizard.employer1HasSlips === 'all' ? C.wl : '#fff', border: `1px solid ${wizard.employer1HasSlips === 'all' ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, textAlign: 'left', fontWeight: 500, color: C.text }}>All months</button>
+              <button onClick={() => setWizard({ ...wizard, employer1HasSlips: 'some' })} style={{ padding: 16, background: wizard.employer1HasSlips === 'some' ? C.wl : '#fff', border: `1px solid ${wizard.employer1HasSlips === 'some' ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, textAlign: 'left', fontWeight: 500, color: C.text }}>Only some months</button>
             </div>
 
-            {employer1HasSlips === 'some' && (
+            {wizard.employer1HasSlips === 'some' && (
               <div style={{ marginBottom: 24, padding: 16, background: C.wl, borderRadius: 6 }}>
                 <label style={{ display: 'block', fontSize: 12, color: C.muted, marginBottom: 12 }}>For months without slips, did you get an increment?</label>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   <div>
                     <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 6 }}>Increment month</label>
-                    <select value={employer1IncrementMonth} onChange={(e) => setEmployer1IncrementMonth(e.target.value)} style={{ width: '100%', padding: '8px', fontSize: 12, borderRadius: 4, border: `1px solid ${C.border}`, fontFamily: 'inherit' }}>
+                    <select value={wizard.employer1IncrementMonth} onChange={(e) => setWizard({ ...wizard, employer1IncrementMonth: e.target.value })} style={{ width: '100%', padding: '8px', fontSize: 12, borderRadius: 4, border: `1px solid ${C.border}`, fontFamily: 'inherit' }}>
                       <option value="">No increment</option>
                       {['apr', 'may', 'jun', 'jul', 'aug', 'sep'].map((m, i) => (
                         <option key={i} value={`${fyStartYear}-${String((i + 4) % 12 || 12).padStart(2, '0')}`}>{m}</option>
                       ))}
                     </select>
                   </div>
-                  {employer1IncrementMonth && (
+                  {wizard.employer1IncrementMonth && (
                     <>
                       <div>
-                        <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 6 }}>Increment % ({employer1IncrementPercent}%)</label>
-                        <input type="range" min="0" max="50" step="1" value={employer1IncrementPercent} onChange={(e) => setEmployer1IncrementPercent(parseInt(e.target.value))} style={{ width: '100%' }} />
+                        <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 6 }}>Increment % ({wizard.employer1IncrementPercent}%)</label>
+                        <input type="range" min="0" max="50" step="1" value={wizard.employer1IncrementPercent} onChange={(e) => setWizard({ ...wizard, employer1IncrementPercent: parseInt(e.target.value) })} style={{ width: '100%' }} />
                       </div>
                       <label style={{ display: 'flex', alignItems: 'center', fontSize: 12, color: C.text, gap: 8, cursor: 'pointer' }}>
-                        <input type="checkbox" checked={employer1Retroactive} onChange={(e) => setEmployer1Retroactive(e.target.checked)} />
+                        <input type="checkbox" checked={wizard.employer1Retroactive} onChange={(e) => setWizard({ ...wizard, employer1Retroactive: e.target.checked })} />
                         Retroactive (applies to earlier months)
                       </label>
                     </>
@@ -340,7 +427,7 @@ export default function SalaryPageCompleteWizard() {
 
             <div style={{ display: 'flex', gap: 12 }}>
               <button onClick={() => setWizardStep('step2a')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
-              <button onClick={() => setWizardStep('step2b-employer2')} disabled={!employer1HasSlips} style={{ flex: 1, padding: '12px', background: employer1HasSlips ? C.fg : '#ccc', color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: employer1HasSlips ? 'pointer' : 'default', fontFamily: 'inherit', opacity: employer1HasSlips ? 1 : 0.5 }}>Next →</button>
+              <button onClick={() => setWizardStep('step2b-employer2')} disabled={!wizard.employer1HasSlips} style={{ flex: 1, padding: '12px', background: wizard.employer1HasSlips ? C.fg : '#ccc', color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: wizard.employer1HasSlips ? 'pointer' : 'default', fontFamily: 'inherit', opacity: wizard.employer1HasSlips ? 1 : 0.5 }}>Next →</button>
             </div>
           </div>
         )}
@@ -348,16 +435,16 @@ export default function SalaryPageCompleteWizard() {
         {wizardStep === 'step2b-employer2' && (
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24 }}>
             <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 16px' }}>Employer 2: Use base salary?</h2>
-            <p style={{ fontSize: 13, color: C.muted, margin: '0 0 20px' }}>For {monthLabel(changeMonth)} to Mar {fyStartYear + 1}, should I use your latest slip as base for all months?</p>
+            <p style={{ fontSize: 13, color: C.muted, margin: '0 0 20px' }}>For {monthLabel(wizard.changeMonth)} to Mar {fyStartYear + 1}, should I use your latest slip as base for all months?</p>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
-              <button onClick={() => setEmployer2UseBase(true)} style={{ padding: 16, background: employer2UseBase === true ? C.wl : '#fff', border: `1px solid ${employer2UseBase === true ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, textAlign: 'left', fontWeight: 500, color: C.text }}>Yes, use latest slip as base</button>
-              <button onClick={() => setEmployer2UseBase(false)} style={{ padding: 16, background: employer2UseBase === false ? C.wl : '#fff', border: `1px solid ${employer2UseBase === false ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, textAlign: 'left', fontWeight: 500, color: C.text }}>No, I'll enter each month</button>
+              <button onClick={() => setWizard({ ...wizard, employer2UseBase: true })} style={{ padding: 16, background: wizard.employer2UseBase === true ? C.wl : '#fff', border: `1px solid ${wizard.employer2UseBase === true ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, textAlign: 'left', fontWeight: 500, color: C.text }}>Yes, use latest slip as base</button>
+              <button onClick={() => setWizard({ ...wizard, employer2UseBase: false })} style={{ padding: 16, background: wizard.employer2UseBase === false ? C.wl : '#fff', border: `1px solid ${wizard.employer2UseBase === false ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, textAlign: 'left', fontWeight: 500, color: C.text }}>No, I'll enter each month</button>
             </div>
 
             <div style={{ display: 'flex', gap: 12 }}>
               <button onClick={() => setWizardStep('step2b-employer1')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
-              <button onClick={() => setWizardStep('step3')} disabled={employer2UseBase === null} style={{ flex: 1, padding: '12px', background: employer2UseBase !== null ? C.fg : '#ccc', color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: employer2UseBase !== null ? 'pointer' : 'default', fontFamily: 'inherit', opacity: employer2UseBase !== null ? 1 : 0.5 }}>Next →</button>
+              <button onClick={() => setWizardStep('step3')} disabled={wizard.employer2UseBase === null} style={{ flex: 1, padding: '12px', background: wizard.employer2UseBase !== null ? C.fg : '#ccc', color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: wizard.employer2UseBase !== null ? 'pointer' : 'default', fontFamily: 'inherit', opacity: wizard.employer2UseBase !== null ? 1 : 0.5 }}>Next →</button>
             </div>
           </div>
         )}
@@ -365,7 +452,7 @@ export default function SalaryPageCompleteWizard() {
         {wizardStep === 'step3' && (
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24 }}>
             <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 16px' }}>Any other increments?</h2>
-            <p style={{ fontSize: 13, color: C.muted, margin: '0 0 20px' }}>Did you get salary increments with Employer 2 (after {monthLabel(changeMonth)})?</p>
+            <p style={{ fontSize: 13, color: C.muted, margin: '0 0 20px' }}>Did you get salary increments with Employer 2 (after {monthLabel(wizard.changeMonth)})?</p>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
               <button onClick={() => { buildEmploymentsFromWizard(); setWizardStep('review') }} style={{ padding: 16, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, textAlign: 'left', fontWeight: 500, color: C.text }}>No, no more increments</button>
@@ -387,6 +474,81 @@ export default function SalaryPageCompleteWizard() {
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '20px 0' }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Salary</h1>
       <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>FY {fyStartYear}-{fyStartYear + 1}</p>
+
+      {/* Preview Modal - Salary Breakup */}
+      {previewMonth && previewEmploymentId && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(28,43,34,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 20 }}>
+          <div style={{ background: C.card, borderRadius: 10, padding: 30, maxWidth: 600, width: '95%', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', position: 'relative' }}>
+            <button onClick={() => setPreviewMonth(null)} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', fontSize: 28, color: C.muted, cursor: 'pointer', padding: 0 }}>×</button>
+
+            {previewMonth && getMonthData(previewEmploymentId, previewMonth) && (() => {
+              const md = getMonthData(previewEmploymentId, previewMonth)!
+              return (
+                <>
+                  <h2 style={{ fontSize: 18, fontWeight: 700, color: C.text, margin: '0 0 4px' }}>{monthLabel(previewMonth)}</h2>
+                  <p style={{ fontSize: 12, color: C.muted, margin: '0 0 20px' }}>{md.source === 'actual' ? 'From salary slip' : md.source === 'edited' ? 'Your edit' : 'Calculated from base'}</p>
+
+                  {/* Earnings */}
+                  <div style={{ marginBottom: 20 }}>
+                    <h3 style={{ fontSize: 13, fontWeight: 600, color: C.fg, margin: '0 0 12px' }}>Earnings</h3>
+                    <div style={{ background: C.wl, borderRadius: 6, overflow: 'hidden' }}>
+                      {md.earnings && md.earnings.length > 0 ? (
+                        md.earnings.map((e, i) => (
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', borderBottom: i < md.earnings!.length - 1 ? `1px solid ${C.border}` : 'none' }}>
+                            <span style={{ fontSize: 12, color: C.text }}>{e.label}</span>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: C.fg }}>{fmt(e.amount)}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px' }}>
+                          <span style={{ fontSize: 12, color: C.text }}>Gross Salary</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: C.fg }}>{fmt(md.gross)}</span>
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: C.wl, fontWeight: 600, borderTop: `1px solid ${C.border}` }}>
+                        <span style={{ fontSize: 12, color: C.fg }}>Total Earnings</span>
+                        <span style={{ fontSize: 12, color: C.fg }}>{fmt(md.gross)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Deductions */}
+                  <div style={{ marginBottom: 20 }}>
+                    <h3 style={{ fontSize: 13, fontWeight: 600, color: C.fg, margin: '0 0 12px' }}>Deductions</h3>
+                    <div style={{ background: '#FBF0F0', borderRadius: 6, overflow: 'hidden' }}>
+                      {md.deductionsList && md.deductionsList.length > 0 ? (
+                        md.deductionsList.map((d, i) => (
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', borderBottom: i < md.deductionsList!.length - 1 ? `1px solid ${C.border}` : 'none' }}>
+                            <span style={{ fontSize: 12, color: C.text }}>{d.label}</span>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: C.danger }}>−{fmt(d.amount)}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px' }}>
+                          <span style={{ fontSize: 12, color: C.text }}>Deductions</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: C.danger }}>−{fmt(md.deductions)}</span>
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: '#FBF0F0', fontWeight: 600, borderTop: `1px solid ${C.border}` }}>
+                        <span style={{ fontSize: 12, color: C.danger }}>Total Deductions</span>
+                        <span style={{ fontSize: 12, color: C.danger }}>−{fmt(md.deductions)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Net Salary */}
+                  <div style={{ marginTop: 20, padding: '14px', background: C.wl, borderRadius: 6, display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: C.fg }}>Net Salary</span>
+                    <span style={{ fontSize: 16, fontWeight: 700, color: '#2A7A4A' }}>{fmt(md.net)}</span>
+                  </div>
+                </>
+              )
+            })()}
+
+            <button onClick={() => setPreviewMonth(null)} style={{ width: '100%', marginTop: 20, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Close</button>
+          </div>
+        </div>
+      )}
 
       {/* Edit Modal */}
       {editingMonth && editEmploymentId && (
@@ -444,7 +606,7 @@ export default function SalaryPageCompleteWizard() {
             {expandedEmployment === emp.id && (
               <div style={{ padding: '16px', borderTop: `1px solid ${C.border}` }}>
                 <div style={{ marginBottom: 16 }}>
-                  <p style={{ fontSize: 11, fontWeight: 600, color: C.muted, margin: '0 0 12px', textTransform: 'uppercase' }}>Timeline · click to edit</p>
+                  <p style={{ fontSize: 11, fontWeight: 600, color: C.muted, margin: '0 0 12px', textTransform: 'uppercase' }}>Timeline · click to view/edit</p>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 8, marginBottom: 12 }}>
                     {emp.months.map(m => {
                       const bg = m.source === 'actual' ? C.fg : m.source === 'edited' ? C.wm : C.border
@@ -455,10 +617,8 @@ export default function SalaryPageCompleteWizard() {
                         <button
                           key={m.monthKey}
                           onClick={() => {
-                            setEditingMonth(m.monthKey)
-                            setEditEmploymentId(emp.id)
-                            setEditGross(m.gross)
-                            setEditNet(m.net)
+                            setPreviewMonth(m.monthKey)
+                            setPreviewEmploymentId(emp.id)
                           }}
                           style={{ background: bg, color: fg, border: 'none', borderRadius: 4, padding: '12px 4px', fontSize: 10, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}
                         >
@@ -470,11 +630,13 @@ export default function SalaryPageCompleteWizard() {
                     })}
                   </div>
 
-                  <div style={{ display: 'flex', gap: 12, fontSize: 10.5, color: C.muted }}>
+                  <div style={{ display: 'flex', gap: 12, fontSize: 10.5, color: C.muted, marginBottom: 12 }}>
                     <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: C.fg, marginRight: 4 }} />Actual</span>
                     <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: C.wm, marginRight: 4 }} />Edited</span>
                     <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: C.border, marginRight: 4 }} />Projected</span>
                   </div>
+
+                  <button onClick={() => { setEditEmploymentId(emp.id); setEditingMonth(emp.months[0].monthKey); setEditGross(emp.months[0].gross); setEditNet(emp.months[0].net) }} style={{ width: '100%', padding: '10px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Edit any month</button>
                 </div>
 
                 <div style={{ padding: '12px', background: C.wl, borderRadius: 6 }}>
