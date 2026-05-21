@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { parseSalaryFromBase64 } from '@/lib/claude'
 import { PDFDocument } from 'pdf-lib'
 import type { ParsedSalaryData } from '@/types'
-import { prisma } from "@/lib/db"
-import { logActivity } from "@/lib/activity"
 
 export const maxDuration = 60
 
@@ -133,52 +131,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const response = NextResponse.json({
+    return NextResponse.json({
       success: true,
       data: validSlips,
       count: validSlips.length,
       skipped: parsedSlips.length - validSlips.length,
       errors: errors.length > 0 ? errors : undefined,
     })
-
-    // Fire-and-forget: persist salary slips to DB
-    Promise.resolve().then(async () => {
-      try {
-        for (const slip of validSlips) {
-          const netPay = slip.netSalary || slip.netPay || 0
-          if (netPay <= 0) continue
-          const period = slip.payPeriod || new Date().toISOString().slice(0, 7) + '-01'
-          await prisma.salarySlip.upsert({
-            where: {
-              userId_periodMonth: {
-                userId: 'anonymous',
-                periodMonth: new Date(period),
-              },
-            },
-            update: {
-              employer: slip.employerName || null,
-              netPay,
-              components: JSON.parse(JSON.stringify(slip)),
-            },
-            create: {
-              userId: 'anonymous',
-              periodMonth: new Date(period),
-              employer: slip.employerName || null,
-              netPay,
-              components: JSON.parse(JSON.stringify(slip)),
-            },
-          })
-        }
-        await logActivity('anonymous', 'SALARY_PARSE_SUCCESS', null, {
-          count: validSlips.length,
-          netPay: validSlips[0]?.netSalary || validSlips[0]?.netPay,
-        })
-      } catch (e) {
-        console.error("[parse-salary] DB WRITE ERROR:", e); console.error("[parse-salary] Stack:", e?.stack)
-      }
-    })
-
-    return response
   } catch (error: any) {
     console.error('Salary parse error:', error)
     return NextResponse.json(

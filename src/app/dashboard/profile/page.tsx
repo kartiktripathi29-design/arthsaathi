@@ -1513,6 +1513,7 @@ function ProfileContent() {
     setEmptyMonthsDismissed(false)
     try { localStorage.removeItem('av_empty_months_dismissed') } catch {}
 
+    let toastMsg: string | null = null
     setSalaryTimeline(prev => {
       // First batch ever — create timeline from the earliest slip's FY
       if (!prev) {
@@ -1530,7 +1531,7 @@ function ProfileContent() {
           }],
           overrides: [],
         }
-        if (toastId) toast.success(`${slips.length} slips added`, { id: toastId })
+        toastMsg = `${slips.length} slips added`
         return newTimeline
       }
 
@@ -1584,9 +1585,10 @@ function ProfileContent() {
       if (added > 0) parts.push(`${added} added`)
       if (replacedMonths.length > 0) parts.push(`${replacedMonths.length} replaced`)
       if (skippedMonths.length > 0) parts.push(`${skippedMonths.length} skipped (already in another employment)`)
-      if (toastId) toast.success(parts.join(' · ') || `${slips.length} slips processed`, { id: toastId })
+      toastMsg = parts.join(' · ') || `${slips.length} slips processed`
       return updated
     })
+    queueMicrotask(() => { if (toastId && toastMsg) toast.success(toastMsg, { id: toastId }) })
   }
 
 
@@ -1710,6 +1712,7 @@ function ProfileContent() {
     // Reset dismissed empty-months notice — uploading a new slip may have closed a gap
     setEmptyMonthsDismissed(false)
     try { localStorage.removeItem('av_empty_months_dismissed') } catch {}
+    let afterUpdate: (() => void) | null = null
     setSalaryTimeline(prev => {
       // First slip ever — create timeline
       if (!prev) {
@@ -1726,7 +1729,7 @@ function ProfileContent() {
           }],
           overrides: [],
         }
-        if (toastId) toast.success(`Salary slip added · ${monthLabel(slip.monthKey)}`, { id: toastId })
+        afterUpdate = () => { if (toastId) toast.success(`Salary slip added · ${monthLabel(slip.monthKey)}`, { id: toastId }) }
         return newTimeline
       }
       // Compare with latest slip in latest employment
@@ -1744,7 +1747,7 @@ function ProfileContent() {
       if (existingEmp) {
         const ok = typeof window !== 'undefined' && window.confirm(`A slip for ${monthLabel(slip.monthKey)} already exists. Replace it?`)
         if (!ok) {
-          if (toastId) toast.dismiss(toastId)
+          afterUpdate = () => { if (toastId) toast.dismiss(toastId) }
           return prev
         }
         const updated = {
@@ -1757,20 +1760,22 @@ function ProfileContent() {
           }),
           overrides: prev.overrides.filter(o => o.monthKey !== slip.monthKey),
         }
-        if (toastId) toast.success(`Replaced ${monthLabel(slip.monthKey)} slip`, { id: toastId })
+        afterUpdate = () => { if (toastId) toast.success(`Replaced ${monthLabel(slip.monthKey)} slip`, { id: toastId }) }
         return updated
       }
 
       // Ambiguous case — prompt the user
       if (!employerSame || basicJumped) {
-        setEmploymentPrompt({
-          open: true,
-          pendingSlip: slip,
-          reason: !employerSame ? 'employer_changed' : 'basic_jumped',
-          oldEmployerName: oldEmployerName,
-          newEmployerName: newEmployerName,
-        })
-        if (toastId) toast.dismiss(toastId)
+        afterUpdate = () => {
+          setEmploymentPrompt({
+            open: true,
+            pendingSlip: slip,
+            reason: !employerSame ? 'employer_changed' : 'basic_jumped',
+            oldEmployerName: oldEmployerName,
+            newEmployerName: newEmployerName,
+          })
+          if (toastId) toast.dismiss(toastId)
+        }
         return prev
       }
 
@@ -1785,15 +1790,17 @@ function ProfileContent() {
           return { ...e, slips: newSlips, fromMonth: newFromMonth }
         }),
       }
-      if (toastId) toast.success(`Salary slip added · ${monthLabel(slip.monthKey)}`, { id: toastId })
+      afterUpdate = () => { if (toastId) toast.success(`Salary slip added · ${monthLabel(slip.monthKey)}`, { id: toastId }) }
       return updated
     })
+    queueMicrotask(() => { afterUpdate?.() })
   }
 
   // Resolve the employment prompt — user picked one of three options
   const resolveEmploymentPrompt = (choice: 'same_employer' | 'hike' | 'new_employer') => {
     const slip = employmentPrompt.pendingSlip
     if (!slip) { setEmploymentPrompt({ open: false, pendingSlip: null, reason: null }); return }
+    let toastMsg: string | null = null
     setSalaryTimeline(prev => {
       if (!prev) return prev
       if (choice === 'new_employer') {
@@ -1812,7 +1819,7 @@ function ProfileContent() {
           toMonth: null,
           slips: [slip],
         }
-        toast.success(`New employer added · ${newEmp.employerName}`)
+        toastMsg = `New employer added · ${newEmp.employerName}`
         return { ...prev, employments: [...closed, newEmp] }
       }
       // same_employer or hike — both attach to latest employment.
@@ -1826,10 +1833,11 @@ function ProfileContent() {
           return { ...e, slips: newSlips, fromMonth: newFromMonth }
         }),
       }
-      toast.success(choice === 'hike' ? `Hike recorded from ${monthLabel(slip.monthKey)}` : `Slip added · ${monthLabel(slip.monthKey)}`)
+      toastMsg = choice === 'hike' ? `Hike recorded from ${monthLabel(slip.monthKey)}` : `Slip added · ${monthLabel(slip.monthKey)}`
       return updated
     })
     setEmploymentPrompt({ open: false, pendingSlip: null, reason: null })
+    queueMicrotask(() => { if (toastMsg) toast.success(toastMsg) })
   }
 
   const removeSlip = (slipId: string) => {
