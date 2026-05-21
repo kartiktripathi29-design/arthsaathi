@@ -170,7 +170,7 @@ export default function OtherIncomePage() {
               {openForm.type === 'equity' && (
                 <>
                   <div>
-                    <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>Long-term gains (held > 1 year)</label>
+                    <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>Long-term gains (held &gt; 1 year)</label>
                     <input type="text" inputMode="numeric" value={openForm.ltcgGains} onChange={(e) => setOpenForm({ ...openForm, ltcgGains: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }} />
                     <p style={{ fontSize: 10, color: C.muted, margin: '4px 0 0' }}>First ₹1,25,000 is tax-free</p>
                   </div>
