@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
-const C = { bg: '#FDFAF6', card: '#fff', border: '#E4DDD1', fg: '#1C2B22', muted: '#6B7770', primary: '#3A4B41', danger: '#B94040' }
+const C = { bg: '#FDFAF6', card: '#fff', border: '#E4DDD1', fg: '#1C2B22', muted: '#6B7770', primary: '#3A4B41', danger: '#B94040', text: '#1C2B22' }
 const fmt = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`
 
 interface TaxResult {
