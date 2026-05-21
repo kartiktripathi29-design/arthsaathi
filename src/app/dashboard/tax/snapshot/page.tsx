@@ -17,9 +17,17 @@ interface TaxResult {
   totalGross: number
 }
 
+interface ITRForm {
+  form: string
+  title: string
+  reason: string
+  details: string
+}
+
 export default function TaxSnapshotPage() {
   const router = useRouter()
   const [result, setResult] = useState<TaxResult | null>(null)
+  const [itrForm, setItrForm] = useState<ITRForm | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -144,6 +152,43 @@ export default function TaxSnapshotPage() {
     const newTax = calcNewRegimeTax(newTaxable)
     const oldTax = calcOldRegimeTax(oldTaxable)
 
+    // Determine ITR form
+    const hasFreelance = otherIncome.some((inc: any) => inc.type === 'freelance')
+    const hasEquity = otherIncome.some((inc: any) => inc.type === 'equity')
+    const hasCrypto = otherIncome.some((inc: any) => inc.type === 'crypto')
+    const hasFNO = otherIncome.some((inc: any) => inc.type === 'fno')
+
+    let itr: ITRForm
+    if (hasFNO) {
+      itr = {
+        form: 'ITR-3',
+        title: 'ITR-3 (Business/Professional)',
+        reason: 'F&O trading income',
+        details: 'ITR-3 covers salary + business/professional income. Required for F&O trading.',
+      }
+    } else if (hasEquity || hasCrypto) {
+      itr = {
+        form: 'ITR-2',
+        title: 'ITR-2 (Capital Gains)',
+        reason: 'Equity or crypto gains',
+        details: 'ITR-2 is for salary + capital gains (equity, crypto, mutual funds, etc.).',
+      }
+    } else if (hasFreelance) {
+      itr = {
+        form: 'ITR-4',
+        title: 'ITR-4 (Sugam)',
+        reason: 'Presumptive freelance income (44ADA)',
+        details: 'ITR-4 (simplified form) for salaried + freelance income under ₹50L. No capital gains.',
+      }
+    } else {
+      itr = {
+        form: 'ITR-1',
+        title: 'ITR-1 (Sahaj)',
+        reason: 'Salary only',
+        details: 'ITR-1 (simplest form) for salaried users with salary, interest, no capital gains or business income.',
+      }
+    }
+
     setResult({
       newTax,
       oldTax,
@@ -156,55 +201,9 @@ export default function TaxSnapshotPage() {
       totalGross: salaryAnnual + otherIncome.reduce((sum: number, inc: any) => sum + (inc.amount || 0), 0),
     })
 
+    setItrForm(itr)
     setLoading(false)
   }, [])
-
-  // Determine ITR form
-  function getITRForm() {
-    const otherIncomeData = localStorage.getItem('av_other_income')
-    const otherIncome = otherIncomeData ? JSON.parse(otherIncomeData) : []
-
-    const hasFreelance = otherIncome.some((inc: any) => inc.type === 'freelance')
-    const hasEquity = otherIncome.some((inc: any) => inc.type === 'equity')
-    const hasCrypto = otherIncome.some((inc: any) => inc.type === 'crypto')
-    const hasFNO = otherIncome.some((inc: any) => inc.type === 'fno')
-
-    if (hasFNO) {
-      return {
-        form: 'ITR-3',
-        title: 'ITR-3 (Business/Professional)',
-        reason: 'F&O trading income',
-        details: 'ITR-3 covers salary + business/professional income. Required for F&O trading.',
-      }
-    }
-
-    if (hasEquity || hasCrypto) {
-      return {
-        form: 'ITR-2',
-        title: 'ITR-2 (Capital Gains)',
-        reason: 'Equity or crypto gains',
-        details: 'ITR-2 is for salary + capital gains (equity, crypto, mutual funds, etc.).',
-      }
-    }
-
-    if (hasFreelance) {
-      return {
-        form: 'ITR-4',
-        title: 'ITR-4 (Sugam)',
-        reason: 'Presumptive freelance income (44ADA)',
-        details: 'ITR-4 (simplified form) for salaried + freelance income under ₹50L. No capital gains.',
-      }
-    }
-
-    return {
-      form: 'ITR-1',
-      title: 'ITR-1 (Sahaj)',
-      reason: 'Salary only',
-      details: 'ITR-1 (simplest form) for salaried users with salary, interest, no capital gains or business income.',
-    }
-  }
-
-  const itrForm = getITRForm()
 
   if (loading) {
     return (
@@ -337,22 +336,24 @@ export default function TaxSnapshotPage() {
       </div>
 
       {/* ITR Form Recommendation */}
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 24 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 600, color: C.fg, margin: '0 0 12px' }}>ITR Form to File</h3>
+      {itrForm && (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 24 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 600, color: C.fg, margin: '0 0 12px' }}>ITR Form to File</h3>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-          <div>
-            <p style={{ fontSize: 13, fontWeight: 600, color: C.primary, margin: '0 0 4px' }}>{itrForm.form}</p>
-            <p style={{ fontSize: 12, color: C.fg, margin: '0 0 6px' }}>{itrForm.title}</p>
-            <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>{itrForm.reason}</p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 600, color: C.primary, margin: '0 0 4px' }}>{itrForm.form}</p>
+              <p style={{ fontSize: 12, color: C.fg, margin: '0 0 6px' }}>{itrForm.title}</p>
+              <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>{itrForm.reason}</p>
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 700, color: C.primary }}>{itrForm.form}</div>
           </div>
-          <div style={{ fontSize: 24, fontWeight: 700, color: C.primary }}>{itrForm.form}</div>
-        </div>
 
-        <div style={{ background: '#F9F7F4', border: `1px solid ${C.border}`, borderRadius: 6, padding: 12, marginTop: 12 }}>
-          <p style={{ fontSize: 12, color: C.text, margin: 0, lineHeight: 1.6 }}>{itrForm.details}</p>
+          <div style={{ background: '#F9F7F4', border: `1px solid ${C.border}`, borderRadius: 6, padding: 12, marginTop: 12 }}>
+            <p style={{ fontSize: 12, color: C.text, margin: 0, lineHeight: 1.6 }}>{itrForm.details}</p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Navigation */}
       <div style={{ display: 'flex', gap: 12 }}>
