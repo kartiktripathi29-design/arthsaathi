@@ -12,50 +12,51 @@ const client = new Anthropic({
 
 // ─── Salary Slip Parser ───────────────────────────────────────────────────
 
-const SALARY_PARSE_SYSTEM = `You are a precise Indian payroll document parser. Extract ALL salary components from any Indian payslip.
+const SALARY_PARSE_SYSTEM = `You are a precise Indian payroll document parser. Extract ALL salary components from any Indian payslip — regardless of format, employer, or layout.
 
-CRITICAL: Return ONLY valid JSON. No markdown, no explanation, no extra text.
-
-Extract and return this exact JSON structure:
+Return ONLY valid JSON. No markdown, no explanation. Use this exact schema:
 {
-  "employeeName": "string (employee name from slip)",
-  "employerName": "string (company name from slip)",
-  "month": "string (e.g. March, April, January)",
-  "year": "string (e.g. 2026, 2025)",
-  "basicSalary": number (just basic, not including allowances),
-  "hra": number (House Rent Allowance),
-  "da": number (Dearness Allowance),
-  "ta": number (Travel/Transport Allowance - sum all if multiple),
-  "lta": number (Leave Travel Allowance),
+  "employeeName": "string",
+  "employerName": "string",
+  "month": "string (e.g. March)",
+  "year": "string (e.g. 2024)",
+  "basicSalary": number,
+  "hra": number,
+  "da": number,
+  "ta": number,
+  "lta": number,
   "medicalAllowance": number,
-  "specialAllowance": number (any allowance labeled 'special'),
-  "otherAllowances": number (sum of all OTHER allowances not listed above),
-  "grossSalary": number (total earnings before deductions - MUST match slip's gross),
-  "employeePF": number (Employee Provident Fund),
-  "employerPF": number (Employer PF - if shown on slip),
-  "esic": number (ESIC contribution),
+  "specialAllowance": number,
+  "otherAllowances": number,
+  "grossSalary": number,
+  "employeePF": number,
+  "employerPF": number,
+  "esic": number,
   "professionalTax": number,
-  "tdsDeducted": number (Income Tax / TDS),
+  "tdsDeducted": number,
   "loanDeduction": number,
-  "otherDeductions": number (sum of any other deductions),
-  "totalDeductions": number (total deductions - MUST match slip's total),
-  "netSalary": number (take home pay - MUST match slip's net),
-  "ctcMonthly": number (CTC if mentioned, else = grossSalary + employerPF),
-  "ctcAnnual": number (CTC * 12),
+  "otherDeductions": number,
+  "totalDeductions": number,
+  "netSalary": number,
+  "ctcMonthly": number,
+  "ctcAnnual": number,
   "components": [
-    {"label": "string (allowance/deduction name)", "amount": number, "type": "earning|deduction|computed"}
+    {"label": "string", "amount": number, "type": "earning|deduction|computed"}
   ]
 }
 
-RULES:
-- ALL amounts are numbers only, no rupee symbols
-- If a field is NOT on the slip, use 0
-- grossSalary = sum of all earnings/allowances
-- netSalary = grossSalary - totalDeductions (take-home pay shown on slip)
-- otherAllowances = sum of allowances that don't fit specific categories (medical reimbursement, children education, hostel, LTA reimbursement, uniform, telephone, internet, books, helper, driver reimbursement, research, food coupon, hill area, tribal area, etc.)
-- components array should include EVERY line item from the slip
-- If slip shows gross and net, TRUST those numbers - they are correct
-- Match component amounts exactly as shown on slip`
+Rules:
+- All amounts in INR rupees (numbers only, no symbols)
+- If a field is not present, use 0
+- grossSalary = sum of all earnings before deductions
+- netSalary = take-home pay (grossSalary - totalDeductions)
+- ctcMonthly = grossSalary + employerPF + ESIC employer share + gratuity provision
+- ctcAnnual = ctcMonthly * 12
+- Include ALL visible components in the components array
+- Common Indian allowances: Basic, HRA, DA, TA/Conveyance, LTA, Medical, Special Allowance, Night Shift, Statutory Bonus
+- Common deductions: PF/EPF, ESIC, Professional Tax (PT/P.Tax), TDS, Loans, Salary Advance
+- If gross doesn't match sum of components, trust the printed gross
+- For "Special Allowance" or "Other Allowances", capture the actual amount shown`
 
 export async function parseSalaryFromBase64(
   base64Data: string,
@@ -77,10 +78,11 @@ export async function parseSalaryFromBase64(
       },
       {
         type: 'text',
-        text: 'Parse this salary slip. Return ONLY the JSON, nothing else.',
+        text: 'Parse this Indian salary slip and return the JSON as specified. Extract every number you can see accurately.',
       },
     ]
   } else {
+    // PDF — send as document
     content = [
       {
         type: 'document' as any,
@@ -92,29 +94,23 @@ export async function parseSalaryFromBase64(
       } as any,
       {
         type: 'text',
-        text: 'Parse this salary slip. Return ONLY the JSON, nothing else.',
+        text: 'Parse this Indian salary slip PDF and return the JSON as specified.',
       },
     ]
   }
 
   const response = await client.messages.create({
-    model: 'claude-opus-4-1-20250805',
-    max_tokens: 1500,
+    model: 'claude-sonnet-4-6',
+    max_tokens: 1200,
     system: SALARY_PARSE_SYSTEM,
     messages: [{ role: 'user', content }],
   })
 
   const text = response.content[0].type === 'text' ? response.content[0].text : ''
-  console.log('[Parser] Claude response:', text.slice(0, 500))
-  
   const jsonMatch = text.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) {
-    console.error('[Parser] No JSON found. Raw response:', text)
-    throw new Error('Could not extract JSON from Claude response')
-  }
+  if (!jsonMatch) throw new Error('Could not extract JSON from Claude response')
 
   const parsed = JSON.parse(jsonMatch[0]) as ParsedSalaryData
-  console.log('[Parser] Parsed successfully. Gross:', parsed.grossSalary, 'Net:', parsed.netSalary)
   return parsed
 }
 
