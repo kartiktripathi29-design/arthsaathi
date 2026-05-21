@@ -2,204 +2,264 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
-const C = { bg: '#FDFAF6', card: '#fff', border: '#E4DDD1', fg: '#1C2B22', muted: '#6B7770', primary: '#3A4B41' }
+const C = { fg:'#3A4B41', wheat:'#E6CFA7', wl:'#F5ECD8', wm:'#D4B98A', bg:'#FDFAF6', card:'#fff', border:'#E4DDD1', text:'#1C2B22', muted:'#7A8A7E', danger:'#B94040' }
+const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`
 
-interface ParsedSlip {
+interface SalarySlip {
+  monthKey: string
   month: string
   year: string
   employerName: string
-  employeeName: string
   grossSalary: number
   netSalary: number
   basicSalary: number
   hra: number
   employeePF: number
   tdsDeducted: number
-  components: Array<{ label: string; amount: number; type: string }>
+  components?: { label: string; amount: number; type: 'earning' | 'deduction' }[]
 }
 
 export default function SalaryPage() {
   const router = useRouter()
-  const [slips, setSlips] = useState<ParsedSlip[]>([])
-  const [selectedSlip, setSelectedSlip] = useState<ParsedSlip | null>(null)
+  const [salaries, setSalaries] = useState<SalarySlip[]>([])
+  const [previewSlip, setPreviewSlip] = useState<SalarySlip | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('av_salary_timeline')
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        setSlips(parsed)
+    const data = localStorage.getItem('av_salary_timeline')
+    if (data) {
+      try {
+        const parsed = JSON.parse(data)
+        const slipArray = Array.isArray(parsed) ? parsed : parsed.employments?.[0]?.slips || []
+        setSalaries(slipArray)
+        if (slipArray.length > 0) {
+          setPreviewSlip(slipArray[slipArray.length - 1])
+        }
+      } catch (e) {
+        console.error('Failed to load salary data:', e)
       }
     }
+    setLoading(false)
   }, [])
 
-  const earnings = selectedSlip?.components?.filter(c => c.type === 'earning') || []
-  const deductions = selectedSlip?.components?.filter(c => c.type === 'deduction') || []
+  if (loading) {
+    return <div style={{ padding: 40, textAlign: 'center', color: C.muted }}>Loading...</div>
+  }
 
-  return (
-    <div style={{ maxWidth: 900, margin: '0 auto' }}>
-      <div style={{ marginBottom: 24 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, color: C.fg, margin: '0 0 6px' }}>Salary Breakdown</h2>
-        <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>
-          Click any month to see detailed breakdown.
-        </p>
-      </div>
-
-      {slips.length === 0 ? (
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 40, textAlign: 'center' }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>📄</div>
-          <h3 style={{ fontSize: 16, fontWeight: 600, color: C.fg, margin: '0 0 8px' }}>No salary slips uploaded yet</h3>
-          <p style={{ fontSize: 13, color: C.muted, marginBottom: 20 }}>Upload your first slip to get started</p>
-          <button onClick={() => router.push('/dashboard/profile/documents')} style={{
-            padding: '10px 20px', background: C.primary, color: '#fff', border: 'none',
-            borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-          }}>
+  if (!salaries.length) {
+    return (
+      <div style={{ maxWidth: 900, margin: '0 auto', padding: 20 }}>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, textAlign: 'center' }}>
+          <p style={{ fontSize: 14, color: C.muted, margin: '0 0 16px' }}>No salary slips uploaded yet</p>
+          <button
+            onClick={() => router.push('/dashboard/profile/documents')}
+            style={{
+              padding: '10px 20px',
+              background: C.fg,
+              color: '#fff',
+              border: 'none',
+              borderRadius: 6,
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
             Upload Salary Slip
           </button>
         </div>
-      ) : (
-        <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
-              <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>Total Slips</div>
-              <div style={{ fontSize: 24, fontWeight: 700, color: C.fg }}>{slips.length}</div>
-            </div>
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
-              <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>Latest Gross</div>
-              <div style={{ fontSize: 24, fontWeight: 700, color: C.fg }}>₹{(slips[slips.length - 1]?.grossSalary || 0).toLocaleString('en-IN')}</div>
-            </div>
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
-              <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>Latest Net</div>
-              <div style={{ fontSize: 24, fontWeight: 700, color: C.fg }}>₹{(slips[slips.length - 1]?.netSalary || 0).toLocaleString('en-IN')}</div>
-            </div>
-          </div>
+      </div>
+    )
+  }
 
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: C.bg }}>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: C.muted, borderBottom: `1px solid ${C.border}` }}>Month</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: C.muted, borderBottom: `1px solid ${C.border}` }}>Employer</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: C.muted, borderBottom: `1px solid ${C.border}` }}>Gross</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: C.muted, borderBottom: `1px solid ${C.border}` }}>Net</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: 12, fontWeight: 600, color: C.muted, borderBottom: `1px solid ${C.border}` }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {slips.map((slip, idx) => (
-                  <tr key={idx} style={{ borderBottom: `1px solid ${C.border}` }}>
-                    <td style={{ padding: '14px 16px', fontSize: 13, color: C.fg, fontWeight: 500 }}>
-                      {slip.month} {slip.year}
-                    </td>
-                    <td style={{ padding: '14px 16px', fontSize: 13, color: C.fg }}>
-                      {slip.employerName}
-                    </td>
-                    <td style={{ padding: '14px 16px', fontSize: 13, color: C.fg, textAlign: 'right', fontWeight: 600 }}>
-                      ₹{slip.grossSalary.toLocaleString('en-IN')}
-                    </td>
-                    <td style={{ padding: '14px 16px', fontSize: 13, color: C.fg, textAlign: 'right', fontWeight: 600 }}>
-                      ₹{slip.netSalary.toLocaleString('en-IN')}
-                    </td>
-                    <td style={{ padding: '14px 16px', textAlign: 'center' }}>
-                      <button onClick={() => setSelectedSlip(slip)} style={{
-                        padding: '6px 14px', background: C.bg, border: `1px solid ${C.border}`,
-                        borderRadius: 5, fontSize: 12, fontWeight: 500, color: C.fg,
-                        cursor: 'pointer', fontFamily: 'inherit',
-                      }}>
-                        Preview
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+  const earnings = previewSlip?.components?.filter(c => c.type === 'earning') || []
+  const deductions = previewSlip?.components?.filter(c => c.type === 'deduction') || []
+  const totalEarnings = earnings.reduce((s, c) => s + c.amount, 0)
+  const totalDeductions = deductions.reduce((s, c) => s + c.amount, 0)
 
-          <div style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end' }}>
-            <button onClick={() => router.push('/dashboard/profile/other-income')} style={{
-              padding: '12px 24px', background: C.primary, color: '#fff', border: 'none',
-              borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-            }}>
-              Next: Other Income →
+  return (
+    <div style={{ maxWidth: 900, margin: '0 auto', padding: '20px 0' }}>
+      <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Salary</h1>
+      <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>Your salary slip details and timeline</p>
+
+      {/* Preview Modal */}
+      {previewSlip && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(28,43,34,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+          <div style={{ background: C.card, borderRadius: 10, padding: 30, maxWidth: 700, width: '95%', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,0.18)' }}>
+            {/* Close Button */}
+            <button
+              onClick={() => setPreviewSlip(null)}
+              style={{
+                position: 'absolute',
+                top: 16,
+                right: 16,
+                background: 'none',
+                border: 'none',
+                fontSize: 24,
+                color: C.muted,
+                cursor: 'pointer',
+              }}
+            >
+              ×
             </button>
-          </div>
-        </>
-      )}
 
-      {selectedSlip && (
-        <div onClick={() => setSelectedSlip(null)} style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 100, padding: 20,
-        }}>
-          <div onClick={e => e.stopPropagation()} style={{
-            background: C.card, borderRadius: 12, maxWidth: 700, width: '100%',
-            maxHeight: '90vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-          }}>
-            <div style={{ padding: '20px 24px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <h3 style={{ fontSize: 18, fontWeight: 700, color: C.fg, margin: '0 0 4px' }}>
-                  {selectedSlip.month} {selectedSlip.year}
-                </h3>
-                <div style={{ fontSize: 13, color: C.muted }}>{selectedSlip.employerName}</div>
-              </div>
-              <button onClick={() => setSelectedSlip(null)} style={{
-                background: 'transparent', border: 'none', fontSize: 24, color: C.muted,
-                cursor: 'pointer', lineHeight: 1,
-              }}>×</button>
-            </div>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: C.text, margin: '0 0 4px' }}>
+              {previewSlip.month} {previewSlip.year}
+            </h2>
+            <p style={{ fontSize: 12, color: C.muted, margin: '0 0 20px' }}>{previewSlip.employerName}</p>
 
-            <div style={{ padding: 24 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-                <div>
-                  <h4 style={{ fontSize: 14, fontWeight: 600, color: C.fg, margin: '0 0 12px', paddingBottom: 8, borderBottom: `2px solid ${C.primary}` }}>
-                    Earnings
-                  </h4>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {earnings.map((item, idx) => (
-                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                        <span style={{ color: C.muted }}>{item.label}</span>
-                        <span style={{ fontWeight: 600, color: C.fg }}>₹{item.amount.toLocaleString('en-IN')}</span>
-                      </div>
-                    ))}
-                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 700 }}>
-                      <span style={{ color: C.fg }}>Gross Salary</span>
-                      <span style={{ color: C.primary }}>₹{selectedSlip.grossSalary.toLocaleString('en-IN')}</span>
-                    </div>
+            {/* Earnings */}
+            <div style={{ marginBottom: 24 }}>
+              <h3 style={{ fontSize: 13, fontWeight: 600, color: C.fg, margin: '0 0 12px' }}>Earnings</h3>
+              <div style={{ background: C.wl, borderRadius: 6, overflow: 'hidden' }}>
+                {earnings.map((c, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', borderBottom: i < earnings.length - 1 ? `1px solid ${C.border}` : 'none' }}>
+                    <span style={{ fontSize: 13, color: C.text }}>{c.label}</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: C.fg }}>{fmt(c.amount)}</span>
                   </div>
-                </div>
-
-                <div>
-                  <h4 style={{ fontSize: 14, fontWeight: 600, color: C.fg, margin: '0 0 12px', paddingBottom: 8, borderBottom: `2px solid #C33` }}>
-                    Deductions
-                  </h4>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {deductions.map((item, idx) => (
-                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                        <span style={{ color: C.muted }}>{item.label}</span>
-                        <span style={{ fontWeight: 600, color: C.fg }}>₹{item.amount.toLocaleString('en-IN')}</span>
-                      </div>
-                    ))}
-                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 700 }}>
-                      <span style={{ color: C.fg }}>Total Deductions</span>
-                      <span style={{ color: '#C33' }}>₹{(selectedSlip.grossSalary - selectedSlip.netSalary).toLocaleString('en-IN')}</span>
-                    </div>
-                  </div>
+                ))}
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: C.wl, fontWeight: 700 }}>
+                  <span style={{ fontSize: 13, color: C.fg }}>Total Earnings</span>
+                  <span style={{ fontSize: 13, color: C.fg }}>{fmt(totalEarnings)}</span>
                 </div>
               </div>
+            </div>
 
-              <div style={{
-                marginTop: 24, padding: 16, background: C.bg,
-                borderRadius: 8, border: `1px solid ${C.border}`,
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              }}>
-                <span style={{ fontSize: 15, fontWeight: 600, color: C.fg }}>Net Payable</span>
-                <span style={{ fontSize: 20, fontWeight: 700, color: C.primary }}>₹{selectedSlip.netSalary.toLocaleString('en-IN')}</span>
+            {/* Deductions */}
+            <div>
+              <h3 style={{ fontSize: 13, fontWeight: 600, color: C.fg, margin: '0 0 12px' }}>Deductions</h3>
+              <div style={{ background: '#FBF0F0', borderRadius: 6, overflow: 'hidden' }}>
+                {deductions.map((c, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', borderBottom: i < deductions.length - 1 ? `1px solid ${C.border}` : 'none' }}>
+                    <span style={{ fontSize: 13, color: C.text }}>{c.label}</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: C.danger }}>−{fmt(c.amount)}</span>
+                  </div>
+                ))}
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: '#FBF0F0', fontWeight: 700 }}>
+                  <span style={{ fontSize: 13, color: C.danger }}>Total Deductions</span>
+                  <span style={{ fontSize: 13, color: C.danger }}>−{fmt(totalDeductions)}</span>
+                </div>
               </div>
             </div>
+
+            {/* Net */}
+            <div style={{ marginTop: 20, padding: '14px', background: C.wl, borderRadius: 6, display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 14, fontWeight: 600, color: C.fg }}>Net Salary</span>
+              <span style={{ fontSize: 16, fontWeight: 700, color: '#2A7A4A' }}>{fmt(previewSlip.netSalary)}</span>
+            </div>
+
+            {/* Close Button at Bottom */}
+            <button
+              onClick={() => setPreviewSlip(null)}
+              style={{
+                marginTop: 20,
+                width: '100%',
+                padding: '12px',
+                background: C.fg,
+                color: '#fff',
+                border: 'none',
+                borderRadius: 6,
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              Close
+            </button>
           </div>
         </div>
       )}
+
+      {/* Summary Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
+          <p style={{ fontSize: 11, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>Gross Salary (Annual)</p>
+          <p style={{ fontSize: 20, fontWeight: 700, color: C.fg, margin: 0 }}>
+            {fmt((salaries.reduce((s, slip) => s + slip.grossSalary, 0) || 0) * 12)}
+          </p>
+        </div>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
+          <p style={{ fontSize: 11, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>Net Salary (Annual)</p>
+          <p style={{ fontSize: 20, fontWeight: 700, color: '#2A7A4A', margin: 0 }}>
+            {fmt((salaries.reduce((s, slip) => s + slip.netSalary, 0) || 0) * 12)}
+          </p>
+        </div>
+      </div>
+
+      {/* Slips List */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ padding: '14px 16px', background: C.wl, fontWeight: 600, fontSize: 12, color: C.fg, textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>
+          Uploaded Slips
+        </div>
+        {salaries.map((slip, i) => (
+          <div
+            key={i}
+            onClick={() => setPreviewSlip(slip)}
+            style={{
+              padding: '14px 16px',
+              borderBottom: i < salaries.length - 1 ? `1px solid ${C.border}` : 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              transition: 'background 0.2s',
+              background: previewSlip?.monthKey === slip.monthKey ? C.wl : 'transparent',
+            }}
+            onMouseEnter={(e) => { if (previewSlip?.monthKey !== slip.monthKey) (e.currentTarget as HTMLElement).style.background = '#FAFAF8' }}
+            onMouseLeave={(e) => { if (previewSlip?.monthKey !== slip.monthKey) (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+          >
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 600, color: C.text, margin: '0 0 4px' }}>
+                {slip.month} {slip.year}
+              </p>
+              <p style={{ fontSize: 11, color: C.muted, margin: 0 }}>{slip.employerName}</p>
+            </div>
+            <div style={{ textAlign: 'right' as const }}>
+              <p style={{ fontSize: 12, color: C.muted, margin: '0 0 4px' }}>Gross</p>
+              <p style={{ fontSize: 14, fontWeight: 700, color: C.fg, margin: 0 }}>{fmt(slip.grossSalary)}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Navigation */}
+      <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+        <button
+          onClick={() => router.back()}
+          style={{
+            flex: 1,
+            padding: '12px',
+            background: 'transparent',
+            color: C.fg,
+            border: `1px solid ${C.border}`,
+            borderRadius: 6,
+            fontSize: 14,
+            fontWeight: 500,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+          }}
+        >
+          ← Back
+        </button>
+        <button
+          onClick={() => router.push('/dashboard/profile/other-income')}
+          style={{
+            flex: 1,
+            padding: '12px',
+            background: C.fg,
+            color: '#fff',
+            border: 'none',
+            borderRadius: 6,
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+          }}
+        >
+          Next: Other Income →
+        </button>
+      </div>
     </div>
   )
 }
