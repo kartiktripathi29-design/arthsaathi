@@ -55,13 +55,22 @@ export default function SalaryPageFixed() {
     setLoading(false)
   }, [])
 
+  const monthToNum = (month: string): number => {
+    const monthMap: Record<string, number> = {
+      January: 1, February: 2, March: 3, April: 4, May: 5, June: 6,
+      July: 7, August: 8, September: 9, October: 10, November: 11, December: 12,
+      Jan: 1, Feb: 2, Mar: 3, Apr: 4, Jun: 6,
+      Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12,
+    }
+    return monthMap[month] || 1
+  }
+
   const buildPeriods = (slipsArray: Slip[]) => {
     if (!slipsArray || slipsArray.length === 0) {
       setPeriods([])
       return
     }
 
-    // Group slips by employer
     const employerMap = new Map<string, Slip[]>()
     slipsArray.forEach(slip => {
       const employer = slip.employerName || 'Unknown Employer'
@@ -71,7 +80,6 @@ export default function SalaryPageFixed() {
       employerMap.get(employer)!.push(slip)
     })
 
-    // Convert to employment periods
     const newPeriods: EmploymentPeriod[] = Array.from(employerMap.entries()).map(([employer, employerSlips], idx) => {
       const sorted = employerSlips.sort((a, b) => {
         const aYear = parseInt(a.year)
@@ -98,16 +106,6 @@ export default function SalaryPageFixed() {
     })
 
     setPeriods(newPeriods)
-  }
-
-  const monthToNum = (month: string): number => {
-    const months: Record<string, number> = {
-      January: 1, February: 2, March: 3, April: 4, May: 5, June: 6,
-      July: 7, August: 8, September: 9, October: 10, November: 11, December: 12,
-      Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6,
-      Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12,
-    }
-    return months[month] || 1
   }
 
   const annualGross = slips.reduce((sum, slip) => sum + (slip.grossSalary || slip.basicSalary || 0), 0)
