@@ -18,6 +18,8 @@ Return ONLY valid JSON. No markdown, no explanation. Use this exact schema:
 {
   "employeeName": "string",
   "employerName": "string",
+  "pan": "string (10-char PAN like AAAPL1234C if visible, else empty string)",
+  "aadhaarLast4": "string (last 4 digits of Aadhaar if visible, else empty string)",
   "month": "string (e.g. March)",
   "year": "string (e.g. 2024)",
   "basicSalary": number,
@@ -56,7 +58,9 @@ Rules:
 - Common Indian allowances: Basic, HRA, DA, TA/Conveyance, LTA, Medical, Special Allowance, Night Shift, Statutory Bonus
 - Common deductions: PF/EPF, ESIC, Professional Tax (PT/P.Tax), TDS, Loans, Salary Advance
 - If gross doesn't match sum of components, trust the printed gross
-- For "Special Allowance" or "Other Allowances", capture the actual amount shown`
+- For "Special Allowance" or "Other Allowances", capture the actual amount shown
+- PAN: extract the 10-character Permanent Account Number EXACTLY as printed (uppercase). If absent, use empty string ""
+- Aadhaar: many slips show only the last 4 digits ("XXXX XXXX 1234"). Return just those 4 digits as a string. If absent, use empty string ""`
 
 export async function parseSalaryFromBase64(
   base64Data: string,
@@ -116,29 +120,75 @@ export async function parseSalaryFromBase64(
 
 // ─── Offer Letter Parser ─────────────────────────────────────────────────
 
-const OFFER_LETTER_PARSE_SYSTEM = `You are a precise Indian offer letter parser.`
+const OFFER_LETTER_PARSE_SYSTEM = `You are a precise Indian offer letter parser. Extract ALL compensation components from any Indian offer letter — regardless of company, format, or layout.
+
+Return ONLY valid JSON. No markdown, no explanation. Use this exact schema:
+{
+  "employeeName": "string",
+  "employerName": "string",
+  "designation": "string",
+  "joiningDate": "string",
+  "basicSalary": number,
+  "hra": number,
+  "da": number,
+  "ta": number,
+  "lta": number,
+  "medicalAllowance": number,
+  "specialAllowance": number,
+  "otherAllowances": number,
+  "performanceBonus": number,
+  "joiningBonus": number,
+  "retentionBonus": number,
+  "esopValue": number,
+  "gratuity": number,
+  "employeePF": number,
+  "employerPF": number,
+  "professionalTax": number,
+  "fixedCTC": number,
+  "variableCTC": number,
+  "totalCTC": number,
+  "components": [
+    {"label": "string", "amount": number, "type": "fixed|variable|deduction|benefit", "frequency": "monthly|annual|one-time"}
+  ],
+  "notes": "string"
+}
+
+Rules:
+- All amounts in INR rupees ANNUAL (numbers only, no symbols)
+- If monthly amounts shown, multiply by 12
+- fixedCTC = guaranteed annual pay (basic + HRA + all fixed allowances + employer PF)
+- variableCTC = bonus + incentives + ESOPs (not guaranteed)
+- totalCTC = fixedCTC + variableCTC
+- joiningBonus and retentionBonus are one-time, mark frequency as "one-time"
+- ESOPs: use vesting value if mentioned, else 0
+- Include ALL components in the components array with correct frequency
+- professionalTax: estimate based on state if not mentioned (₹2,400/year for most states)
+- employeePF: 12% of basic (max ₹21,600/year) if not mentioned
+- If a field is not present, use 0
+- notes: any important conditions (bond period, variable payout conditions, ESOP vesting schedule)`
 
 export async function parseOfferLetterFromBase64(
   base64Data: string,
   mediaType: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' | 'application/pdf'
 ): Promise<any> {
   const isImage = mediaType.startsWith('image/')
+
   let content: Anthropic.MessageParam['content']
 
   if (isImage) {
     content = [
       { type: 'image', source: { type: 'base64', media_type: mediaType as any, data: base64Data } },
-      { type: 'text', text: 'Parse this offer letter and return JSON.' },
+      { type: 'text', text: 'Parse this Indian offer letter and return the JSON as specified. Extract every compensation component accurately.' },
     ]
   } else {
     content = [
       { type: 'document' as any, source: { type: 'base64', media_type: 'application/pdf', data: base64Data } } as any,
-      { type: 'text', text: 'Parse this offer letter and return JSON.' },
+      { type: 'text', text: 'Parse this Indian offer letter PDF and return the JSON as specified.' },
     ]
   }
 
   const response = await client.messages.create({
-    model: 'claude-opus-4-1-20250805',
+    model: 'claude-sonnet-4-6',
     max_tokens: 1200,
     system: OFFER_LETTER_PARSE_SYSTEM,
     messages: [{ role: 'user', content }],
@@ -155,6 +205,7 @@ export async function parseOfferLetterFromBase64(
 export async function parseOfferLetterMultiPage(
   pages: { base64: string; mediaType: string }[]
 ): Promise<any> {
+  // Send all pages as images in a single Claude call
   const content: Anthropic.MessageParam['content'] = [
     ...pages.map(p => ({
       type: 'image' as const,
@@ -166,14 +217,14 @@ export async function parseOfferLetterMultiPage(
     })),
     {
       type: 'text' as const,
-      text: `Parse these offer letter pages and return JSON.`,
+      text: `These are ${pages.length} pages of an Indian offer letter. Parse ALL pages together and return the complete JSON as specified. Extract every compensation component accurately.`,
     },
   ]
 
   const response = await client.messages.create({
-    model: 'claude-opus-4-1-20250805',
+    model: 'claude-sonnet-4-6',
     max_tokens: 1200,
-    system: 'Parse offer letters',
+    system: OFFER_LETTER_PARSE_SYSTEM,
     messages: [{ role: 'user', content }],
   })
 
@@ -187,7 +238,26 @@ export async function parseOfferLetterMultiPage(
 // ─── AI Financial Chat ────────────────────────────────────────────────────
 
 export function buildChatSystem(userContext: string): string {
-  return `You are ArthVo, an AI-powered financial advisor for India's working class.`
+  return `You are ArthVo, an AI-powered financial advisor for India's working class. You are registered under SEBI as an Investment Adviser (RIA).
+
+Your personality:
+- Warm, clear, jargon-free — like a trusted CA friend
+- Specific to Indian financial laws: Income Tax Act, SEBI regulations, RBI guidelines
+- Always cite relevant sections (e.g. "under Section 80C of IT Act")
+- Give concrete, actionable advice — not vague generalities
+- Never recommend specific stocks by name for purchase
+- Always add appropriate SEBI disclaimer for investment advice
+
+User's financial context:
+${userContext}
+
+Response format:
+- Keep answers concise but complete (150-300 words ideal)
+- Use bullet points for lists
+- Use ₹ for amounts and Indian number system (lakhs, crores)
+- If you don't have enough information, ask a specific clarifying question
+- End investment advice responses with: "⚠️ This is general financial guidance. Please consult a SEBI-registered adviser before making investment decisions."
+- For tax questions, recommend consulting a CA for complex situations`
 }
 
 export async function* streamChatResponse(
@@ -195,18 +265,23 @@ export async function* streamChatResponse(
   userContext: string
 ): AsyncGenerator<string> {
   const stream = await client.messages.stream({
-    model: 'claude-opus-4-1-20250805',
+    model: 'claude-sonnet-4-6',
     max_tokens: 1000,
     system: buildChatSystem(userContext),
     messages,
   })
 
   for await (const chunk of stream) {
-    if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+    if (
+      chunk.type === 'content_block_delta' &&
+      chunk.delta.type === 'text_delta'
+    ) {
       yield chunk.delta.text
     }
   }
 }
+
+// ─── Investment Recommendation Generator ─────────────────────────────────
 
 export async function generateInvestmentPlan(
   monthlyInvestable: number,
@@ -215,10 +290,44 @@ export async function generateInvestmentPlan(
   goals: string[],
   riskProfile: 'conservative' | 'moderate' | 'aggressive'
 ): Promise<string> {
-  const prompt = `Generate investment plan`
+  const prompt = `Generate a personalised investment plan for an Indian working professional:
+
+Monthly investable amount: ₹${monthlyInvestable.toLocaleString('en-IN')}
+Annual income: ₹${annualIncome.toLocaleString('en-IN')}
+Age: ${age}
+Goals: ${goals.join(', ')}
+Risk profile: ${riskProfile}
+
+Return ONLY valid JSON:
+{
+  "recommendations": [
+    {
+      "product": "string",
+      "category": "string",
+      "allocationPercent": number,
+      "monthlyAmount": number,
+      "rationale": "string (1 sentence)",
+      "expectedReturn": "string (e.g. '12-15% CAGR')",
+      "riskLevel": "low|medium|high",
+      "taxBenefit": "string or null"
+    }
+  ],
+  "financialHealthScore": number (0-100),
+  "healthBreakdown": {
+    "savingsRate": number (0-100),
+    "emergencyFund": number (0-100),
+    "insuranceCoverage": number (0-100),
+    "debtRatio": number (0-100),
+    "investmentDiversity": number (0-100)
+  },
+  "topInsight": "string (most important advice in 2 sentences)"
+}
+
+Prioritise: emergency fund first, then tax-saving instruments (ELSS, NPS), then growth investments.
+Use only SEBI-regulated Indian products. No crypto.`
 
   const response = await client.messages.create({
-    model: 'claude-opus-4-1-20250805',
+    model: 'claude-sonnet-4-6',
     max_tokens: 1500,
     messages: [{ role: 'user', content: prompt }],
   })

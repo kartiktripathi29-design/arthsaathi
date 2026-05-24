@@ -1,0 +1,28 @@
+    ALTER TABLE "User"             ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE "Account"          ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE "Statement"        ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE "Transaction"      ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE "TransactionTag"   ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE "Classification"   ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE "PersonTag"        ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE "Entity"           ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE "ActivityEvent"    ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE "SalarySlip"       ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE "UserProfile"      ENABLE ROW LEVEL SECURITY;
+
+    CREATE POLICY user_select_own ON "User" FOR SELECT TO authenticated USING (id = (select auth.uid())::text);
+    CREATE POLICY user_update_own ON "User" FOR UPDATE TO authenticated USING (id = (select auth.uid())::text);
+    CREATE POLICY account_owner ON "Account" FOR ALL TO authenticated USING ("userId" = (select auth.uid())::text) WITH CHECK ("userId" = (select auth.uid())::text);
+    CREATE POLICY statement_owner ON "Statement" FOR ALL TO authenticated USING ("userId" = (select auth.uid())::text) WITH CHECK ("userId" = (select auth.uid())::text);
+    CREATE POLICY transaction_owner ON "Transaction" FOR ALL TO authenticated USING ("userId" = (select auth.uid())::text) WITH CHECK ("userId" = (select auth.uid())::text);
+    CREATE POLICY tag_owner ON "TransactionTag" FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM "Transaction" t WHERE t.id = "TransactionTag"."transactionId" AND t."userId" = (select auth.uid())::text)) WITH CHECK (EXISTS (SELECT 1 FROM "Transaction" t WHERE t.id = "TransactionTag"."transactionId" AND t."userId" = (select auth.uid())::text));
+    CREATE POLICY classification_owner ON "Classification" FOR ALL TO authenticated USING ("userId" = (select auth.uid())::text) WITH CHECK ("userId" = (select auth.uid())::text);
+    CREATE POLICY persontag_owner ON "PersonTag" FOR ALL TO authenticated USING ("userId" = (select auth.uid())::text) WITH CHECK ("userId" = (select auth.uid())::text);
+    CREATE POLICY entity_read_all ON "Entity" FOR SELECT TO authenticated USING (true);
+    CREATE POLICY activity_owner ON "ActivityEvent" FOR ALL TO authenticated USING ("userId" = (select auth.uid())::text) WITH CHECK ("userId" = (select auth.uid())::text);
+    CREATE POLICY salary_owner ON "SalarySlip" FOR ALL TO authenticated USING ("userId" = (select auth.uid())::text) WITH CHECK ("userId" = (select auth.uid())::text);
+    CREATE POLICY profile_owner ON "UserProfile" FOR ALL TO authenticated USING ("userId" = (select auth.uid())::text) WITH CHECK ("userId" = (select auth.uid())::text);
+
+    CREATE POLICY "bank_statements_owner_select" ON storage.objects FOR SELECT TO authenticated USING (bucket_id = 'bank-statements' AND (storage.foldername(name))[1] = (select auth.uid())::text);
+    CREATE POLICY "bank_statements_owner_insert" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'bank-statements' AND (storage.foldername(name))[1] = (select auth.uid())::text);
+    CREATE POLICY "bank_statements_owner_delete" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'bank-statements' AND (storage.foldername(name))[1] = (select auth.uid())::text);

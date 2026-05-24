@@ -3,13 +3,32 @@ import { useState } from 'react'
 
 const C = { bg: '#FDFAF6', card: '#fff', border: '#E4DDD1', fg: '#1C2B22', muted: '#6B7770', primary: '#3A4B41', accent: '#E6CFA7' }
 
+interface ParsedComponent {
+  label: string
+  amount: number
+  type: 'earning' | 'deduction' | 'computed' | string
+}
+
+interface ParsedSlipForPreview {
+  employeeName?: string
+  employerName?: string
+  grossSalary?: number
+  netSalary?: number
+  totalDeductions?: number
+  components?: ParsedComponent[]
+}
+
 interface FYSelectorProps {
   month: string
   year: string
   onSelect: (fy: string) => void
+  parsed?: ParsedSlipForPreview | null
 }
 
-export default function FYSelector({ month, year, onSelect }: FYSelectorProps) {
+const fmt = (n: number) =>
+  n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`
+
+export default function FYSelector({ month, year, onSelect, parsed }: FYSelectorProps) {
   const [selected, setSelected] = useState<string | null>(null)
 
   // Parse month number from month name
@@ -56,9 +75,61 @@ export default function FYSelector({ month, year, onSelect }: FYSelectorProps) {
         <h3 style={{ fontSize: 20, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>
           Select Financial Year
         </h3>
-        <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>
+        <p style={{ fontSize: 13, color: C.muted, margin: '0 0 20px' }}>
           This slip is for <strong>{month} {year}</strong>. Which FY should we use for tax calculations?
         </p>
+
+        {parsed && ((parsed.grossSalary || 0) > 0 || (parsed.netSalary || 0) > 0) && (() => {
+          const earnings = (parsed.components || []).filter(c => c.type === 'earning')
+          const deductions = (parsed.components || []).filter(c => c.type === 'deduction')
+          const gross = parsed.grossSalary || earnings.reduce((s, c) => s + (c.amount || 0), 0)
+          const totalDed = parsed.totalDeductions ?? deductions.reduce((s, c) => s + (c.amount || 0), 0)
+          const net = parsed.netSalary || (gross - totalDed)
+          return (
+            <div style={{ marginBottom: 20, padding: 14, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+                <p style={{ fontSize: 11, fontWeight: 600, color: C.muted, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Parsed slip · breakdown</p>
+                {parsed.employerName ? <span style={{ fontSize: 11, color: C.muted }}>{parsed.employerName}</span> : null}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                <div>
+                  <p style={{ fontSize: 10, fontWeight: 600, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase' }}>Earnings</p>
+                  <div style={{ background: '#FFFCF6', borderRadius: 4, border: `1px solid ${C.border}` }}>
+                    {(earnings.length > 0 ? earnings : [{ label: 'Gross', amount: gross } as ParsedComponent]).map((e, i, arr) => (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 8px', borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : 'none', fontSize: 10.5 }}>
+                        <span style={{ color: C.fg }}>{e.label}</span>
+                        <span style={{ fontWeight: 600, color: C.fg }}>{fmt(e.amount)}</span>
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 8px', fontSize: 10.5, fontWeight: 700, background: '#FFF8EC', borderTop: `1px solid ${C.border}` }}>
+                      <span style={{ color: C.fg }}>Gross</span>
+                      <span style={{ color: C.fg }}>{fmt(gross)}</span>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <p style={{ fontSize: 10, fontWeight: 600, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase' }}>Deductions</p>
+                  <div style={{ background: '#FBF0F0', borderRadius: 4, border: `1px solid ${C.border}` }}>
+                    {(deductions.length > 0 ? deductions : [{ label: 'Deductions', amount: totalDed } as ParsedComponent]).map((d, i, arr) => (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 8px', borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : 'none', fontSize: 10.5 }}>
+                        <span style={{ color: C.fg }}>{d.label}</span>
+                        <span style={{ fontWeight: 600, color: '#B94040' }}>−{fmt(d.amount)}</span>
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 8px', fontSize: 10.5, fontWeight: 700, background: '#F7E0E0', borderTop: `1px solid ${C.border}` }}>
+                      <span style={{ color: '#B94040' }}>Total</span>
+                      <span style={{ color: '#B94040' }}>−{fmt(totalDed)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', background: '#E8F2EC', borderRadius: 4 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: C.fg }}>Net Salary</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#2A7A4A' }}>{fmt(net)}</span>
+              </div>
+            </div>
+          )
+        })()}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
           {options.map(opt => (
