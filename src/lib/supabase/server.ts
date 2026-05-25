@@ -32,3 +32,8 @@ export async function getCurrentUser() {
   const { data: { user } } = await supabase.auth.getUser()
   return user
 }
+
+// Backward-compat alias — older callers (storage.ts, auth/callback/route.ts on
+// feature/db-persistence-clean) import { createClient } from this module.
+// Keeping both names available avoids build breaks when branches are merged.
+export const createClient = createSupabaseServerClient
