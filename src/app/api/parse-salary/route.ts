@@ -141,13 +141,13 @@ export async function POST(req: NextRequest) {
       errors: errors.length > 0 ? errors : undefined,
     })
 
-    // Fire-and-forget: persist salary slips to DB
+    // Fire-and-forget: persist salary slips to DB. DB failures must not affect the response.
     Promise.resolve().then(async () => {
       try {
         for (const slip of validSlips) {
-          const netPay = slip.netSalary || slip.netPay || 0
+          const netPay = slip.netSalary || (slip as any).netPay || 0
           if (netPay <= 0) continue
-          const period = slip.payPeriod || new Date().toISOString().slice(0, 7) + '-01'
+          const period = (slip as any).payPeriod || new Date().toISOString().slice(0, 7) + '-01'
           await prisma.salarySlip.upsert({
             where: {
               userId_periodMonth: {
@@ -171,9 +171,9 @@ export async function POST(req: NextRequest) {
         }
         await logActivity('anonymous', 'SALARY_PARSE_SUCCESS', null, {
           count: validSlips.length,
-          netPay: validSlips[0]?.netSalary || validSlips[0]?.netPay,
+          netPay: validSlips[0]?.netSalary || (validSlips[0] as any)?.netPay,
         })
-      } catch (e) {
+      } catch (e: any) {
         console.error("[parse-salary] DB WRITE ERROR:", e); console.error("[parse-salary] Stack:", e?.stack)
       }
     })

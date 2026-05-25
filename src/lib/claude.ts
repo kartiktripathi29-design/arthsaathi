@@ -18,6 +18,8 @@ Return ONLY valid JSON. No markdown, no explanation. Use this exact schema:
 {
   "employeeName": "string",
   "employerName": "string",
+  "pan": "string (10-char PAN like AAAPL1234C if visible, else empty string)",
+  "aadhaarLast4": "string (last 4 digits of Aadhaar if visible, else empty string)",
   "month": "string (e.g. March)",
   "year": "string (e.g. 2024)",
   "basicSalary": number,
@@ -56,7 +58,9 @@ Rules:
 - Common Indian allowances: Basic, HRA, DA, TA/Conveyance, LTA, Medical, Special Allowance, Night Shift, Statutory Bonus
 - Common deductions: PF/EPF, ESIC, Professional Tax (PT/P.Tax), TDS, Loans, Salary Advance
 - If gross doesn't match sum of components, trust the printed gross
-- For "Special Allowance" or "Other Allowances", capture the actual amount shown`
+- For "Special Allowance" or "Other Allowances", capture the actual amount shown
+- PAN: extract the 10-character Permanent Account Number EXACTLY as printed (uppercase). If absent, use empty string ""
+- Aadhaar: many slips show only the last 4 digits ("XXXX XXXX 1234"). Return just those 4 digits as a string. If absent, use empty string ""`
 
 export async function parseSalaryFromBase64(
   base64Data: string,

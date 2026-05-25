@@ -1,0 +1,1729 @@
+'use client'
+import { useState, useEffect, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
+import { seedIfMissing, verifyIdentity, setStoredIdentity } from '@/lib/identity'
+import {
+  detectAnomalies,
+  extractAnnualGross,
+  extractAnnualTDS,
+  type Anomaly,
+} from '@/lib/salary-analytics'
+
+const C = { fg:'#3A4B41', wheat:'#E6CFA7', wl:'#F5ECD8', wm:'#D4B98A', bg:'#FDFAF6', card:'#fff', border:'#E4DDD1', text:'#1C2B22', muted:'#7A8A7E', danger:'#B94040' }
+const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`
+
+const monthLabel = (mk: string) => {
+  const [y, m] = mk.split('-')
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  return `${months[parseInt(m) - 1]} ${y}`
+}
+
+const fyMonths = (fyStartYear: number) => {
+  const months: string[] = []
+  for (let m = 4; m <= 12; m++) months.push(`${fyStartYear}-${String(m).padStart(2, '0')}`)
+  for (let m = 1; m <= 3; m++) months.push(`${fyStartYear + 1}-${String(m).padStart(2, '0')}`)
+  return months
+}
+
+type Frequency = 'monthly' | 'quarterly' | 'half_yearly' | 'yearly' | 'one_time'
+
+interface Earning {
+  label: string
+  amount: number
+  // Cadence — drives whether/how this component projects forward.
+  // 'monthly' carries forward every month; the others don't repeat by adjacent month.
+  frequency?: Frequency
+  // Legacy field (binary recurring/one-time) kept for migration of older saved data.
+  flag?: 'recurring' | 'one_time'
+}
+
+const FREQUENCY_OPTIONS: { id: Frequency; label: string }[] = [
+  { id: 'monthly',     label: 'Monthly' },
+  { id: 'quarterly',   label: 'Quarterly' },
+  { id: 'half_yearly', label: 'Half-Yearly' },
+  { id: 'yearly',      label: 'Yearly' },
+  { id: 'one_time',    label: 'One-Time' },
+]
+
+// Heuristic for first-load defaulting: bonus/joining/etc → one_time; everything else → monthly.
+const ONE_TIME_PATTERN = /\b(bonus|joining|sign[- ]?on|incentive|arrear|reimbursement|gift|gratuity|leave\s*encash)/i
+function defaultFrequency(label: string): Frequency {
+  return ONE_TIME_PATTERN.test(label || '') ? 'one_time' : 'monthly'
+}
+
+// Read frequency with legacy-fallback (old `flag` field → new `frequency`).
+function resolveFrequency(e: Earning): Frequency {
+  if (e.frequency) return e.frequency
+  if (e.flag === 'recurring') return 'monthly'
+  if (e.flag === 'one_time') return 'one_time'
+  return defaultFrequency(e.label)
+}
+
+// Kept as alias so existing call sites compile; semantics: 'monthly' === recurring.
+function defaultFlag(label: string): 'recurring' | 'one_time' {
+  return defaultFrequency(label) === 'monthly' ? 'recurring' : 'one_time'
+}
+
+interface MonthData {
+  monthKey: string
+  gross: number
+  net: number
+  deductions: number
+  // 'actual'   = uploaded slip for this exact month
+  // 'inferred' = filled in from another month's slip per the confirmed pattern (v7 ◆ marker)
+  // 'edited'   = user manually changed values
+  // 'projected'= forecast (Forecast intent — gets the 🔮 dashed-border render)
+  source: 'actual' | 'inferred' | 'edited' | 'projected'
+  earnings?: Earning[]
+  deductionsList?: Earning[]
+}
+
+interface Employment {
+  id: string
+  name: string
+  fromMonth: string
+  toMonth: string
+  months: MonthData[]
+  baseGross?: number
+  baseNet?: number
+}
+
+// Intent (PRD v6) — two options only. Drives which questions the wizard asks.
+type Intent = 'validate' | 'forecast'
+
+// v7 §FY Inference Logic
+// A slip dated YYYY-MM belongs to FY starting Apr Y-1 (if MM ≤ 3) or Apr Y (otherwise).
+// Validate uses that FY directly. Forecast uses the next FY (year after the latest slip's FY).
+function slipFyStartYear(year: number, monthNum: number): number {
+  return monthNum >= 4 ? year : year - 1
+}
+function inferFyStartYear(slipDates: { year: number; monthNum: number }[], intent: Intent): number {
+  if (slipDates.length === 0) return new Date().getMonth() + 1 >= 4 ? new Date().getFullYear() : new Date().getFullYear() - 1
+  // Use the latest slip to anchor.
+  const latest = [...slipDates].sort((a, b) => (b.year - a.year) || (b.monthNum - a.monthNum))[0]
+  const slipFy = slipFyStartYear(latest.year, latest.monthNum)
+  return intent === 'forecast' ? slipFy + 1 : slipFy
+}
+
+// A confirmed slip-to-month-range mapping inferred from slip dates.
+// Each range covers monthFrom..monthTo (inclusive, YYYY-MM string compare) and
+// uses the named source slip as the salary template.
+interface PeriodMapping {
+  fromMonth: string
+  toMonth: string
+  sourceSlipId: string  // id of the slip whose components fill these months
+}
+
+interface ForecastChange {
+  kind: 'increment' | 'job_switch' | 'bonus_timing' | 'other'
+  monthApplies: string      // YYYY-MM — the month the change takes effect
+  retroactive: boolean
+  retroFromMonth: string    // YYYY-MM — only if retroactive
+  amountMode: 'pct' | 'abs' // which input the user is using
+  amountPct: number         // e.g. 10 for 10%
+  amountAbs: number         // absolute new monthly salary in ₹
+}
+
+interface WizardData {
+  intent: Intent | null
+  // v7 Step 3: confirmation of each parsed slip (yes / no→edit). Keyed by slip id.
+  slipConfirmations: Record<string, 'confirmed' | 'edit'>
+  // v7 Step 3: confirmed mapping of date-range → source slip.
+  periodMapping: PeriodMapping[]
+  // v7 Step 3 Q4: months with bonuses or one-time payments.
+  bonusMonths: string[]
+  // v7 Step 3 Q5: forecast-only — expected change(s). Single change for MVP.
+  forecastChange: ForecastChange | null
+}
+
+type WizardStep =
+  | 'intent-pick'
+  | 'confirm-periods'   // v7 Q1 — confirm each parsed slip's period
+  | 'forecast-changes'  // v8: Forecast intent — asked right after slip confirmation
+  | 'confirm-pattern'   // v7 Q2 — confirm the inferred date-range → slip mapping
+  | 'remap-periods'     // v7 Q3 — only when user says "No" at confirm-pattern
+  | 'bonuses'           // v7 Q4
+  | 'review'
+
+export default function SalaryPageCompleteFinal() {
+  const router = useRouter()
+  const [slips, setSlips] = useState<any[]>([])
+  const [fyStartYear, setFyStartYear] = useState(2025)
+  const [wizardStep, setWizardStep] = useState<WizardStep>('intent-pick')
+  const [employments, setEmployments] = useState<Employment[]>([])
+  const [expandedEmployment, setExpandedEmployment] = useState<string | null>(null)
+  const [previewMonth, setPreviewMonth] = useState<string | null>(null)
+  const [previewEmploymentId, setPreviewEmploymentId] = useState<string | null>(null)
+  const [editingMonth, setEditingMonth] = useState<string | null>(null)
+  const [editEmploymentId, setEditEmploymentId] = useState<string | null>(null)
+  const [editGross, setEditGross] = useState(0)
+  const [editNet, setEditNet] = useState(0)
+  const [loading, setLoading] = useState(true)
+
+  // Per-month upload state — one form per expanded employment.
+  const [monthUploadEmpId, setMonthUploadEmpId] = useState<string | null>(null)
+  const [monthUploadKey, setMonthUploadKey] = useState<string>('')
+  const [monthUploadFile, setMonthUploadFile] = useState<File | null>(null)
+  const [monthUploadBusy, setMonthUploadBusy] = useState(false)
+  const [monthUploadError, setMonthUploadError] = useState<string | null>(null)
+
+  // Manual-entry state — separate from upload, so user can type numbers directly.
+  const [manualOpenEmpId, setManualOpenEmpId] = useState<string | null>(null)
+  const [manualMonthKey, setManualMonthKey] = useState<string>('')
+  const [manualError, setManualError] = useState<string | null>(null)
+  const [manualEarnings, setManualEarnings] = useState<{ label: string; amount: string }[]>([
+    { label: 'Basic', amount: '' },
+    { label: 'HRA', amount: '' },
+  ])
+  const [manualDeductions, setManualDeductions] = useState<{ label: string; amount: string }[]>([
+    { label: 'PF', amount: '' },
+    { label: 'TDS', amount: '' },
+  ])
+
+  // Inline preview panel — collapsible under each employment's timeline.
+  const [previewOpenEmpId, setPreviewOpenEmpId] = useState<string | null>(null)
+
+  // Per-line override editor: which component (in which month/employment) is currently being edited inline.
+  const [overrideKey, setOverrideKey] = useState<{ empId: string; monthKey: string; kind: 'earning' | 'deduction'; index: number } | null>(null)
+  const [overrideValue, setOverrideValue] = useState<string>('')
+
+  // Memoized analytics — kept for cell anomaly badges and the summary box. No tax math here (per v6).
+  const annualGross = useMemo(() => extractAnnualGross(employments), [employments])
+  const annualTDS = useMemo(() => extractAnnualTDS(employments), [employments])
+  const anomaliesByEmp = useMemo(() => {
+    const map = new Map<string, Anomaly[]>()
+    for (const emp of employments) map.set(emp.id, detectAnomalies(emp))
+    return map
+  }, [employments])
+  const anomalyByMonth = useMemo(() => {
+    const map = new Map<string, Anomaly>()
+    for (const list of anomaliesByEmp.values()) for (const a of list) map.set(a.monthKey, a)
+    return map
+  }, [anomaliesByEmp])
+
+  const [wizard, setWizard] = useState<WizardData>({
+    intent: null,
+    slipConfirmations: {},
+    periodMapping: [],
+    bonusMonths: [],
+    forecastChange: null,
+  })
+
+  useEffect(() => {
+    const data = localStorage.getItem('av_salary_timeline')
+    if (data) {
+      try {
+        const parsed = JSON.parse(data)
+        const slipsArray = Array.isArray(parsed) ? parsed : []
+        // Dedupe by (year, month) — keep the LAST occurrence so newer uploads override older ones.
+        const seen = new Map<string, any>()
+        for (const s of slipsArray) {
+          const key = `${s?.year || ''}|${String(s?.month || '').toLowerCase()}`
+          if (key !== '|') seen.set(key, s)
+        }
+        const deduped = Array.from(seen.values())
+        // If we collapsed anything, write the clean version back so we don't repeat the dedupe forever.
+        if (deduped.length !== slipsArray.length) {
+          try { localStorage.setItem('av_salary_timeline', JSON.stringify(deduped)) } catch {}
+        }
+        setSlips(deduped)
+        detectFY(deduped)
+      } catch (e) {
+        console.error('Failed to load:', e)
+      }
+    }
+    setLoading(false)
+  }, [])
+
+  const monthToNum = (month: string): number => {
+    const m: Record<string, number> = {
+      January: 1, February: 2, March: 3, April: 4, May: 5, June: 6,
+      July: 7, August: 8, September: 9, October: 10, November: 11, December: 12,
+      Jan: 1, Feb: 2, Mar: 3, Apr: 4, Jun: 6,
+      Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12,
+    }
+    return m[month] || 1
+  }
+
+  const detectFY = (slipsArray: any[]) => {
+    if (slipsArray.length === 0) return
+    const slip = slipsArray[0]
+    const month = monthToNum(slip.month)
+    const year = parseInt(slip.year)
+    const fy = month >= 4 ? year : year - 1
+    setFyStartYear(fy)
+  }
+
+  // Attach a stable id + parsed date to each slip so the wizard can reference them.
+  const slipsWithMeta = useMemo(() => slips.map((s, i) => {
+    const monthNum = monthToNum(s.month)
+    const year = parseInt(s.year) || new Date().getFullYear()
+    const monthKey = `${year}-${String(monthNum).padStart(2, '0')}`
+    return {
+      raw: s,
+      id: s.id || `slip-${i}-${monthKey}`,
+      year, monthNum, monthKey,
+      fyStart: slipFyStartYear(year, monthNum),
+    }
+  }), [slips])
+
+  function nextMonthKey(mk: string): string {
+    const [y, m] = mk.split('-').map(Number)
+    return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
+  }
+
+  // v7 default mapping: for Validate, each slip covers from (previous slip month + 1) to its own month;
+  // the last slip extends through Mar. For Forecast, the latest slip covers the whole forecast FY.
+  const defaultPeriodMapping = (intent: Intent, fyStart: number): PeriodMapping[] => {
+    if (slipsWithMeta.length === 0) return []
+    const fyEnd = `${fyStart + 1}-03`
+    if (intent === 'forecast') {
+      const latest = [...slipsWithMeta].sort((a, b) => b.monthKey.localeCompare(a.monthKey))[0]
+      return [{ fromMonth: `${fyStart}-04`, toMonth: fyEnd, sourceSlipId: latest.id }]
+    }
+    // Validate: only slips whose FY matches the inferred FY.
+    const inFY = slipsWithMeta.filter(s => s.fyStart === fyStart).sort((a, b) => a.monthKey.localeCompare(b.monthKey))
+    if (inFY.length === 0) {
+      const latest = [...slipsWithMeta].sort((a, b) => b.monthKey.localeCompare(a.monthKey))[0]
+      return [{ fromMonth: `${fyStart}-04`, toMonth: fyEnd, sourceSlipId: latest.id }]
+    }
+    const mappings: PeriodMapping[] = []
+    let prev = `${fyStart}-04`
+    for (let i = 0; i < inFY.length; i++) {
+      const s = inFY[i]
+      const isLast = i === inFY.length - 1
+      const to = isLast ? fyEnd : s.monthKey
+      mappings.push({ fromMonth: prev, toMonth: to, sourceSlipId: s.id })
+      prev = nextMonthKey(s.monthKey)
+    }
+    return mappings
+  }
+
+  // v7 build: turn the confirmed period mapping into a 12-month timeline. Single employment.
+  const buildEmploymentsFromMapping = () => {
+    if (!wizard.intent || slipsWithMeta.length === 0) return
+    const dates = slipsWithMeta.map(m => ({ year: m.year, monthNum: m.monthNum }))
+    const fyStart = inferFyStartYear(dates, wizard.intent)
+    setFyStartYear(fyStart)
+
+    const mapping = wizard.periodMapping.length > 0 ? wizard.periodMapping : defaultPeriodMapping(wizard.intent, fyStart)
+    const allFY = fyMonths(fyStart)
+    const slipById = new Map(slipsWithMeta.map(s => [s.id, s]))
+
+    const months: MonthData[] = allFY.map(mk => {
+      const range = mapping.find(r => mk >= r.fromMonth && mk <= r.toMonth)
+      const src = range ? slipById.get(range.sourceSlipId) : undefined
+      if (!src) {
+        return { monthKey: mk, gross: 0, net: 0, deductions: 0, source: 'projected', earnings: [], deductionsList: [] }
+      }
+      const slip = src.raw
+      const gross = slip.grossSalary || slip.basicSalary || 0
+      const net = slip.netSalary || slip.basicSalary || 0
+      const earnings = (slip.components || []).filter((c: any) => c.type === 'earning')
+      const deductionsList = (slip.components || []).filter((c: any) => c.type === 'deduction')
+      // Forecast: everything in the future FY is projected (🔮). Validate: 'actual' iff exact match, else 'inferred' (◆).
+      const source: MonthData['source'] = wizard.intent === 'forecast'
+        ? 'projected'
+        : (mk === src.monthKey ? 'actual' : 'inferred')
+      return { monthKey: mk, gross, net, deductions: gross - net, source, earnings, deductionsList }
+    })
+
+    // Forecast: apply the expected change to months at/after the apply month (and from retroFromMonth if retroactive).
+    if (wizard.intent === 'forecast' && wizard.forecastChange) {
+      const fc = wizard.forecastChange
+      const factor = fc.amountPct > 0 ? 1 + fc.amountPct / 100 : 1
+      const newAbs = fc.amountAbs > 0 ? fc.amountAbs : 0
+      const apply = (m: MonthData): MonthData => {
+        const newGross = newAbs > 0 ? newAbs : Math.round(m.gross * factor)
+        const ratio = m.gross > 0 ? newGross / m.gross : 1
+        return {
+          ...m,
+          gross: newGross,
+          net: Math.round(m.net * ratio),
+          deductions: Math.round((m.deductions || 0) * ratio),
+          earnings: (m.earnings || []).map(e => ({ ...e, amount: Math.round((e.amount || 0) * ratio) })),
+        }
+      }
+      const fromKey = fc.retroactive && fc.retroFromMonth ? fc.retroFromMonth : fc.monthApplies
+      for (let i = 0; i < months.length; i++) {
+        if (months[i].monthKey >= fromKey) months[i] = apply(months[i])
+      }
+    }
+
+    const empName = (slipsWithMeta[0]?.raw?.employerName) || 'Employment'
+    setEmployments([{
+      id: 'emp-v7',
+      name: empName,
+      fromMonth: `${fyStart}-04`,
+      toMonth: `${fyStart + 1}-03`,
+      months,
+      baseGross: months[0]?.gross || 0,
+      baseNet: months[0]?.net || 0,
+    }])
+  }
+
+
+  const updateMonth = (employmentId: string, monthKey: string, gross: number, net: number) => {
+    setEmployments(prev =>
+      prev.map(emp => {
+        if (emp.id === employmentId) {
+          return {
+            ...emp,
+            months: emp.months.map(m =>
+              m.monthKey === monthKey
+                ? { ...m, gross, net, deductions: gross - net, source: 'edited' as const }
+                : m
+            ),
+          }
+        }
+        return emp
+      })
+    )
+    setEditingMonth(null)
+  }
+
+  const getMonthData = (employmentId: string, monthKey: string): MonthData | undefined => {
+    return employments.find(e => e.id === employmentId)?.months.find(m => m.monthKey === monthKey)
+  }
+
+  // Re-project all 'projected' months in an employment based on its latest actual/edited month.
+  // Honors recurring/one-time flags so one-time components don't carry forward.
+  const reprojectEmployment = (emps: Employment[], employmentId: string): Employment[] => {
+    return emps.map(emp => {
+      if (emp.id !== employmentId) return emp
+      // Find the latest non-projected month within the employment's range.
+      const baseMonth = [...emp.months]
+        .filter(m => m.monthKey >= emp.fromMonth && m.monthKey <= emp.toMonth)
+        .filter(m => m.source === 'actual' || m.source === 'edited')
+        .sort((a, b) => b.monthKey.localeCompare(a.monthKey))[0]
+      if (!baseMonth) return emp
+
+      const flaggedEarnings = (baseMonth.earnings || []).map(e => ({
+        ...e,
+        frequency: resolveFrequency(e),
+      }))
+      const recurringEarnings = flaggedEarnings.filter(e => e.frequency === 'monthly')
+      const recurringGross = recurringEarnings.reduce((s, e) => s + (e.amount || 0), 0)
+      const totalDed = (baseMonth.deductionsList || []).reduce((s, d) => s + (d.amount || 0), 0)
+      const recurringNet = recurringGross - totalDed
+
+      return {
+        ...emp,
+        months: emp.months.map(m => {
+          if (m.source !== 'projected') return m
+          if (m.monthKey < emp.fromMonth || m.monthKey > emp.toMonth) return m
+          return {
+            ...m,
+            gross: recurringGross,
+            net: recurringNet,
+            deductions: totalDed,
+            earnings: recurringEarnings,
+            deductionsList: baseMonth.deductionsList || [],
+          }
+        }),
+      }
+    })
+  }
+
+  // Set the frequency (Monthly/Quarterly/Half-Yearly/Yearly/One-Time) for a single earning, then re-project.
+  const setEarningFrequency = (employmentId: string, monthKey: string, index: number, frequency: Frequency) => {
+    setEmployments(prev => {
+      const updated = prev.map(emp => {
+        if (emp.id !== employmentId) return emp
+        return {
+          ...emp,
+          months: emp.months.map(m => {
+            if (m.monthKey !== monthKey) return m
+            const earnings = (m.earnings || []).map((e, i) => {
+              if (i !== index) return e
+              const next: Earning = { ...e, frequency }
+              return next
+            })
+            return { ...m, earnings, source: 'edited' as const }
+          }),
+        }
+      })
+      return reprojectEmployment(updated, employmentId)
+    })
+  }
+
+  // Save an inline override for a single earning or deduction component within a month.
+  // Recomputes the month's gross/net, then re-projects forward months in the same employment.
+  const saveOverride = () => {
+    if (!overrideKey) return
+    const amount = Math.round(parseFloat(overrideValue) || 0)
+    if (amount < 0) return
+    const empId = overrideKey.empId
+    setEmployments(prev => {
+      const updated = prev.map(emp => {
+        if (emp.id !== empId) return emp
+        return {
+          ...emp,
+          months: emp.months.map(m => {
+            if (m.monthKey !== overrideKey.monthKey) return m
+            const earnings = (m.earnings || []).slice()
+            const deductionsList = (m.deductionsList || []).slice()
+            if (overrideKey.kind === 'earning') {
+              if (earnings[overrideKey.index]) earnings[overrideKey.index] = { ...earnings[overrideKey.index], amount }
+            } else {
+              if (deductionsList[overrideKey.index]) deductionsList[overrideKey.index] = { ...deductionsList[overrideKey.index], amount }
+            }
+            const gross = earnings.reduce((s, e) => s + e.amount, 0) || m.gross
+            const totalDed = deductionsList.reduce((s, d) => s + d.amount, 0)
+            const net = gross - totalDed
+            return { ...m, earnings, deductionsList, gross, deductions: totalDed, net, source: 'edited' as const }
+          }),
+        }
+      })
+      return reprojectEmployment(updated, empId)
+    })
+    setOverrideKey(null)
+    setOverrideValue('')
+  }
+
+  // Open the manual entry form pre-filled with the month's current breakdown so the user can edit it.
+  const startEditBreakdown = (employmentId: string, monthKey: string) => {
+    const md = getMonthData(employmentId, monthKey)
+    if (!md) return
+    const earningsRows = (md.earnings && md.earnings.length > 0)
+      ? md.earnings.map(e => ({ label: e.label, amount: String(e.amount) }))
+      : [{ label: 'Gross Salary', amount: String(md.gross) }]
+    const dedRows = (md.deductionsList && md.deductionsList.length > 0)
+      ? md.deductionsList.map(d => ({ label: d.label, amount: String(d.amount) }))
+      : [{ label: 'Deductions', amount: String(md.deductions) }]
+    setManualEarnings(earningsRows)
+    setManualDeductions(dedRows)
+    setManualMonthKey(monthKey)
+    setManualOpenEmpId(employmentId)
+    setExpandedEmployment(employmentId)
+    setPreviewMonth(null)
+    setPreviewEmploymentId(null)
+    setManualError(null)
+  }
+
+  // Manually enter a salary breakdown for a month — no slip needed.
+  // Gross = sum of earnings, Net = gross - sum of deductions. Persisted as 'edited'.
+  const submitManualEntry = (employmentId: string) => {
+    setManualError(null)
+    if (!manualMonthKey) { setManualError('Pick a month'); return }
+
+    const earnings = manualEarnings
+      .map(r => ({ label: r.label.trim(), amount: Math.round(parseFloat(r.amount) || 0) }))
+      .filter(r => r.label && r.amount > 0)
+    const deductionsList = manualDeductions
+      .map(r => ({ label: r.label.trim(), amount: Math.round(parseFloat(r.amount) || 0) }))
+      .filter(r => r.label && r.amount > 0)
+
+    if (earnings.length === 0) { setManualError('Add at least one earning'); return }
+
+    const gross = earnings.reduce((s, e) => s + e.amount, 0)
+    const totalDed = deductionsList.reduce((s, d) => s + d.amount, 0)
+    if (totalDed > gross) { setManualError('Deductions exceed gross — check the amounts'); return }
+    const net = gross - totalDed
+
+    const emp = employments.find(e => e.id === employmentId)
+    if (!emp) return
+    const existing = emp.months.find(m => m.monthKey === manualMonthKey)
+    if (existing && (existing.source === 'actual' || existing.source === 'edited')) {
+      if (!window.confirm(`A slip already exists for ${monthLabel(manualMonthKey)}. Replace it?`)) return
+    }
+
+    setEmployments(prev => prev.map(e => {
+      if (e.id !== employmentId) return e
+      return {
+        ...e,
+        months: e.months.map(m => m.monthKey === manualMonthKey
+          ? { ...m, gross, net, deductions: totalDed, source: 'edited' as const, earnings, deductionsList }
+          : m),
+      }
+    }))
+
+    const savedMonth = manualMonthKey
+    setManualMonthKey('')
+    setManualEarnings([{ label: 'Basic', amount: '' }, { label: 'HRA', amount: '' }])
+    setManualDeductions([{ label: 'PF', amount: '' }, { label: 'TDS', amount: '' }])
+    setManualOpenEmpId(null)
+
+    // Auto-open the breakdown for the just-saved month.
+    setPreviewEmploymentId(employmentId)
+    setPreviewMonth(savedMonth)
+    setPreviewOpenEmpId(employmentId)
+  }
+
+  // Parse a slip file and apply it to a specific month within an employment.
+  // Confirms before overwriting an existing 'actual' or 'edited' month, and
+  // catches mismatches where the slip's printed month/year doesn't match the
+  // selected timeline cell — offers to re-target to the slip's actual month.
+  const uploadMonthlySlip = async (employmentId: string, selectedMonthKey: string, file: File) => {
+    setMonthUploadError(null)
+    const emp = employments.find(e => e.id === employmentId)
+    if (!emp) return
+
+    setMonthUploadBusy(true)
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(((reader.result as string) || '').split(',')[1])
+        reader.onerror = () => reject(new Error('Could not read file'))
+        reader.readAsDataURL(file)
+      })
+      const res = await fetch('/api/parse-salary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base64Data: base64, mediaType: file.type }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json?.error || 'Parse failed')
+      const parsed = Array.isArray(json?.data) ? json.data[0] : null
+      if (!parsed) throw new Error('No slip data returned')
+
+      // Identity check: warn if this slip doesn't look like the same person who uploaded earlier.
+      const seeded = seedIfMissing(parsed)
+      if (!seeded) {
+        const check = verifyIdentity(parsed)
+        if (!check.ok) {
+          const proceed = window.confirm(
+            `This slip may belong to someone else:\n\n` +
+            check.mismatches.map(m => `• ${m}`).join('\n') +
+            `\n\nUpload only your own salary slips. Continue anyway?`
+          )
+          if (!proceed) {
+            setMonthUploadError('Upload cancelled — identity mismatch.')
+            return
+          }
+        } else if (check.enriched) {
+          setStoredIdentity(check.enriched)
+        }
+      }
+
+      // Detect the slip's printed month/year and compare with the user's selection.
+      const parsedMonthNum = parsed.month ? monthToNum(parsed.month) : 0
+      const parsedYearNum = parsed.year ? parseInt(String(parsed.year)) : 0
+      const parsedKey = parsedMonthNum && parsedYearNum
+        ? `${parsedYearNum}-${String(parsedMonthNum).padStart(2, '0')}`
+        : null
+
+      let monthKey = selectedMonthKey
+      if (parsedKey && parsedKey !== selectedMonthKey) {
+        const useParsed = window.confirm(
+          `This slip looks like it's for ${monthLabel(parsedKey)}, ` +
+          `but you selected ${monthLabel(selectedMonthKey)}.\n\n` +
+          `Click OK to attach it to ${monthLabel(parsedKey)} instead, ` +
+          `or Cancel to abort the upload.`
+        )
+        if (!useParsed) {
+          setMonthUploadError(`Upload cancelled — slip month did not match selection.`)
+          return
+        }
+        if (parsedKey < emp.fromMonth || parsedKey > emp.toMonth) {
+          setMonthUploadError(
+            `Slip is for ${monthLabel(parsedKey)}, which is outside this employment's range ` +
+            `(${monthLabel(emp.fromMonth)} → ${monthLabel(emp.toMonth)}). ` +
+            `Use the correct employment, or pick a month inside this range.`
+          )
+          return
+        }
+        monthKey = parsedKey
+      }
+
+      // Now confirm overwrite of an actual/edited month (using the resolved monthKey).
+      const existing = emp.months.find(m => m.monthKey === monthKey)
+      if (existing && (existing.source === 'actual' || existing.source === 'edited')) {
+        const ok = window.confirm(`A slip already exists for ${monthLabel(monthKey)}. Replace it?`)
+        if (!ok) return
+      }
+
+      const gross = parsed.grossSalary || parsed.basicSalary || 0
+      const net = parsed.netSalary || parsed.basicSalary || 0
+      const earnings = (parsed.components || []).filter((c: any) => c.type === 'earning')
+      const deductionsList = (parsed.components || []).filter((c: any) => c.type === 'deduction')
+
+      // Frequency conflict check (v6 §5.4): if an incoming earning matches a label
+      // already marked one-time in another month of this employment, prompt the user.
+      const conflicts: { label: string; otherMonth: string }[] = []
+      for (const ne of earnings) {
+        if (!ne.label) continue
+        for (const m of emp.months) {
+          if (m.monthKey === monthKey) continue
+          for (const oe of m.earnings || []) {
+            if (oe.label?.toLowerCase() === ne.label.toLowerCase() && resolveFrequency(oe) === 'one_time') {
+              conflicts.push({ label: ne.label, otherMonth: m.monthKey })
+            }
+          }
+        }
+      }
+      if (conflicts.length > 0) {
+        const summary = conflicts.slice(0, 3).map(c => `• "${c.label}" was marked One-Time in ${monthLabel(c.otherMonth)}`).join('\n')
+        const keepBoth = window.confirm(
+          `Frequency conflict:\n\n${summary}\n\n` +
+          `OK = count both months (will un-mark as one-time).\n` +
+          `Cancel = ignore the new occurrence, keep the prior one-time tag.`
+        )
+        if (!keepBoth) {
+          // Drop the conflicting earnings from this slip's incoming list.
+          const drop = new Set(conflicts.map(c => c.label.toLowerCase()))
+          for (let i = earnings.length - 1; i >= 0; i--) {
+            if (drop.has(earnings[i].label?.toLowerCase())) earnings.splice(i, 1)
+          }
+        } else {
+          // Promote prior one-time entries with the same label to monthly.
+          const labels = new Set(conflicts.map(c => c.label.toLowerCase()))
+          setEmployments(prev => prev.map(e2 => e2.id !== employmentId ? e2 : {
+            ...e2,
+            months: e2.months.map(m => ({
+              ...m,
+              earnings: (m.earnings || []).map(oe =>
+                labels.has(oe.label?.toLowerCase() || '') ? { ...oe, frequency: 'monthly' as Frequency } : oe
+              ),
+            })),
+          }))
+        }
+      }
+
+      setEmployments(prev => prev.map(e => {
+        if (e.id !== employmentId) return e
+        return {
+          ...e,
+          months: e.months.map(m => m.monthKey === monthKey
+            ? { ...m, gross, net, deductions: gross - net, source: 'actual' as const, earnings, deductionsList }
+            : m),
+        }
+      }))
+
+      // Persist into the slips list with the slip's true month/year (resolved monthKey).
+      const [y, mm] = monthKey.split('-')
+      const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+      const slipShape = { ...parsed, month: monthNames[parseInt(mm) - 1], year: y }
+      setSlips(prev => {
+        const filtered = prev.filter(s => `${s.year}-${String(monthToNum(s.month)).padStart(2, '0')}` !== monthKey)
+        const next = [...filtered, slipShape]
+        try { localStorage.setItem('av_salary_timeline', JSON.stringify(next)) } catch {}
+        return next
+      })
+
+      setMonthUploadFile(null)
+      setMonthUploadKey('')
+      setMonthUploadEmpId(null)
+
+      // Auto-open the breakdown for the just-uploaded month so user can verify.
+      setPreviewEmploymentId(employmentId)
+      setPreviewMonth(monthKey)
+      setPreviewOpenEmpId(employmentId)
+    } catch (e: any) {
+      setMonthUploadError(e?.message || 'Upload failed')
+    } finally {
+      setMonthUploadBusy(false)
+    }
+  }
+
+  // annualGross is memoized at the top via extractAnnualGross(employments).
+  const annualNet = useMemo(
+    () => employments.reduce((total, emp) => total + emp.months.reduce((sum, m) => sum + m.net, 0), 0),
+    [employments],
+  )
+
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: C.muted }}>Loading...</div>
+
+  if (slips.length === 0) {
+    return (
+      <div style={{ maxWidth: 900, margin: '0 auto', padding: 20 }}>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, textAlign: 'center' }}>
+          <p style={{ fontSize: 14, color: C.muted, margin: '0 0 16px' }}>No salary data uploaded yet</p>
+          <button onClick={() => router.push('/dashboard/profile/documents')} style={{ padding: '10px 20px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Upload Salary Slip</button>
+        </div>
+      </div>
+    )
+  }
+
+  // WIZARD STEPS
+  if (wizardStep !== 'review') {
+    return (
+      <div style={{ maxWidth: 700, margin: '0 auto', padding: '20px 0' }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Salary Setup</h1>
+        <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>FY {fyStartYear}-{fyStartYear + 1}</p>
+
+        {wizardStep === 'intent-pick' && (() => {
+          const slipCount = slips.length
+          const intents: { id: Intent; title: string; desc: string }[] = [
+            { id: 'validate', title: 'Validate — I want to understand my full-year tax liability', desc: `I uploaded ${slipCount} slip(s). Show me how much tax I paid/owe given my complete salary + other income + deductions.` },
+            { id: 'forecast', title: 'Forecast — I expect salary changes (increment / job switch)', desc: 'Show me the impact if my salary changes (increment, bonus timing, new employer).' },
+          ]
+          const pickIntent = (id: Intent) => {
+            setWizard(prev => ({ ...prev, intent: id, periodMapping: [], slipConfirmations: {} }))
+            setWizardStep('confirm-periods')
+          }
+          return (
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 8px' }}>What do you want to do?</h2>
+              <p style={{ fontSize: 13, color: C.muted, margin: '0 0 20px' }}>Pick the path that matches your situation. We'll only ask the questions relevant to it.</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {intents.map(it => (
+                  <button
+                    key={it.id}
+                    onClick={() => pickIntent(it.id)}
+                    style={{ textAlign: 'left', padding: 16, background: wizard.intent === it.id ? C.wl : '#fff', border: `1px solid ${wizard.intent === it.id ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit' }}
+                  >
+                    <p style={{ fontSize: 14, fontWeight: 600, color: C.text, margin: '0 0 6px' }}>{it.title}</p>
+                    <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>{it.desc}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* ── v7 confirm-periods: confirm each parsed slip ── */}
+        {wizardStep === 'confirm-periods' && (() => {
+          const inferred = wizard.intent ? inferFyStartYear(slipsWithMeta.map(m => ({ year: m.year, monthNum: m.monthNum })), wizard.intent) : null
+          return (
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 6px' }}>I found {slipsWithMeta.length} salary slip{slipsWithMeta.length !== 1 ? 's' : ''}. Let me confirm the periods.</h2>
+              {inferred !== null && (
+                <p style={{ fontSize: 13, color: C.muted, margin: '0 0 16px' }}>
+                  Building timeline for <strong>FY {inferred}-{inferred + 1}</strong> (Apr {inferred} – Mar {inferred + 1}){wizard.intent === 'forecast' ? ' — FORECAST' : ''}.
+                </p>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                {slipsWithMeta.map(s => {
+                  const status = wizard.slipConfirmations[s.id]
+                  return (
+                    <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', border: `1px solid ${C.border}`, borderRadius: 6, background: C.bg }}>
+                      <div>
+                        <p style={{ fontSize: 13, fontWeight: 600, color: C.text, margin: 0 }}>{monthLabel(s.monthKey)} · {s.raw.employerName || 'Employer'}</p>
+                        <p style={{ fontSize: 11, color: C.muted, margin: '2px 0 0' }}>Gross {fmt(s.raw.grossSalary || s.raw.basicSalary || 0)} · Net {fmt(s.raw.netSalary || 0)}</p>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button onClick={() => setWizard(prev => ({ ...prev, slipConfirmations: { ...prev.slipConfirmations, [s.id]: 'confirmed' } }))} style={{ padding: '6px 12px', background: status === 'confirmed' ? '#2A7A4A' : '#fff', color: status === 'confirmed' ? '#fff' : C.fg, border: `1px solid ${status === 'confirmed' ? '#2A7A4A' : C.border}`, borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>✓ Yes</button>
+                        <button onClick={() => setWizard(prev => ({ ...prev, slipConfirmations: { ...prev.slipConfirmations, [s.id]: 'edit' } }))} style={{ padding: '6px 12px', background: status === 'edit' ? '#E07B3A' : '#fff', color: status === 'edit' ? '#fff' : C.fg, border: `1px solid ${status === 'edit' ? '#E07B3A' : C.border}`, borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Edit</button>
+                        <button
+                          onClick={() => {
+                            if (!window.confirm(`Delete ${monthLabel(s.monthKey)} salary slip? This can't be undone.`)) return
+                            const nextSlips = slips.filter((raw: any, idx: number) => {
+                              const k = `${raw?.year || ''}|${String(raw?.month || '').toLowerCase()}`
+                              const sk = `${s.year}|${String(s.raw.month || '').toLowerCase()}`
+                              return !(k === sk && (raw.id === s.raw.id || idx === slips.indexOf(s.raw)))
+                            })
+                            setSlips(nextSlips)
+                            try { localStorage.setItem('av_salary_timeline', JSON.stringify(nextSlips)) } catch {}
+                            setWizard(prev => {
+                              const { [s.id]: _, ...rest } = prev.slipConfirmations
+                              return {
+                                ...prev,
+                                slipConfirmations: rest,
+                                periodMapping: prev.periodMapping.filter(r => r.sourceSlipId !== s.id),
+                              }
+                            })
+                          }}
+                          title="Delete this slip"
+                          style={{ padding: '6px 10px', background: '#fff', color: C.danger, border: `1px solid ${C.danger}`, borderRadius: 4, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', lineHeight: 1 }}
+                        >×</button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              {slipsWithMeta.some(s => wizard.slipConfirmations[s.id] === 'edit') && (
+                <p style={{ fontSize: 11, color: '#A14B12', margin: '0 0 12px' }}>Slips marked "Edit" can be corrected on the timeline after build (click the cell → Edit breakdown).</p>
+              )}
+              {slipsWithMeta.length > 0 && (
+                <div style={{ marginBottom: 12, textAlign: 'right' }}>
+                  <button
+                    onClick={() => {
+                      if (!window.confirm(`Delete all ${slipsWithMeta.length} uploaded slip(s)? This will reset the timeline.`)) return
+                      setSlips([])
+                      setEmployments([])
+                      try {
+                        localStorage.removeItem('av_salary_timeline')
+                        localStorage.removeItem('av_selected_fy')
+                      } catch {}
+                      setWizard(prev => ({ ...prev, slipConfirmations: {}, periodMapping: [], bonusMonths: [], forecastChange: null }))
+                      router.push('/dashboard/profile/documents')
+                    }}
+                    style={{ background: 'transparent', border: 'none', color: C.danger, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', padding: 0, textDecoration: 'underline' }}
+                  >Clear all uploaded slips</button>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button onClick={() => setWizardStep('intent-pick')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
+                <button
+                  onClick={() => {
+                    // Seed the default mapping; Forecast intent asks for the expected change next, then pattern confirmation.
+                    const mapping = defaultPeriodMapping(wizard.intent!, inferred ?? 0)
+                    setWizard(prev => ({ ...prev, periodMapping: mapping }))
+                    setWizardStep(wizard.intent === 'forecast' ? 'forecast-changes' : 'confirm-pattern')
+                  }}
+                  style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                >Next →</button>
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* ── v8 forecast-changes: Forecast intent only, right after slip confirmation ── */}
+        {wizardStep === 'forecast-changes' && (() => {
+          const inferred = wizard.intent ? inferFyStartYear(slipsWithMeta.map(m => ({ year: m.year, monthNum: m.monthNum })), wizard.intent) : 0
+          const allFY = fyMonths(inferred)
+          const fc = wizard.forecastChange || { kind: 'increment' as const, monthApplies: '', retroactive: false, retroFromMonth: '', amountMode: 'pct' as const, amountPct: 0, amountAbs: 0 }
+          const update = (patch: Partial<ForecastChange>) => setWizard(prev => ({ ...prev, forecastChange: { ...(prev.forecastChange ?? fc), ...patch } }))
+          const skip = () => { setWizard(prev => ({ ...prev, forecastChange: null })); setWizardStep('confirm-pattern') }
+          return (
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 8px' }}>What changes are you expecting?</h2>
+              <p style={{ fontSize: 13, color: C.muted, margin: '0 0 16px' }}>Layer an expected change on top of the baseline. Skip if no change is expected.</p>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 12 }}>
+                {(['increment','job_switch','bonus_timing','other'] as const).map(k => (
+                  <button key={k} onClick={() => update({ kind: k })} style={{ padding: '10px', background: fc.kind === k ? C.wl : '#fff', border: `1px solid ${fc.kind === k ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: C.text, textAlign: 'center' }}>
+                    {k === 'increment' ? 'Increment' : k === 'job_switch' ? 'Job switch' : k === 'bonus_timing' ? 'Bonus timing' : 'One time payment'}
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                <div>
+                  <label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 6 }}>When does it take effect?</label>
+                  <select value={fc.monthApplies} onChange={e => update({ monthApplies: e.target.value })} style={{ width: '100%', padding: '10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, fontFamily: 'inherit', background: '#fff', color: C.text }}>
+                    <option value="">Month…</option>
+                    {allFY.map(mk => <option key={mk} value={mk}>{monthLabel(mk)}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <label style={{ fontSize: 11, color: C.muted }}>How much?</label>
+                    <div style={{ display: 'flex', gap: 2 }}>
+                      <button
+                        type="button"
+                        onClick={() => update({ amountMode: 'pct', amountAbs: 0 })}
+                        style={{ padding: '2px 8px', background: fc.amountMode === 'abs' ? '#fff' : C.fg, color: fc.amountMode === 'abs' ? C.fg : '#fff', border: `1px solid ${C.fg}`, borderRadius: 3, fontSize: 10, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                      >%</button>
+                      <button
+                        type="button"
+                        onClick={() => update({ amountMode: 'abs', amountPct: 0 })}
+                        style={{ padding: '2px 8px', background: fc.amountMode === 'abs' ? C.fg : '#fff', color: fc.amountMode === 'abs' ? '#fff' : C.fg, border: `1px solid ${C.fg}`, borderRadius: 3, fontSize: 10, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                      >₹</button>
+                    </div>
+                  </div>
+                  {fc.amountMode === 'abs' ? (
+                    <input type="number" value={fc.amountAbs || ''} onChange={e => update({ amountAbs: parseFloat(e.target.value) || 0 })} style={{ width: '100%', padding: '10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, fontFamily: 'inherit', color: C.text }} />
+                  ) : (
+                    <input type="number" value={fc.amountPct || ''} onChange={e => update({ amountPct: parseFloat(e.target.value) || 0 })} placeholder="e.g. 10 (%)" style={{ width: '100%', padding: '10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, fontFamily: 'inherit', color: C.text }} />
+                  )}
+                </div>
+              </div>
+
+              <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, color: C.text, marginBottom: 6 }}>
+                <input type="checkbox" checked={fc.retroactive} onChange={e => update({ retroactive: e.target.checked })} />
+                Retroactive — applies from an earlier month
+              </label>
+              {fc.retroactive && (
+                <div style={{ marginBottom: 10 }}>
+                  <label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 6 }}>Retroactive from</label>
+                  <select value={fc.retroFromMonth} onChange={e => update({ retroFromMonth: e.target.value })} style={{ width: '100%', padding: '10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, fontFamily: 'inherit', background: '#fff', color: C.text }}>
+                    <option value="">Month…</option>
+                    {allFY.map(mk => <option key={mk} value={mk}>{monthLabel(mk)}</option>)}
+                  </select>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 12, marginTop: 14 }}>
+                <button onClick={() => setWizardStep('confirm-periods')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
+                <button onClick={skip} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Skip — no change</button>
+                <button onClick={() => setWizardStep('confirm-pattern')} style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Next →</button>
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* ── v7 confirm-pattern: show inferred mapping, user confirms or remaps ── */}
+        {wizardStep === 'confirm-pattern' && (() => {
+          const slipById = new Map(slipsWithMeta.map(s => [s.id, s]))
+          const inferred = wizard.intent ? inferFyStartYear(slipsWithMeta.map(m => ({ year: m.year, monthNum: m.monthNum })), wizard.intent) : 0
+          return (
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 8px' }}>Based on these slips, I'm building your timeline like this. Does it look right?</h2>
+              <p style={{ fontSize: 13, color: C.muted, margin: '0 0 16px' }}>FY {inferred}-{inferred + 1}{wizard.intent === 'forecast' ? ' — FORECAST' : ''}</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+                {wizard.periodMapping.map((r, i) => {
+                  const src = slipById.get(r.sourceSlipId)
+                  return (
+                    <div key={i} style={{ padding: '10px 12px', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12 }}>
+                      <span style={{ color: C.text, fontWeight: 600 }}>{monthLabel(r.fromMonth)} → {monthLabel(r.toMonth)}</span>
+                      <span style={{ color: C.muted }}> · Using {src ? monthLabel(src.monthKey) : '?'} slip · {fmt(src?.raw?.grossSalary || src?.raw?.basicSalary || 0)}</span>
+                    </div>
+                  )
+                })}
+              </div>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button onClick={() => setWizardStep('confirm-periods')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
+                <button onClick={() => setWizardStep('remap-periods')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Remap…</button>
+                <button onClick={() => setWizardStep('bonuses')} style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Looks right →</button>
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* ── v7 remap-periods: per-month dropdown to pick source slip ── */}
+        {wizardStep === 'remap-periods' && (() => {
+          const inferred = wizard.intent ? inferFyStartYear(slipsWithMeta.map(m => ({ year: m.year, monthNum: m.monthNum })), wizard.intent) : 0
+          const allFY = fyMonths(inferred)
+          // Per-month source slip currently assigned (derived from periodMapping).
+          const monthSlipOf = (mk: string) => wizard.periodMapping.find(r => mk >= r.fromMonth && mk <= r.toMonth)?.sourceSlipId || ''
+          const setMonthSlip = (mk: string, slipId: string) => {
+            // Rewrite mapping: collapse to per-month entries, then merge adjacent same-slip ranges.
+            const perMonth = allFY.map(m => ({ from: m, to: m, slip: m === mk ? slipId : monthSlipOf(m) }))
+            const merged: PeriodMapping[] = []
+            for (const item of perMonth) {
+              if (!item.slip) continue
+              const last = merged[merged.length - 1]
+              if (last && last.sourceSlipId === item.slip && nextMonthKey(last.toMonth) === item.from) {
+                last.toMonth = item.to
+              } else {
+                merged.push({ fromMonth: item.from, toMonth: item.to, sourceSlipId: item.slip })
+              }
+            }
+            setWizard(prev => ({ ...prev, periodMapping: merged }))
+          }
+          return (
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 8px' }}>Pick which slip applies to each month</h2>
+              <p style={{ fontSize: 13, color: C.muted, margin: '0 0 16px' }}>Adjacent months with the same slip are merged into a range automatically.</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6, marginBottom: 16 }}>
+                {allFY.map(mk => (
+                  <div key={mk} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '6px 10px', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4 }}>
+                    <span style={{ fontSize: 12, color: C.text, fontWeight: 600, minWidth: 70 }}>{monthLabel(mk)}</span>
+                    <select value={monthSlipOf(mk)} onChange={e => setMonthSlip(mk, e.target.value)} style={{ flex: 1, padding: '4px 6px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, fontFamily: 'inherit', background: '#fff', color: C.text }}>
+                      <option value="">— None —</option>
+                      {slipsWithMeta.map(s => <option key={s.id} value={s.id}>{monthLabel(s.monthKey)}</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button onClick={() => setWizardStep('confirm-pattern')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
+                <button onClick={() => setWizardStep('bonuses')} style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Next →</button>
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* ── v7 bonuses: Q4 ── */}
+        {wizardStep === 'bonuses' && (() => {
+          const inferred = wizard.intent ? inferFyStartYear(slipsWithMeta.map(m => ({ year: m.year, monthNum: m.monthNum })), wizard.intent) : 0
+          const allFY = fyMonths(inferred)
+          const toggle = (mk: string) => setWizard(prev => ({
+            ...prev,
+            bonusMonths: prev.bonusMonths.includes(mk) ? prev.bonusMonths.filter(m => m !== mk) : [...prev.bonusMonths, mk],
+          }))
+          // v8: Forecast no longer collects increment pre-build. Always build the baseline
+          // timeline first; the user adds the scenario overlay from the review page.
+          const finishOrForecast = () => {
+            buildEmploymentsFromMapping()
+            setWizardStep('review')
+          }
+          return (
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 8px' }}>Any bonuses or one-time payments?</h2>
+              <p style={{ fontSize: 13, color: C.muted, margin: '0 0 16px' }}>Tick the months. You can upload those specific slips from the timeline after build.</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 6, marginBottom: 16 }}>
+                {allFY.map(mk => {
+                  const on = wizard.bonusMonths.includes(mk)
+                  return (
+                    <button key={mk} onClick={() => toggle(mk)} style={{ padding: '8px 4px', background: on ? C.wm : '#fff', color: on ? '#fff' : C.text, border: `1px solid ${on ? C.wm : C.border}`, borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600 }}>
+                      {monthLabel(mk).split(' ')[0]}
+                    </button>
+                  )
+                })}
+              </div>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button onClick={() => setWizardStep('confirm-pattern')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
+                <button
+                  onClick={() => { setWizard(prev => ({ ...prev, bonusMonths: [] })); finishOrForecast() }}
+                  style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}
+                >Skip — no bonuses</button>
+                <button onClick={finishOrForecast} style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  Build timeline →
+                </button>
+              </div>
+            </div>
+          )
+        })()}
+
+
+
+      </div>
+    )
+  }
+
+  // REVIEW STEP
+  return (
+    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '20px 0' }}>
+      <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Salary</h1>
+      <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>
+        FY {fyStartYear}-{fyStartYear + 1} (Apr {fyStartYear} – Mar {fyStartYear + 1})
+        {wizard.intent === 'forecast' ? ' · FORECAST' : ''}
+      </p>
+
+      {/* Preview Modal - Salary Breakup */}
+      {previewMonth && previewEmploymentId && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(28,43,34,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 20 }}>
+          <div style={{ background: C.card, borderRadius: 10, padding: 30, maxWidth: 600, width: '95%', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', position: 'relative' }}>
+            <button onClick={() => setPreviewMonth(null)} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', fontSize: 28, color: C.muted, cursor: 'pointer', padding: 0 }}>×</button>
+
+            {previewMonth && getMonthData(previewEmploymentId, previewMonth) && (() => {
+              const md = getMonthData(previewEmploymentId, previewMonth)!
+              return (
+                <>
+                  <h2 style={{ fontSize: 18, fontWeight: 700, color: C.text, margin: '0 0 4px' }}>{monthLabel(previewMonth)}</h2>
+                  <p style={{ fontSize: 12, color: C.muted, margin: '0 0 20px' }}>{md.source === 'actual' ? 'From salary slip' : md.source === 'edited' ? 'Your edit' : 'Calculated from base'}</p>
+
+                  {/* Earnings — each row has an inline Override */}
+                  <div style={{ marginBottom: 20 }}>
+                    <h3 style={{ fontSize: 13, fontWeight: 600, color: C.fg, margin: '0 0 12px' }}>Earnings</h3>
+                    <div style={{ background: C.wl, borderRadius: 6, overflow: 'hidden' }}>
+                      {(md.earnings && md.earnings.length > 0 ? md.earnings : [{ label: 'Gross Salary', amount: md.gross }]).map((e, i, arr) => {
+                        const isEditing = overrideKey?.empId === previewEmploymentId && overrideKey?.monthKey === previewMonth && overrideKey?.kind === 'earning' && overrideKey?.index === i
+                        const canOverride = !!(md.earnings && md.earnings.length > 0)
+                        return (
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : 'none', gap: 10 }}>
+                            <span style={{ fontSize: 12, color: C.text, flex: 1 }}>{e.label}</span>
+                            {isEditing ? (
+                              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                <input type="number" value={overrideValue} onChange={ev => setOverrideValue(ev.target.value)} autoFocus style={{ width: 100, padding: '4px 8px', border: `1px solid ${C.fg}`, borderRadius: 4, fontSize: 12, fontFamily: 'inherit', color: C.text }} />
+                                <button onClick={saveOverride} style={{ padding: '4px 10px', background: C.fg, color: '#fff', border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
+                                <button onClick={() => { setOverrideKey(null); setOverrideValue('') }} style={{ padding: '4px 8px', background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>×</button>
+                              </div>
+                            ) : (
+                              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                <span style={{ fontSize: 12, fontWeight: 600, color: C.fg }}>{fmt(e.amount)}</span>
+                                {canOverride && (() => {
+                                  const freq: Frequency = resolveFrequency(e)
+                                  return (
+                                    <select
+                                      value={freq}
+                                      onChange={ev => setEarningFrequency(previewEmploymentId!, previewMonth!, i, ev.target.value as Frequency)}
+                                      title={`Frequency: ${freq}. Monthly carries forward to all months; others apply only when paid.`}
+                                      style={{
+                                        padding: '3px 6px',
+                                        background: freq === 'monthly' ? '#E8F2EC' : '#FFF1E0',
+                                        color: freq === 'monthly' ? '#2A7A4A' : '#A14B12',
+                                        border: `1px solid ${freq === 'monthly' ? '#B8D9C4' : '#F0C18A'}`,
+                                        borderRadius: 3, fontSize: 10, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer',
+                                      }}
+                                    >
+                                      {FREQUENCY_OPTIONS.map(opt => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
+                                    </select>
+                                  )
+                                })()}
+                                {canOverride && (
+                                  <button
+                                    onClick={() => {
+                                      setOverrideKey({ empId: previewEmploymentId!, monthKey: previewMonth!, kind: 'earning', index: i })
+                                      setOverrideValue(String(e.amount))
+                                    }}
+                                    style={{ padding: '3px 8px', background: '#E07B3A', color: '#fff', border: 'none', borderRadius: 3, fontSize: 10, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'uppercase', letterSpacing: '0.03em' }}
+                                  >
+                                    Override
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: C.wl, fontWeight: 600, borderTop: `1px solid ${C.border}` }}>
+                        <span style={{ fontSize: 12, color: C.fg }}>Total Earnings</span>
+                        <span style={{ fontSize: 12, color: C.fg }}>{fmt(md.gross)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Deductions — each row has an inline Override */}
+                  <div style={{ marginBottom: 20 }}>
+                    <h3 style={{ fontSize: 13, fontWeight: 600, color: C.fg, margin: '0 0 12px' }}>Deductions</h3>
+                    <div style={{ background: '#FBF0F0', borderRadius: 6, overflow: 'hidden' }}>
+                      {(md.deductionsList && md.deductionsList.length > 0 ? md.deductionsList : [{ label: 'Deductions', amount: md.deductions }]).map((d, i, arr) => {
+                        const isEditing = overrideKey?.empId === previewEmploymentId && overrideKey?.monthKey === previewMonth && overrideKey?.kind === 'deduction' && overrideKey?.index === i
+                        const canOverride = !!(md.deductionsList && md.deductionsList.length > 0)
+                        return (
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : 'none', gap: 10 }}>
+                            <span style={{ fontSize: 12, color: C.text, flex: 1 }}>{d.label}</span>
+                            {isEditing ? (
+                              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                <input type="number" value={overrideValue} onChange={ev => setOverrideValue(ev.target.value)} autoFocus style={{ width: 100, padding: '4px 8px', border: `1px solid ${C.fg}`, borderRadius: 4, fontSize: 12, fontFamily: 'inherit', color: C.text }} />
+                                <button onClick={saveOverride} style={{ padding: '4px 10px', background: C.fg, color: '#fff', border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
+                                <button onClick={() => { setOverrideKey(null); setOverrideValue('') }} style={{ padding: '4px 8px', background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>×</button>
+                              </div>
+                            ) : (
+                              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                <span style={{ fontSize: 12, fontWeight: 600, color: C.danger }}>−{fmt(d.amount)}</span>
+                                {canOverride && (
+                                  <button
+                                    onClick={() => {
+                                      setOverrideKey({ empId: previewEmploymentId!, monthKey: previewMonth!, kind: 'deduction', index: i })
+                                      setOverrideValue(String(d.amount))
+                                    }}
+                                    style={{ padding: '3px 8px', background: '#E07B3A', color: '#fff', border: 'none', borderRadius: 3, fontSize: 10, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'uppercase', letterSpacing: '0.03em' }}
+                                  >
+                                    Override
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: '#FBF0F0', fontWeight: 600, borderTop: `1px solid ${C.border}` }}>
+                        <span style={{ fontSize: 12, color: C.danger }}>Total Deductions</span>
+                        <span style={{ fontSize: 12, color: C.danger }}>−{fmt(md.deductions)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Net Salary */}
+                  <div style={{ marginTop: 20, padding: '14px', background: C.wl, borderRadius: 6, display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: C.fg }}>Net Salary</span>
+                    <span style={{ fontSize: 16, fontWeight: 700, color: '#2A7A4A' }}>{fmt(md.net)}</span>
+                  </div>
+                </>
+              )
+            })()}
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              <button
+                onClick={() => previewEmploymentId && previewMonth && startEditBreakdown(previewEmploymentId, previewMonth)}
+                style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.fg}`, borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                Edit breakdown
+              </button>
+              <button
+                onClick={() => setPreviewMonth(null)}
+                style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {editingMonth && editEmploymentId && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(28,43,34,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 20 }}>
+          <div style={{ background: C.card, borderRadius: 10, padding: 30, maxWidth: 500, width: '95%', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', position: 'relative' }}>
+            <button onClick={() => setEditingMonth(null)} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', fontSize: 28, color: C.muted, cursor: 'pointer', padding: 0 }}>×</button>
+
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: C.text, margin: '0 0 20px' }}>Edit {monthLabel(editingMonth)}</h2>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', fontSize: 12, color: C.muted, marginBottom: 6 }}>Gross Salary</label>
+              <input type="number" value={editGross} onChange={(e) => setEditGross(parseInt(e.target.value) || 0)} style={{ width: '100%', padding: '10px', fontSize: 14, borderRadius: 6, border: `1px solid ${C.border}`, fontFamily: 'inherit', boxSizing: 'border-box' }} />
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', fontSize: 12, color: C.muted, marginBottom: 6 }}>Net Salary</label>
+              <input type="number" value={editNet} onChange={(e) => setEditNet(parseInt(e.target.value) || 0)} style={{ width: '100%', padding: '10px', fontSize: 14, borderRadius: 6, border: `1px solid ${C.border}`, fontFamily: 'inherit', boxSizing: 'border-box' }} />
+            </div>
+
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button onClick={() => setEditingMonth(null)} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+              <button onClick={() => updateMonth(editEmploymentId, editingMonth, editGross, editNet)} style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Annual Summary */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
+          <p style={{ fontSize: 10, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Annual Gross</p>
+          <p style={{ fontSize: 20, fontWeight: 700, color: C.fg, margin: 0 }}>{fmt(annualGross)}</p>
+        </div>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
+          <p style={{ fontSize: 10, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Annual Net</p>
+          <p style={{ fontSize: 20, fontWeight: 700, color: '#2A7A4A', margin: 0 }}>{fmt(annualNet)}</p>
+        </div>
+      </div>
+
+      {/* Employment Periods */}
+      <div style={{ marginBottom: 24 }}>
+        {employments.map((emp, idx) => (
+          <div key={emp.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 12, overflow: 'hidden' }}>
+            <button
+              onClick={() => setExpandedEmployment(expandedEmployment === emp.id ? null : emp.id)}
+              style={{ width: '100%', padding: '16px', background: expandedEmployment === emp.id ? C.wl : '#fff', border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+            >
+              <div style={{ textAlign: 'left' }}>
+                <h3 style={{ fontSize: 13, fontWeight: 600, color: C.text, margin: '0 0 4px' }}>Employment #{idx + 1}: {emp.name}</h3>
+                <p style={{ fontSize: 11, color: C.muted, margin: 0 }}>{monthLabel(emp.fromMonth)} → {monthLabel(emp.toMonth)}</p>
+              </div>
+              <span style={{ fontSize: 14, color: C.fg }}>{expandedEmployment === emp.id ? '−' : '+'}</span>
+            </button>
+
+            {expandedEmployment === emp.id && (
+              <div style={{ padding: '16px', borderTop: `1px solid ${C.border}` }}>
+                {/* Per-month slip upload */}
+                <div style={{ marginBottom: 16, padding: 12, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6 }}>
+                  <p style={{ fontSize: 11, fontWeight: 600, color: C.muted, margin: '0 0 8px', textTransform: 'uppercase' }}>Upload monthly slip</p>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <select
+                      value={monthUploadEmpId === emp.id ? monthUploadKey : ''}
+                      onChange={(e) => { setMonthUploadEmpId(emp.id); setMonthUploadKey(e.target.value); setMonthUploadError(null) }}
+                      disabled={monthUploadBusy}
+                      style={{ padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontFamily: 'inherit', background: '#fff', color: C.text, minWidth: 140 }}
+                    >
+                      <option value="">Select month…</option>
+                      {emp.months
+                        .filter(m => m.monthKey >= emp.fromMonth && m.monthKey <= emp.toMonth)
+                        .map(m => (
+                          <option key={m.monthKey} value={m.monthKey}>
+                            {monthLabel(m.monthKey)}{m.source === 'actual' ? ' (uploaded)' : m.source === 'edited' ? ' (edited)' : ''}
+                          </option>
+                        ))}
+                    </select>
+                    <input
+                      type="file"
+                      accept="application/pdf,image/*"
+                      disabled={monthUploadBusy || (monthUploadEmpId === emp.id ? !monthUploadKey : true)}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0] || null
+                        setMonthUploadFile(f)
+                        if (f && monthUploadEmpId === emp.id && monthUploadKey) {
+                          uploadMonthlySlip(emp.id, monthUploadKey, f)
+                          e.target.value = ''
+                        }
+                      }}
+                      style={{ fontSize: 12, fontFamily: 'inherit', color: C.text }}
+                    />
+                    {monthUploadBusy && monthUploadEmpId === emp.id && (
+                      <span style={{ fontSize: 11, color: C.muted }}>Parsing…</span>
+                    )}
+                  </div>
+                  {monthUploadError && monthUploadEmpId === emp.id && (
+                    <p style={{ fontSize: 11, color: C.danger, margin: '8px 0 0' }}>{monthUploadError}</p>
+                  )}
+
+                  {/* Manual entry — no slip needed */}
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${C.border}` }}>
+                    <button
+                      onClick={() => {
+                        setManualOpenEmpId(manualOpenEmpId === emp.id ? null : emp.id)
+                        setManualError(null)
+                      }}
+                      style={{ background: 'transparent', border: 'none', color: C.fg, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}
+                    >
+                      {manualOpenEmpId === emp.id ? '− Hide manual entry' : '+ Add manually (no slip)'}
+                    </button>
+                    {manualOpenEmpId === emp.id && (() => {
+                      // Live totals from current row state
+                      const liveGross = manualEarnings.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0)
+                      const liveDed = manualDeductions.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0)
+                      const liveNet = liveGross - liveDed
+                      return (
+                        <div style={{ marginTop: 10 }}>
+                          <div style={{ marginBottom: 10 }}>
+                            <label style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Month</label>
+                            <select
+                              value={manualMonthKey}
+                              onChange={(e) => { setManualMonthKey(e.target.value); setManualError(null) }}
+                              style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontFamily: 'inherit', background: '#fff', color: C.text }}
+                            >
+                              <option value="">Select month…</option>
+                              {emp.months
+                                .filter(m => m.monthKey >= emp.fromMonth && m.monthKey <= emp.toMonth)
+                                .map(m => (
+                                  <option key={m.monthKey} value={m.monthKey}>
+                                    {monthLabel(m.monthKey)}{m.source === 'actual' ? ' (uploaded)' : m.source === 'edited' ? ' (edited)' : ''}
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            {/* Earnings editor */}
+                            <div>
+                              <p style={{ fontSize: 10, fontWeight: 600, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase' }}>Earnings</p>
+                              {manualEarnings.map((row, i) => (
+                                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 90px auto', gap: 4, marginBottom: 4 }}>
+                                  <input
+                                    type="text"
+                                    placeholder="Label (e.g. HRA)"
+                                    value={row.label}
+                                    onChange={(e) => setManualEarnings(prev => prev.map((r, j) => j === i ? { ...r, label: e.target.value } : r))}
+                                    style={{ padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, fontFamily: 'inherit', color: C.text }}
+                                  />
+                                  <input
+                                    type="number"
+                                    placeholder="Amount"
+                                    value={row.amount}
+                                    onChange={(e) => setManualEarnings(prev => prev.map((r, j) => j === i ? { ...r, amount: e.target.value } : r))}
+                                    style={{ padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, fontFamily: 'inherit', color: C.text }}
+                                  />
+                                  <button
+                                    onClick={() => setManualEarnings(prev => prev.filter((_, j) => j !== i))}
+                                    title="Remove"
+                                    style={{ padding: '0 8px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 14, color: C.muted, cursor: 'pointer', fontFamily: 'inherit' }}
+                                  >×</button>
+                                </div>
+                              ))}
+                              <button
+                                onClick={() => setManualEarnings(prev => [...prev, { label: '', amount: '' }])}
+                                style={{ marginTop: 4, padding: '4px 8px', background: 'transparent', border: `1px dashed ${C.border}`, borderRadius: 4, fontSize: 10.5, color: C.fg, cursor: 'pointer', fontFamily: 'inherit', width: '100%' }}
+                              >+ Add earning</button>
+                            </div>
+
+                            {/* Deductions editor */}
+                            <div>
+                              <p style={{ fontSize: 10, fontWeight: 600, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase' }}>Deductions</p>
+                              {manualDeductions.map((row, i) => (
+                                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 90px auto', gap: 4, marginBottom: 4 }}>
+                                  <input
+                                    type="text"
+                                    placeholder="Label (e.g. PF)"
+                                    value={row.label}
+                                    onChange={(e) => setManualDeductions(prev => prev.map((r, j) => j === i ? { ...r, label: e.target.value } : r))}
+                                    style={{ padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, fontFamily: 'inherit', color: C.text }}
+                                  />
+                                  <input
+                                    type="number"
+                                    placeholder="Amount"
+                                    value={row.amount}
+                                    onChange={(e) => setManualDeductions(prev => prev.map((r, j) => j === i ? { ...r, amount: e.target.value } : r))}
+                                    style={{ padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, fontFamily: 'inherit', color: C.text }}
+                                  />
+                                  <button
+                                    onClick={() => setManualDeductions(prev => prev.filter((_, j) => j !== i))}
+                                    title="Remove"
+                                    style={{ padding: '0 8px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 14, color: C.muted, cursor: 'pointer', fontFamily: 'inherit' }}
+                                  >×</button>
+                                </div>
+                              ))}
+                              <button
+                                onClick={() => setManualDeductions(prev => [...prev, { label: '', amount: '' }])}
+                                style={{ marginTop: 4, padding: '4px 8px', background: 'transparent', border: `1px dashed ${C.border}`, borderRadius: 4, fontSize: 10.5, color: C.fg, cursor: 'pointer', fontFamily: 'inherit', width: '100%' }}
+                              >+ Add deduction</button>
+                            </div>
+                          </div>
+
+                          {/* Live preview totals */}
+                          <div style={{ marginTop: 10, padding: 10, background: C.wl, borderRadius: 6, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                            <div>
+                              <p style={{ fontSize: 10, color: C.muted, margin: '0 0 2px', textTransform: 'uppercase' }}>Gross</p>
+                              <p style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: 0 }}>{fmt(liveGross)}</p>
+                            </div>
+                            <div>
+                              <p style={{ fontSize: 10, color: C.muted, margin: '0 0 2px', textTransform: 'uppercase' }}>Deductions</p>
+                              <p style={{ fontSize: 13, fontWeight: 700, color: C.danger, margin: 0 }}>−{fmt(liveDed)}</p>
+                            </div>
+                            <div>
+                              <p style={{ fontSize: 10, color: C.muted, margin: '0 0 2px', textTransform: 'uppercase' }}>Net</p>
+                              <p style={{ fontSize: 13, fontWeight: 700, color: '#2A7A4A', margin: 0 }}>{fmt(liveNet)}</p>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => submitManualEntry(emp.id)}
+                            style={{ marginTop: 10, width: '100%', padding: '10px 14px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                          >
+                            Save breakdown
+                          </button>
+                        </div>
+                      )
+                    })()}
+                    {manualError && manualOpenEmpId === emp.id && (
+                      <p style={{ fontSize: 11, color: C.danger, margin: '8px 0 0' }}>{manualError}</p>
+                    )}
+                  </div>
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <p style={{ fontSize: 11, fontWeight: 600, color: C.muted, margin: '0 0 12px', textTransform: 'uppercase' }}>Timeline · click to view/edit</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 8, marginBottom: 12 }}>
+                    {emp.months.map(m => {
+                      // Forecast intent: projected cells get the dashed-border 🔮 treatment per v6.
+                      const isForecastCell = wizard.intent === 'forecast' && m.source === 'projected' && m.gross > 0
+                      const bg = m.source === 'actual' ? C.fg
+                        : m.source === 'edited' ? C.wm
+                        : m.source === 'inferred' ? '#D8D2C5'   // slightly darker than projected to differentiate ◆
+                        : C.border
+                      const fg = m.source === 'actual' || m.source === 'edited' ? '#fff'
+                        : m.source === 'inferred' ? C.fg
+                        : C.muted
+                      const icon = isForecastCell
+                        ? '🔮'
+                        : m.source === 'actual' ? '●'
+                        : m.source === 'edited' ? '✎'
+                        : m.source === 'inferred' ? '◆'
+                        : '○'
+                      const anomaly = anomalyByMonth.get(m.monthKey)
+                      const cellBorder = anomaly
+                        ? `2px solid #E07B3A`
+                        : isForecastCell ? `2px dashed ${C.fg}` : 'none'
+
+                      return (
+                        <button
+                          key={m.monthKey}
+                          onClick={() => {
+                            setPreviewMonth(m.monthKey)
+                            setPreviewEmploymentId(emp.id)
+                          }}
+                          title={anomaly?.message || (isForecastCell ? 'Forecast — based on your scenario' : undefined)}
+                          style={{ position: 'relative', background: bg, color: fg, border: cellBorder, borderRadius: 4, padding: '12px 4px', fontSize: 10, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}
+                        >
+                          {anomaly && (
+                            <span style={{ position: 'absolute', top: -6, right: -4, background: '#E07B3A', color: '#fff', borderRadius: '50%', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700 }}>!</span>
+                          )}
+                          <div style={{ fontSize: 9 }}>{monthLabel(m.monthKey).split(' ')[0]}</div>
+                          <div style={{ fontSize: 11 }}>{icon}</div>
+                          <div style={{ fontSize: 8, opacity: 0.8 }}>{fmt(m.gross)}</div>
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 12, fontSize: 10.5, color: C.muted, marginBottom: 12, flexWrap: 'wrap' }}>
+                    <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: C.fg, marginRight: 4 }} />Actual</span>
+                    <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: C.wm, marginRight: 4 }} />Edited</span>
+                    <span>◆ Inferred from another slip</span>
+                    {wizard.intent === 'forecast' && (
+                      <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, border: `1px dashed ${C.fg}`, marginRight: 4 }} />Forecast</span>
+                    )}
+                    <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#E07B3A', marginRight: 4 }} />Anomaly</span>
+                  </div>
+
+                  <button onClick={() => { setEditEmploymentId(emp.id); setEditingMonth(emp.months[0].monthKey); setEditGross(emp.months[0].gross); setEditNet(emp.months[0].net) }} style={{ width: '100%', padding: '10px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Edit any month</button>
+                </div>
+
+                {/* Inline preview panel — collapsible, mirrors the click-modal but in-page */}
+                <div style={{ marginBottom: 16, border: `1px solid ${C.border}`, borderRadius: 6, overflow: 'hidden' }}>
+                  <button
+                    onClick={() => setPreviewOpenEmpId(previewOpenEmpId === emp.id ? null : emp.id)}
+                    style={{ width: '100%', padding: '10px 12px', background: previewOpenEmpId === emp.id ? C.wl : '#fff', border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                  >
+                    <span style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'uppercase' }}>Preview · all months</span>
+                    <span style={{ fontSize: 13, color: C.fg }}>{previewOpenEmpId === emp.id ? '−' : '+'}</span>
+                  </button>
+                  {previewOpenEmpId === emp.id && (
+                    <div style={{ padding: 12, borderTop: `1px solid ${C.border}`, background: C.bg }}>
+                      {emp.months.filter(m => m.gross > 0 || m.net > 0).length === 0 ? (
+                        <p style={{ fontSize: 12, color: C.muted, margin: 0, textAlign: 'center' }}>No salary data yet — upload a slip or add manually.</p>
+                      ) : (
+                        emp.months.filter(m => m.gross > 0 || m.net > 0).map(m => {
+                          const isOpen = previewMonth === m.monthKey && previewEmploymentId === emp.id
+                          return (
+                            <div key={m.monthKey} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, marginBottom: 8, overflow: 'hidden' }}>
+                              <button
+                                onClick={() => {
+                                  if (isOpen) { setPreviewMonth(null); setPreviewEmploymentId(null) }
+                                  else { setPreviewMonth(m.monthKey); setPreviewEmploymentId(emp.id) }
+                                }}
+                                style={{ width: '100%', padding: '10px 12px', background: isOpen ? C.wl : '#fff', border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                              >
+                                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                                  <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{monthLabel(m.monthKey)}</span>
+                                  <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 3, background: m.source === 'actual' ? C.fg : m.source === 'edited' ? C.wm : C.border, color: m.source === 'projected' ? C.muted : '#fff' }}>{m.source}</span>
+                                </div>
+                                <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+                                  <span style={{ fontSize: 11, color: C.muted }}>Gross <strong style={{ color: C.fg }}>{fmt(m.gross)}</strong></span>
+                                  <span style={{ fontSize: 11, color: C.muted }}>Net <strong style={{ color: '#2A7A4A' }}>{fmt(m.net)}</strong></span>
+                                  <span style={{ fontSize: 13, color: C.fg }}>{isOpen ? '−' : '+'}</span>
+                                </div>
+                              </button>
+                              {isOpen && (
+                                <div style={{ padding: 12, borderTop: `1px solid ${C.border}`, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                  <div>
+                                    <p style={{ fontSize: 10, fontWeight: 600, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase' }}>Earnings</p>
+                                    <div style={{ background: C.wl, borderRadius: 4 }}>
+                                      {(m.earnings && m.earnings.length > 0 ? m.earnings : [{ label: 'Gross', amount: m.gross }]).map((e, i, arr) => (
+                                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : 'none', fontSize: 11 }}>
+                                          <span style={{ color: C.text }}>{e.label}</span>
+                                          <span style={{ fontWeight: 600, color: C.fg }}>{fmt(e.amount)}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <p style={{ fontSize: 10, fontWeight: 600, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase' }}>Deductions</p>
+                                    <div style={{ background: '#FBF0F0', borderRadius: 4 }}>
+                                      {(m.deductionsList && m.deductionsList.length > 0 ? m.deductionsList : [{ label: 'Deductions', amount: m.deductions }]).map((d, i, arr) => (
+                                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : 'none', fontSize: 11 }}>
+                                          <span style={{ color: C.text }}>{d.label}</span>
+                                          <span style={{ fontWeight: 600, color: C.danger }}>−{fmt(d.amount)}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ padding: '12px', background: C.wl, borderRadius: 6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <span style={{ fontSize: 11, color: C.muted }}>Period Gross:</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: C.fg }}>{fmt(emp.months.reduce((s, m) => s + m.gross, 0))}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 11, color: C.muted }}>Period Net:</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: '#2A7A4A' }}>{fmt(emp.months.reduce((s, m) => s + m.net, 0))}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* ── Forecast scenarios (v7 §Intent B) — Baseline / Non-retro / Retro side by side. */}
+      {wizard.intent === 'forecast' && wizard.forecastChange && annualGross > 0 && (() => {
+        const firstEmp = employments[0]
+        if (!firstEmp) return null
+        const baseSlip = slipsWithMeta[0]
+        if (!baseSlip) return null
+        const baseGross = baseSlip.raw.grossSalary || baseSlip.raw.basicSalary || 0
+        const baseTDSPerMonth = (baseSlip.raw.components || []).filter((d: any) => d.type === 'deduction' && /\b(tds|income\s*tax|i\.?t)\b/i.test(d.label || '')).reduce((s: number, d: any) => s + (d.amount || 0), 0)
+        const fc = wizard.forecastChange
+        const allFY = fyMonths(fyStartYear)
+        const applyIdx = fc.monthApplies ? allFY.indexOf(fc.monthApplies) : -1
+        const monthsBefore = applyIdx > 0 ? applyIdx : 0
+        const monthsAfter = applyIdx >= 0 ? (12 - applyIdx) : 12
+        const factor = 1 + (fc.amountPct || 0) / 100
+        const newGross = fc.amountAbs > 0 ? fc.amountAbs : Math.round(baseGross * factor)
+        const newTDS = Math.round(baseTDSPerMonth * (newGross / Math.max(baseGross, 1)))
+
+        const scenarios = [
+          { id: 'baseline', name: 'Baseline (no change)', annualGross: baseGross * 12, annualTDS: baseTDSPerMonth * 12 },
+          {
+            id: 'non_retro',
+            name: fc.monthApplies ? `Non-retro · from ${monthLabel(fc.monthApplies)}` : 'Non-retroactive change',
+            annualGross: (baseGross * monthsBefore) + (newGross * monthsAfter),
+            annualTDS: (baseTDSPerMonth * monthsBefore) + (newTDS * monthsAfter),
+          },
+          ...(fc.retroactive ? [{
+            id: 'retro',
+            name: `Retroactive · from ${fc.retroFromMonth ? monthLabel(fc.retroFromMonth) : 'Apr'} (arrears in ${fc.monthApplies ? monthLabel(fc.monthApplies) : 'change month'})`,
+            annualGross: newGross * 12,
+            annualTDS: newTDS * 12,
+          }] : []),
+        ]
+
+        return (
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 16 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: C.fg, margin: '0 0 14px' }}>Forecast scenarios</h3>
+            <div style={{ background: C.bg, borderRadius: 6, overflow: 'hidden' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', padding: '8px 12px', background: C.wl, fontSize: 11, fontWeight: 700, color: C.fg, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <span>Scenario</span>
+                <span style={{ textAlign: 'right' }}>Annual Gross</span>
+                <span style={{ textAlign: 'right' }}>Annual TDS</span>
+              </div>
+              {scenarios.map((s, i) => (
+                <div key={s.id} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', padding: '10px 12px', borderTop: i === 0 ? 'none' : `1px solid ${C.border}`, fontSize: 12, color: C.text }}>
+                  <span>{s.name}</span>
+                  <span style={{ textAlign: 'right', fontWeight: 600, color: C.fg }}>{fmt(s.annualGross)}</span>
+                  <span style={{ textAlign: 'right', fontWeight: 600, color: C.fg }}>{fmt(s.annualTDS)}</span>
+                </div>
+              ))}
+            </div>
+            <p style={{ fontSize: 11, color: C.muted, margin: '12px 0 0', textAlign: 'center' }}>
+              Scenarios derived from baseline slip × {fc.amountPct}%. Final tax liability is computed in Tax Summary.
+            </p>
+          </div>
+        )
+      })()}
+
+      {/* ── Validation guards (v6 §4.1 / §9) ──────────────────────────────── */}
+      {annualGross > 0 && (() => {
+        const warnings: string[] = []
+        // 1) Identical-all-months check
+        const monthlyTotals = employments.flatMap(e => e.months.filter(m => m.monthKey >= e.fromMonth && m.monthKey <= e.toMonth).map(m => m.gross))
+        if (monthlyTotals.length >= 12 && new Set(monthlyTotals).size === 1 && monthlyTotals[0] > 0) {
+          warnings.push('All 12 months show the same gross — is this actual data or an estimate?')
+        }
+        // 2) TDS reasonableness
+        if (annualGross > 0) {
+          const tdsRate = annualTDS / annualGross
+          if (tdsRate > 0 && (tdsRate < 0.08 || tdsRate > 0.30)) {
+            warnings.push(`TDS is ${Math.round(tdsRate * 100)}% of gross — outside the typical 8–30% range. Please verify the slips.`)
+          }
+        }
+        // 3) <3 months actual data
+        let actualCount = 0
+        for (const emp of employments) for (const m of emp.months) {
+          if (m.monthKey >= emp.fromMonth && m.monthKey <= emp.toMonth && (m.source === 'actual' || m.source === 'edited')) actualCount++
+        }
+        if (actualCount < 3) warnings.push(`Only ${actualCount} month(s) of actual data — projections may be less accurate. Consider uploading more slips.`)
+        if (warnings.length === 0) return null
+        return (
+          <div style={{ background: '#FFF1E0', border: `1px solid #F0C18A`, borderRadius: 8, padding: 14, marginBottom: 16 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: '#A14B12', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>⚠ Please verify</p>
+            {warnings.map((w, i) => (
+              <p key={i} style={{ fontSize: 12, color: C.text, margin: i === 0 ? 0 : '4px 0 0', lineHeight: 1.4 }}>• {w}</p>
+            ))}
+          </div>
+        )
+      })()}
+
+      {/* ── Salary Summary (PRD v6) — NO tax math, NO confidence. Just totals + routing message. */}
+      {annualGross > 0 && (() => {
+        // Aggregate components across all months for the breakdown table.
+        const compTotals = new Map<string, number>()
+        for (const emp of employments) {
+          for (const m of emp.months) {
+            if (m.monthKey < emp.fromMonth || m.monthKey > emp.toMonth) continue
+            for (const e of m.earnings || []) {
+              compTotals.set(e.label, (compTotals.get(e.label) || 0) + (e.amount || 0))
+            }
+          }
+        }
+        const topComponents = Array.from(compTotals.entries())
+          .filter(([, v]) => v > 0)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 6)
+
+        return (
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 16 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: C.fg, margin: '0 0 14px' }}>Salary Summary</h3>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+              <div style={{ padding: 12, background: C.bg, borderRadius: 6 }}>
+                <p style={{ fontSize: 10, color: C.muted, margin: '0 0 4px', textTransform: 'uppercase' }}>Annual Gross</p>
+                <p style={{ fontSize: 18, fontWeight: 700, color: C.fg, margin: 0 }}>{fmt(annualGross)}</p>
+              </div>
+              <div style={{ padding: 12, background: C.bg, borderRadius: 6 }}>
+                <p style={{ fontSize: 10, color: C.muted, margin: '0 0 4px', textTransform: 'uppercase' }}>TDS Paid (from slips)</p>
+                <p style={{ fontSize: 18, fontWeight: 700, color: C.fg, margin: 0 }}>{fmt(annualTDS)}</p>
+              </div>
+            </div>
+
+            {topComponents.length > 0 && (
+              <div style={{ background: C.bg, borderRadius: 6, padding: 12, marginBottom: 14 }}>
+                <p style={{ fontSize: 11, fontWeight: 600, color: C.muted, margin: '0 0 8px', textTransform: 'uppercase' }}>Components · annual</p>
+                {topComponents.map(([label, total], i) => (
+                  <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: i < topComponents.length - 1 ? `1px solid ${C.border}` : 'none', fontSize: 11 }}>
+                    <span style={{ color: C.text }}>{label}</span>
+                    <span style={{ fontWeight: 600, color: C.fg }}>{fmt(total)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <p style={{ fontSize: 12, color: C.muted, margin: 0, padding: 12, background: C.wl, borderRadius: 6 }}>
+              {wizard.intent === 'forecast'
+                ? 'Your salary forecast is ready. Add your other income and deductions to see the tax impact of each scenario.'
+                : 'Your salary data is ready. Now add your other income and deductions to calculate your complete tax liability in Tax Summary.'}
+            </p>
+          </div>
+        )
+      })()}
+
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+        <button onClick={() => setWizardStep('intent-pick')} style={{ flex: 1, minWidth: 120, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Edit timeline</button>
+        <button onClick={() => router.push('/dashboard/profile/documents')} style={{ flex: 1, minWidth: 120, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Upload more slips</button>
+        <button onClick={() => router.push('/dashboard/profile/other-income')} style={{ flex: 1, minWidth: 120, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Add Other Income →</button>
+      </div>
+    </div>
+  )
+}

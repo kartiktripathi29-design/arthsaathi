@@ -1,29 +1,34 @@
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
-import { cookies } from "next/headers";
-import { createClient as createAdminClient } from "@supabase/supabase-js";
+// Server-side Supabase client. Use in Server Components, Route Handlers, and Server Actions to
+// read the current user from cookies. Reads/writes session cookies via Next.js cookies() API.
 
-export async function createClient() {
-  const cookieStore = await cookies();
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+
+export async function createSupabaseServerClient() {
+  const cookieStore = await cookies()
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
       cookies: {
-        getAll() { return cookieStore.getAll(); },
-        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
+        getAll() {
+          return cookieStore.getAll()
+        },
+        setAll(toSet) {
           try {
-            cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
-          } catch {}
+            for (const c of toSet) cookieStore.set(c.name, c.value, c.options)
+          } catch {
+            // Server Component setAll calls can throw — middleware refreshes the session.
+          }
         },
       },
     },
-  );
+  )
 }
 
-export function createSupabaseAdmin() {
-  const secret = process.env.SUPABASE_SECRET_KEY;
-  if (!secret) throw new Error("SUPABASE_SECRET_KEY not set");
-  return createAdminClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, secret, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+/** Returns the currently logged-in Supabase user, or null. */
+export async function getCurrentUser() {
+  const supabase = await createSupabaseServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  return user
 }
