@@ -1,6 +1,5 @@
 import { NextRequest } from 'next/server'
 import { streamChatResponse } from '@/lib/claude'
-import { logActivity } from '@/lib/activity'
 
 export const maxDuration = 60
 
@@ -8,11 +7,6 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const { messages, userContext } = body
-
-    // Fire-and-forget: log chat activity
-    logActivity('anonymous', 'CHAT_MESSAGE_SENT', null, {
-      messageCount: messages?.length || 0,
-    }).catch(() => {})
 
     const encoder = new TextEncoder()
     const stream = new ReadableStream({

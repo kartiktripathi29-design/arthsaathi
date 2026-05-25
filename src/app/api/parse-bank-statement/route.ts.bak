@@ -6,9 +6,6 @@ import { runPipeline, stage2_normalize, stage3_categorize, stage4_analyze, stage
 import type { ParseResult, RawTransaction, PipelineReport } from '@/lib/pipeline'
 import { analyzeStatement } from '@/lib/txn-intelligence'
 import type { IntelligenceReport } from '@/lib/txn-intelligence'
-import { prisma } from '@/lib/db'
-import { logActivity } from '@/lib/activity'
-import { hashBuffer } from '@/lib/storage'
 
 export const maxDuration = 120
 
@@ -75,29 +72,21 @@ export async function POST(req: NextRequest) {
           try {
             const { pipelineReport, intelligence } = runPipelineFromLocalResult(localResult)
             log(`pipeline done — ${pipelineReport.total_transactions} txns, ${pipelineReport.categorization_summary.auto_classified} auto-classified`)
-            const resp1 = NextResponse.json({
+            return NextResponse.json({
               data: localResult,
               pipeline: pipelineReport,
               intelligence,
               fileKind,
               parsedLocally: true,
             })
-            persistStatement(buffer, fileName, localResult, intelligence).catch(e =>
-              console.error('[bank-parse] DB persist failed (non-blocking):', e)
-            )
-            return resp1
           } catch (pipeErr: any) {
             log(`pipeline failed: ${pipeErr.message} — returning raw parse only`)
-            const resp2 = NextResponse.json({
+            return NextResponse.json({
               data: localResult,
               pipeline: null,
               fileKind,
               parsedLocally: true,
             })
-            persistStatement(buffer, fileName, localResult, null).catch(e =>
-              console.error('[bank-parse] DB persist failed (non-blocking):', e)
-            )
-            return resp2
           }
           // ──────────────────────────────────────────────────────────────
         }
@@ -127,29 +116,21 @@ export async function POST(req: NextRequest) {
           try {
             const { pipelineReport, intelligence } = runPipelineFromLocalResult(localResult)
             log(`pipeline done — ${pipelineReport.total_transactions} txns`)
-            const resp3 = NextResponse.json({
+            return NextResponse.json({
               data: localResult,
               pipeline: pipelineReport,
               intelligence,
               fileKind: 'pdf',
               parsedLocally: true,
             })
-            persistStatement(buffer, fileName, localResult, intelligence).catch(e =>
-              console.error('[bank-parse] DB persist failed (non-blocking):', e)
-            )
-            return resp3
           } catch (pipeErr: any) {
             log(`pipeline failed on PDF: ${pipeErr.message}`)
-            const resp4 = NextResponse.json({
+            return NextResponse.json({
               data: localResult,
               pipeline: null,
               fileKind: 'pdf',
               parsedLocally: true,
             })
-            persistStatement(buffer, fileName, localResult, null).catch(e =>
-              console.error('[bank-parse] DB persist failed (non-blocking):', e)
-            )
-            return resp4
           }
         }
         log('local PDF parse: unknown bank or too few transactions — falling through to Haiku')
@@ -187,17 +168,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const resp5 = NextResponse.json({
+    return NextResponse.json({
       data: haikuData,
       pipeline: pipelineReport,
       intelligence,
       fileKind: result.kind,
       parsedLocally: false,
     })
-    persistStatement(buffer, fileName, haikuData, intelligence).catch(e =>
-      console.error('[bank-parse] DB persist failed (non-blocking):', e)
-    )
-    return resp5
   } catch (err: any) {
     console.error('[bank-parse] error:', err)
     return NextResponse.json({ error: err.message || 'Server error' }, { status: 500 })
@@ -364,43 +341,4 @@ function detectBankFromName(name: string): BankId {
     if (n.includes(signal)) return id
   }
   return 'UNKNOWN'
-}
-
-
-// ─── DB PERSISTENCE (fire-and-forget, never blocks response) ────────────────
-
-async function persistStatement(
-  buffer: Buffer,
-  fileName: string,
-  localResult: any,
-  intelligence: IntelligenceReport | null,
-) {
-  try {
-    const contentHash = hashBuffer(buffer)
-    const txnCount = localResult.transactions?.length || 0
-
-    const statement = await prisma.statement.upsert({
-      where: {
-        userId_contentHash: { userId: 'anonymous', contentHash },
-      },
-      update: { txnCount, parsedAt: new Date() },
-      create: {
-        userId: 'anonymous',
-        originalName: fileName,
-        contentHash,
-        storagePath: '',
-        fileSize: buffer.length,
-        txnCount,
-        parsedAt: new Date(),
-      },
-    })
-
-    await logActivity('anonymous', 'STATEMENT_PARSE_SUCCESS', statement.id, {
-      fileName,
-      txnCount,
-      bank: localResult.bank || 'unknown',
-    })
-  } catch (e) {
-    console.error('[persistStatement]', e)
-  }
 }
