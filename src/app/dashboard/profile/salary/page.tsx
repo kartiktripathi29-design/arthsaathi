@@ -69,7 +69,11 @@ interface MonthData {
   gross: number
   net: number
   deductions: number
-  source: 'actual' | 'projected' | 'edited'
+  // 'actual'   = uploaded slip for this exact month
+  // 'inferred' = filled in from another month's slip per the confirmed pattern (v7 ◆ marker)
+  // 'edited'   = user manually changed values
+  // 'projected'= forecast (Forecast intent — gets the 🔮 dashed-border render)
+  source: 'actual' | 'inferred' | 'edited' | 'projected'
   earnings?: Earning[]
   deductionsList?: Earning[]
 }
@@ -87,30 +91,58 @@ interface Employment {
 // Intent (PRD v6) — two options only. Drives which questions the wizard asks.
 type Intent = 'validate' | 'forecast'
 
+// v7 §FY Inference Logic
+// A slip dated YYYY-MM belongs to FY starting Apr Y-1 (if MM ≤ 3) or Apr Y (otherwise).
+// Validate uses that FY directly. Forecast uses the next FY (year after the latest slip's FY).
+function slipFyStartYear(year: number, monthNum: number): number {
+  return monthNum >= 4 ? year : year - 1
+}
+function inferFyStartYear(slipDates: { year: number; monthNum: number }[], intent: Intent): number {
+  if (slipDates.length === 0) return new Date().getMonth() + 1 >= 4 ? new Date().getFullYear() : new Date().getFullYear() - 1
+  // Use the latest slip to anchor.
+  const latest = [...slipDates].sort((a, b) => (b.year - a.year) || (b.monthNum - a.monthNum))[0]
+  const slipFy = slipFyStartYear(latest.year, latest.monthNum)
+  return intent === 'forecast' ? slipFy + 1 : slipFy
+}
+
+// A confirmed slip-to-month-range mapping inferred from slip dates.
+// Each range covers monthFrom..monthTo (inclusive, YYYY-MM string compare) and
+// uses the named source slip as the salary template.
+interface PeriodMapping {
+  fromMonth: string
+  toMonth: string
+  sourceSlipId: string  // id of the slip whose components fill these months
+}
+
+interface ForecastChange {
+  kind: 'increment' | 'job_switch' | 'bonus_timing' | 'other'
+  monthApplies: string      // YYYY-MM — the month the change takes effect
+  retroactive: boolean
+  retroFromMonth: string    // YYYY-MM — only if retroactive
+  amountMode: 'pct' | 'abs' // which input the user is using
+  amountPct: number         // e.g. 10 for 10%
+  amountAbs: number         // absolute new monthly salary in ₹
+}
+
 interface WizardData {
   intent: Intent | null
-  employmentChanges: number | null
-  changeMonth: string
-  employer1HasSlips: string
-  employer1IncrementMonth: string
-  employer1IncrementPercent: number
-  employer1Retroactive: boolean
-  employer2UseBase: boolean | null
-  // Validate intent Q1–Q6 (v6 §Intent A)
-  validateCompleteData: boolean | null      // Q1
-  validateSameAllYear: 'yes' | 'no' | 'partial' | null  // Q2
-  validateChangedEmployer: boolean | null   // Q3
-  validateHadIncrement: boolean | null      // Q4
-  validateFreelanceMonths: string[]         // Q5 — months user freelanced (gap or alongside)
-  validateBonusMonths: string[]             // Q6 — months with bonus / one-time payments
+  // v7 Step 3: confirmation of each parsed slip (yes / no→edit). Keyed by slip id.
+  slipConfirmations: Record<string, 'confirmed' | 'edit'>
+  // v7 Step 3: confirmed mapping of date-range → source slip.
+  periodMapping: PeriodMapping[]
+  // v7 Step 3 Q4: months with bonuses or one-time payments.
+  bonusMonths: string[]
+  // v7 Step 3 Q5: forecast-only — expected change(s). Single change for MVP.
+  forecastChange: ForecastChange | null
 }
 
 type WizardStep =
   | 'intent-pick'
-  // Validate intent — 6 sequential questions per v6 §Intent A
-  | 'validate-q1' | 'validate-q2' | 'validate-q3' | 'validate-q4' | 'validate-q5' | 'validate-q6'
-  // Forecast intent reuses these existing steps
-  | 'step1' | 'step2a' | 'step2b-employer1' | 'step2b-employer2' | 'step3'
+  | 'confirm-periods'   // v7 Q1 — confirm each parsed slip's period
+  | 'forecast-changes'  // v8: Forecast intent — asked right after slip confirmation
+  | 'confirm-pattern'   // v7 Q2 — confirm the inferred date-range → slip mapping
+  | 'remap-periods'     // v7 Q3 — only when user says "No" at confirm-pattern
+  | 'bonuses'           // v7 Q4
   | 'review'
 
 export default function SalaryPageCompleteFinal() {
@@ -171,19 +203,10 @@ export default function SalaryPageCompleteFinal() {
 
   const [wizard, setWizard] = useState<WizardData>({
     intent: null,
-    employmentChanges: null,
-    changeMonth: '',
-    employer1HasSlips: '',
-    employer1IncrementMonth: '',
-    employer1IncrementPercent: 0,
-    employer1Retroactive: false,
-    employer2UseBase: null,
-    validateCompleteData: null,
-    validateSameAllYear: null,
-    validateChangedEmployer: null,
-    validateHadIncrement: null,
-    validateFreelanceMonths: [],
-    validateBonusMonths: [],
+    slipConfirmations: {},
+    periodMapping: [],
+    bonusMonths: [],
+    forecastChange: null,
   })
 
   useEffect(() => {
@@ -192,8 +215,19 @@ export default function SalaryPageCompleteFinal() {
       try {
         const parsed = JSON.parse(data)
         const slipsArray = Array.isArray(parsed) ? parsed : []
-        setSlips(slipsArray)
-        detectFY(slipsArray)
+        // Dedupe by (year, month) — keep the LAST occurrence so newer uploads override older ones.
+        const seen = new Map<string, any>()
+        for (const s of slipsArray) {
+          const key = `${s?.year || ''}|${String(s?.month || '').toLowerCase()}`
+          if (key !== '|') seen.set(key, s)
+        }
+        const deduped = Array.from(seen.values())
+        // If we collapsed anything, write the clean version back so we don't repeat the dedupe forever.
+        if (deduped.length !== slipsArray.length) {
+          try { localStorage.setItem('av_salary_timeline', JSON.stringify(deduped)) } catch {}
+        }
+        setSlips(deduped)
+        detectFY(deduped)
       } catch (e) {
         console.error('Failed to load:', e)
       }
@@ -220,214 +254,114 @@ export default function SalaryPageCompleteFinal() {
     setFyStartYear(fy)
   }
 
-  const buildEmploymentsFromWizard = () => {
-    if (!slips || slips.length === 0) return
-
-    const changeMonthNum = parseInt(wizard.changeMonth.split('-')[1])
-    const allFYMonths = fyMonths(fyStartYear)
-
-    // Separate slips by employment period.
-    // Compare on full YYYY-MM keys (lexicographic) so the FY wrap (Jan-Mar belongs after Dec) is correct.
-    const slipKeyOf = (s: any) => `${s.year}-${String(monthToNum(s.month)).padStart(2, '0')}`
-    const employer1Slips = slips.filter(s => slipKeyOf(s) < wizard.changeMonth)
-    const employer2Slips = slips.filter(s => slipKeyOf(s) >= wizard.changeMonth)
-
-    const newEmployments: Employment[] = []
-
-    // EMPLOYER 1 (Apr - before change month)
-    const e1From = `${fyStartYear}-04`
-    const e1To = `${fyStartYear}-${String(changeMonthNum - 1).padStart(2, '0')}`
-    const e1Name = employer1Slips.length > 0 ? (employer1Slips[0].employerName || 'Employer 1') : 'Employer 1'
-
-    // Helper: from a base slip, split earnings into recurring vs one-time.
-    // Projections only carry recurring earnings forward (e.g. Bonus paid in Apr
-    // should NOT repeat May–Sep).
-    const splitRecurring = (baseSlip: any) => {
-      const earnings = (baseSlip?.components || []).filter((c: any) => c.type === 'earning')
-      const deductions = (baseSlip?.components || []).filter((c: any) => c.type === 'deduction')
-      const flagged = earnings.map((e: any) => ({ ...e, frequency: e.frequency || (e.flag === 'recurring' ? 'monthly' : e.flag === 'one_time' ? 'one_time' : defaultFrequency(e.label)) }))
-      // Only monthly carries forward into adjacent months.
-      const recurringEarnings = flagged.filter((e: any) => e.frequency === 'monthly')
-      const recurringGross = recurringEarnings.reduce((s: number, e: any) => s + (e.amount || 0), 0)
-      const totalDed = deductions.reduce((s: number, d: any) => s + (d.amount || 0), 0)
-      const recurringNet = recurringGross - totalDed
-      return { recurringEarnings, deductions, recurringGross, recurringNet, allEarnings: flagged }
+  // Attach a stable id + parsed date to each slip so the wizard can reference them.
+  const slipsWithMeta = useMemo(() => slips.map((s, i) => {
+    const monthNum = monthToNum(s.month)
+    const year = parseInt(s.year) || new Date().getFullYear()
+    const monthKey = `${year}-${String(monthNum).padStart(2, '0')}`
+    return {
+      raw: s,
+      id: s.id || `slip-${i}-${monthKey}`,
+      year, monthNum, monthKey,
+      fyStart: slipFyStartYear(year, monthNum),
     }
+  }), [slips])
 
-    const e1BaseSlip = employer1Slips.length > 0 ? employer1Slips[0] : null
-    const e1Split = splitRecurring(e1BaseSlip)
-    // Actual-slip total for the base month itself (preserved as-is); projections use the recurring-only totals.
-    const e1BaseGross = e1BaseSlip?.grossSalary || e1BaseSlip?.basicSalary || 0
-    const e1BaseNet = e1BaseSlip?.netSalary || e1BaseSlip?.basicSalary || 0
-    const e1ProjGross = e1Split.recurringGross > 0 ? e1Split.recurringGross : e1BaseGross
-    const e1ProjNet = e1Split.recurringGross > 0 ? e1Split.recurringNet : e1BaseNet
-    const e1BaseEarnings = e1Split.recurringEarnings
-    const e1BaseDeductions = e1Split.deductions
-
-    const e1Months: MonthData[] = allFYMonths.map(mk => {
-      // FY-correct comparison: Jan-Mar of the next year are AFTER Dec, not before Apr.
-      if (mk >= wizard.changeMonth) {
-        return {
-          monthKey: mk,
-          gross: 0,
-          net: 0,
-          deductions: 0,
-          source: 'projected',
-          earnings: [],
-          deductionsList: [],
-        }
-      }
-
-      const slip = employer1Slips.find(s => {
-        const slipKey = `${s.year}-${String(monthToNum(s.month)).padStart(2, '0')}`
-        return slipKey === mk
-      })
-
-      if (slip) {
-        return {
-          monthKey: mk,
-          gross: slip.grossSalary || slip.basicSalary || 0,
-          net: slip.netSalary || slip.basicSalary || 0,
-          deductions: (slip.grossSalary || 0) - (slip.netSalary || 0),
-          source: 'actual',
-          earnings: slip.components?.filter((c: any) => c.type === 'earning') || [],
-          deductionsList: slip.components?.filter((c: any) => c.type === 'deduction') || [],
-        }
-      }
-
-      // Project for missing months with increment logic.
-      // Use the recurring-only totals so one-time components (bonus, joining, etc.) don't carry forward.
-      if (e1ProjGross > 0) {
-        const incrementFactor = 1 + (wizard.employer1IncrementPercent / 100)
-
-        let grossSalary = e1ProjGross
-        let netSalary = e1ProjNet
-
-        if (wizard.employer1IncrementMonth) {
-          if (wizard.employer1Retroactive) {
-            grossSalary = Math.round(e1ProjGross * incrementFactor)
-            netSalary = Math.round(e1ProjNet * (incrementFactor))
-          } else if (mk >= wizard.employer1IncrementMonth) {
-            grossSalary = Math.round(e1ProjGross * incrementFactor)
-            netSalary = Math.round(e1ProjNet * (incrementFactor))
-          }
-        }
-
-        return {
-          monthKey: mk,
-          gross: grossSalary,
-          net: netSalary,
-          deductions: grossSalary - netSalary,
-          source: 'projected',
-          earnings: e1BaseEarnings,
-          deductionsList: e1BaseDeductions,
-        }
-      }
-
-      return {
-        monthKey: mk,
-        gross: 0,
-        net: 0,
-        deductions: 0,
-        source: 'projected',
-        earnings: [],
-        deductionsList: [],
-      }
-    })
-
-    if (changeMonthNum > 4 || employer1Slips.length > 0) {
-      newEmployments.push({
-        id: 'emp-1',
-        name: e1Name,
-        fromMonth: e1From,
-        toMonth: e1To,
-        months: e1Months,
-        baseGross: e1BaseGross,
-        baseNet: e1BaseNet,
-      })
-    }
-
-    // EMPLOYER 2 (from change month to Mar)
-    const e2From = wizard.changeMonth
-    const e2To = `${fyStartYear + 1}-03`
-    const e2Name = employer2Slips.length > 0 ? (employer2Slips[0].employerName || 'Employer 2') : 'Employer 2'
-
-    const e2BaseSlip = employer2Slips[employer2Slips.length - 1]
-    const e2Split = splitRecurring(e2BaseSlip)
-    const e2BaseGross = e2BaseSlip?.grossSalary || e2BaseSlip?.basicSalary || 0
-    const e2BaseNet = e2BaseSlip?.netSalary || e2BaseSlip?.basicSalary || 0
-    const e2ProjGross = e2Split.recurringGross > 0 ? e2Split.recurringGross : e2BaseGross
-    const e2ProjNet = e2Split.recurringGross > 0 ? e2Split.recurringNet : e2BaseNet
-    const e2BaseEarnings = e2Split.recurringEarnings
-    const e2BaseDeductions = e2Split.deductions
-
-    const e2Months: MonthData[] = allFYMonths.map(mk => {
-      // FY-correct comparison: months before the change-month belong to Employment #1.
-      if (mk < wizard.changeMonth) {
-        return {
-          monthKey: mk,
-          gross: 0,
-          net: 0,
-          deductions: 0,
-          source: 'projected',
-          earnings: [],
-          deductionsList: [],
-        }
-      }
-
-      const slip = employer2Slips.find(s => {
-        const slipKey = `${s.year}-${String(monthToNum(s.month)).padStart(2, '0')}`
-        return slipKey === mk
-      })
-
-      if (slip) {
-        return {
-          monthKey: mk,
-          gross: slip.grossSalary || slip.basicSalary || 0,
-          net: slip.netSalary || slip.basicSalary || 0,
-          deductions: (slip.grossSalary || 0) - (slip.netSalary || 0),
-          source: 'actual',
-          earnings: slip.components?.filter((c: any) => c.type === 'earning') || [],
-          deductionsList: slip.components?.filter((c: any) => c.type === 'deduction') || [],
-        }
-      }
-
-      // Project using base salary — recurring only, so one-time components don't repeat.
-      if (wizard.employer2UseBase && e2ProjGross > 0) {
-        return {
-          monthKey: mk,
-          gross: e2ProjGross,
-          net: e2ProjNet,
-          deductions: e2ProjGross - e2ProjNet,
-          source: 'projected',
-          earnings: e2BaseEarnings,
-          deductionsList: e2BaseDeductions,
-        }
-      }
-
-      return {
-        monthKey: mk,
-        gross: 0,
-        net: 0,
-        deductions: 0,
-        source: 'projected',
-        earnings: [],
-        deductionsList: [],
-      }
-    })
-
-    newEmployments.push({
-      id: 'emp-2',
-      name: e2Name,
-      fromMonth: e2From,
-      toMonth: e2To,
-      months: e2Months,
-      baseGross: e2BaseGross,
-      baseNet: e2BaseNet,
-    })
-
-    setEmployments(newEmployments)
+  function nextMonthKey(mk: string): string {
+    const [y, m] = mk.split('-').map(Number)
+    return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
   }
+
+  // v7 default mapping: for Validate, each slip covers from (previous slip month + 1) to its own month;
+  // the last slip extends through Mar. For Forecast, the latest slip covers the whole forecast FY.
+  const defaultPeriodMapping = (intent: Intent, fyStart: number): PeriodMapping[] => {
+    if (slipsWithMeta.length === 0) return []
+    const fyEnd = `${fyStart + 1}-03`
+    if (intent === 'forecast') {
+      const latest = [...slipsWithMeta].sort((a, b) => b.monthKey.localeCompare(a.monthKey))[0]
+      return [{ fromMonth: `${fyStart}-04`, toMonth: fyEnd, sourceSlipId: latest.id }]
+    }
+    // Validate: only slips whose FY matches the inferred FY.
+    const inFY = slipsWithMeta.filter(s => s.fyStart === fyStart).sort((a, b) => a.monthKey.localeCompare(b.monthKey))
+    if (inFY.length === 0) {
+      const latest = [...slipsWithMeta].sort((a, b) => b.monthKey.localeCompare(a.monthKey))[0]
+      return [{ fromMonth: `${fyStart}-04`, toMonth: fyEnd, sourceSlipId: latest.id }]
+    }
+    const mappings: PeriodMapping[] = []
+    let prev = `${fyStart}-04`
+    for (let i = 0; i < inFY.length; i++) {
+      const s = inFY[i]
+      const isLast = i === inFY.length - 1
+      const to = isLast ? fyEnd : s.monthKey
+      mappings.push({ fromMonth: prev, toMonth: to, sourceSlipId: s.id })
+      prev = nextMonthKey(s.monthKey)
+    }
+    return mappings
+  }
+
+  // v7 build: turn the confirmed period mapping into a 12-month timeline. Single employment.
+  const buildEmploymentsFromMapping = () => {
+    if (!wizard.intent || slipsWithMeta.length === 0) return
+    const dates = slipsWithMeta.map(m => ({ year: m.year, monthNum: m.monthNum }))
+    const fyStart = inferFyStartYear(dates, wizard.intent)
+    setFyStartYear(fyStart)
+
+    const mapping = wizard.periodMapping.length > 0 ? wizard.periodMapping : defaultPeriodMapping(wizard.intent, fyStart)
+    const allFY = fyMonths(fyStart)
+    const slipById = new Map(slipsWithMeta.map(s => [s.id, s]))
+
+    const months: MonthData[] = allFY.map(mk => {
+      const range = mapping.find(r => mk >= r.fromMonth && mk <= r.toMonth)
+      const src = range ? slipById.get(range.sourceSlipId) : undefined
+      if (!src) {
+        return { monthKey: mk, gross: 0, net: 0, deductions: 0, source: 'projected', earnings: [], deductionsList: [] }
+      }
+      const slip = src.raw
+      const gross = slip.grossSalary || slip.basicSalary || 0
+      const net = slip.netSalary || slip.basicSalary || 0
+      const earnings = (slip.components || []).filter((c: any) => c.type === 'earning')
+      const deductionsList = (slip.components || []).filter((c: any) => c.type === 'deduction')
+      // Forecast: everything in the future FY is projected (🔮). Validate: 'actual' iff exact match, else 'inferred' (◆).
+      const source: MonthData['source'] = wizard.intent === 'forecast'
+        ? 'projected'
+        : (mk === src.monthKey ? 'actual' : 'inferred')
+      return { monthKey: mk, gross, net, deductions: gross - net, source, earnings, deductionsList }
+    })
+
+    // Forecast: apply the expected change to months at/after the apply month (and from retroFromMonth if retroactive).
+    if (wizard.intent === 'forecast' && wizard.forecastChange) {
+      const fc = wizard.forecastChange
+      const factor = fc.amountPct > 0 ? 1 + fc.amountPct / 100 : 1
+      const newAbs = fc.amountAbs > 0 ? fc.amountAbs : 0
+      const apply = (m: MonthData): MonthData => {
+        const newGross = newAbs > 0 ? newAbs : Math.round(m.gross * factor)
+        const ratio = m.gross > 0 ? newGross / m.gross : 1
+        return {
+          ...m,
+          gross: newGross,
+          net: Math.round(m.net * ratio),
+          deductions: Math.round((m.deductions || 0) * ratio),
+          earnings: (m.earnings || []).map(e => ({ ...e, amount: Math.round((e.amount || 0) * ratio) })),
+        }
+      }
+      const fromKey = fc.retroactive && fc.retroFromMonth ? fc.retroFromMonth : fc.monthApplies
+      for (let i = 0; i < months.length; i++) {
+        if (months[i].monthKey >= fromKey) months[i] = apply(months[i])
+      }
+    }
+
+    const empName = (slipsWithMeta[0]?.raw?.employerName) || 'Employment'
+    setEmployments([{
+      id: 'emp-v7',
+      name: empName,
+      fromMonth: `${fyStart}-04`,
+      toMonth: `${fyStart + 1}-03`,
+      months,
+      baseGross: months[0]?.gross || 0,
+      baseNet: months[0]?.net || 0,
+    }])
+  }
+
 
   const updateMonth = (employmentId: string, monthKey: string, gross: number, net: number) => {
     setEmployments(prev =>
@@ -815,9 +749,8 @@ export default function SalaryPageCompleteFinal() {
             { id: 'forecast', title: 'Forecast — I expect salary changes (increment / job switch)', desc: 'Show me the impact if my salary changes (increment, bonus timing, new employer).' },
           ]
           const pickIntent = (id: Intent) => {
-            setWizard(prev => ({ ...prev, intent: id }))
-            if (id === 'validate') setWizardStep('validate-q1')
-            else setWizardStep('step1')   // existing increment wizard powers Forecast
+            setWizard(prev => ({ ...prev, intent: id, periodMapping: [], slipConfirmations: {} }))
+            setWizardStep('confirm-periods')
           }
           return (
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24 }}>
@@ -839,326 +772,284 @@ export default function SalaryPageCompleteFinal() {
           )
         })()}
 
-        {/* ── Validate flow (Q1–Q6 per v6) — small reusable building blocks ── */}
-        {(['validate-q1','validate-q2','validate-q3','validate-q4','validate-q5','validate-q6'] as const).includes(wizardStep as any) && (() => {
-          const yes = (v: any) => v === true || v === 'yes'
-          const no  = (v: any) => v === false || v === 'no'
-
-          const PrevBack = (toStep: WizardStep) => (
-            <button onClick={() => setWizardStep(toStep)} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
-          )
-          const NextBtn = (disabled: boolean, onClick: () => void, label = 'Next →') => (
-            <button disabled={disabled} onClick={onClick} style={{ flex: 1, padding: '12px', background: disabled ? '#ccc' : C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: disabled ? 'default' : 'pointer', fontFamily: 'inherit' }}>{label}</button>
-          )
-          const StepShell = ({ qNum, title, sub, children, footer }: { qNum: number; title: string; sub?: string; children: React.ReactNode; footer: React.ReactNode }) => (
+        {/* ── v7 confirm-periods: confirm each parsed slip ── */}
+        {wizardStep === 'confirm-periods' && (() => {
+          const inferred = wizard.intent ? inferFyStartYear(slipsWithMeta.map(m => ({ year: m.year, monthNum: m.monthNum })), wizard.intent) : null
+          return (
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24 }}>
-              <p style={{ fontSize: 11, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Validate · Q{qNum} of 6</p>
-              <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 6px' }}>{title}</h2>
-              {sub ? <p style={{ fontSize: 13, color: C.muted, margin: '0 0 16px' }}>{sub}</p> : null}
-              <div style={{ marginBottom: 16 }}>{children}</div>
-              <div style={{ display: 'flex', gap: 12 }}>{footer}</div>
+              <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 6px' }}>I found {slipsWithMeta.length} salary slip{slipsWithMeta.length !== 1 ? 's' : ''}. Let me confirm the periods.</h2>
+              {inferred !== null && (
+                <p style={{ fontSize: 13, color: C.muted, margin: '0 0 16px' }}>
+                  Building timeline for <strong>FY {inferred}-{inferred + 1}</strong> (Apr {inferred} – Mar {inferred + 1}){wizard.intent === 'forecast' ? ' — FORECAST' : ''}.
+                </p>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                {slipsWithMeta.map(s => {
+                  const status = wizard.slipConfirmations[s.id]
+                  return (
+                    <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', border: `1px solid ${C.border}`, borderRadius: 6, background: C.bg }}>
+                      <div>
+                        <p style={{ fontSize: 13, fontWeight: 600, color: C.text, margin: 0 }}>{monthLabel(s.monthKey)} · {s.raw.employerName || 'Employer'}</p>
+                        <p style={{ fontSize: 11, color: C.muted, margin: '2px 0 0' }}>Gross {fmt(s.raw.grossSalary || s.raw.basicSalary || 0)} · Net {fmt(s.raw.netSalary || 0)}</p>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button onClick={() => setWizard(prev => ({ ...prev, slipConfirmations: { ...prev.slipConfirmations, [s.id]: 'confirmed' } }))} style={{ padding: '6px 12px', background: status === 'confirmed' ? '#2A7A4A' : '#fff', color: status === 'confirmed' ? '#fff' : C.fg, border: `1px solid ${status === 'confirmed' ? '#2A7A4A' : C.border}`, borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>✓ Yes</button>
+                        <button onClick={() => setWizard(prev => ({ ...prev, slipConfirmations: { ...prev.slipConfirmations, [s.id]: 'edit' } }))} style={{ padding: '6px 12px', background: status === 'edit' ? '#E07B3A' : '#fff', color: status === 'edit' ? '#fff' : C.fg, border: `1px solid ${status === 'edit' ? '#E07B3A' : C.border}`, borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Edit</button>
+                        <button
+                          onClick={() => {
+                            if (!window.confirm(`Delete ${monthLabel(s.monthKey)} salary slip? This can't be undone.`)) return
+                            const nextSlips = slips.filter((raw: any, idx: number) => {
+                              const k = `${raw?.year || ''}|${String(raw?.month || '').toLowerCase()}`
+                              const sk = `${s.year}|${String(s.raw.month || '').toLowerCase()}`
+                              return !(k === sk && (raw.id === s.raw.id || idx === slips.indexOf(s.raw)))
+                            })
+                            setSlips(nextSlips)
+                            try { localStorage.setItem('av_salary_timeline', JSON.stringify(nextSlips)) } catch {}
+                            setWizard(prev => {
+                              const { [s.id]: _, ...rest } = prev.slipConfirmations
+                              return {
+                                ...prev,
+                                slipConfirmations: rest,
+                                periodMapping: prev.periodMapping.filter(r => r.sourceSlipId !== s.id),
+                              }
+                            })
+                          }}
+                          title="Delete this slip"
+                          style={{ padding: '6px 10px', background: '#fff', color: C.danger, border: `1px solid ${C.danger}`, borderRadius: 4, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', lineHeight: 1 }}
+                        >×</button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              {slipsWithMeta.some(s => wizard.slipConfirmations[s.id] === 'edit') && (
+                <p style={{ fontSize: 11, color: '#A14B12', margin: '0 0 12px' }}>Slips marked "Edit" can be corrected on the timeline after build (click the cell → Edit breakdown).</p>
+              )}
+              {slipsWithMeta.length > 0 && (
+                <div style={{ marginBottom: 12, textAlign: 'right' }}>
+                  <button
+                    onClick={() => {
+                      if (!window.confirm(`Delete all ${slipsWithMeta.length} uploaded slip(s)? This will reset the timeline.`)) return
+                      setSlips([])
+                      setEmployments([])
+                      try {
+                        localStorage.removeItem('av_salary_timeline')
+                        localStorage.removeItem('av_selected_fy')
+                      } catch {}
+                      setWizard(prev => ({ ...prev, slipConfirmations: {}, periodMapping: [], bonusMonths: [], forecastChange: null }))
+                      router.push('/dashboard/profile/documents')
+                    }}
+                    style={{ background: 'transparent', border: 'none', color: C.danger, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', padding: 0, textDecoration: 'underline' }}
+                  >Clear all uploaded slips</button>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button onClick={() => setWizardStep('intent-pick')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
+                <button
+                  onClick={() => {
+                    // Seed the default mapping; Forecast intent asks for the expected change next, then pattern confirmation.
+                    const mapping = defaultPeriodMapping(wizard.intent!, inferred ?? 0)
+                    setWizard(prev => ({ ...prev, periodMapping: mapping }))
+                    setWizardStep(wizard.intent === 'forecast' ? 'forecast-changes' : 'confirm-pattern')
+                  }}
+                  style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                >Next →</button>
+              </div>
             </div>
           )
-
-          const YesNo = (val: boolean | null, set: (v: boolean) => void) => (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <button onClick={() => set(true)} style={{ padding: 14, background: val === true ? C.wl : '#fff', border: `1px solid ${val === true ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, color: C.text }}>Yes</button>
-              <button onClick={() => set(false)} style={{ padding: 14, background: val === false ? C.wl : '#fff', border: `1px solid ${val === false ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, color: C.text }}>No</button>
-            </div>
-          )
-
-          if (wizardStep === 'validate-q1') {
-            return (
-              <StepShell
-                qNum={1}
-                title="Do you have complete salary data for the full FY?"
-                sub={`Apr ${fyStartYear} – Mar ${fyStartYear + 1}. You've uploaded ${slips.length} slip(s).`}
-                footer={<>
-                  {PrevBack('intent-pick')}
-                  {NextBtn(wizard.validateCompleteData === null, () => {
-                    if (wizard.validateCompleteData) {
-                      // Complete data: skip remaining questions, build directly
-                      setWizard(prev => ({ ...prev, employmentChanges: 0 }))
-                      buildEmploymentsFromWizard()
-                      setWizardStep('review')
-                    } else {
-                      setWizardStep('validate-q2')
-                    }
-                  }, wizard.validateCompleteData ? 'Build timeline →' : 'Next →')}
-                </>}
-              >
-                {YesNo(wizard.validateCompleteData, v => setWizard(prev => ({ ...prev, validateCompleteData: v })))}
-              </StepShell>
-            )
-          }
-
-          if (wizardStep === 'validate-q2') {
-            return (
-              <StepShell
-                qNum={2}
-                title="Did your salary stay the same throughout the year?"
-                sub="If yes, we'll use your uploaded slip as the representative month and repeat it for the full FY."
-                footer={<>
-                  {PrevBack('validate-q1')}
-                  {NextBtn(!wizard.validateSameAllYear, () => setWizardStep('validate-q3'))}
-                </>}
-              >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {(['yes','no','partial'] as const).map(opt => (
-                    <button
-                      key={opt}
-                      onClick={() => setWizard(prev => ({ ...prev, validateSameAllYear: opt }))}
-                      style={{ textAlign: 'left', padding: 14, background: wizard.validateSameAllYear === opt ? C.wl : '#fff', border: `1px solid ${wizard.validateSameAllYear === opt ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}
-                    >
-                      {opt === 'yes' ? 'Yes — same all 12 months' : opt === 'no' ? 'No — salary changed mid-year' : 'Partial — same most months, a few exceptions'}
-                    </button>
-                  ))}
-                </div>
-              </StepShell>
-            )
-          }
-
-          if (wizardStep === 'validate-q3') {
-            const allFY = fyMonths(fyStartYear)
-            return (
-              <StepShell
-                qNum={3}
-                title="Did you change employers during this FY?"
-                footer={<>
-                  {PrevBack('validate-q2')}
-                  {NextBtn(wizard.validateChangedEmployer === null || (yes(wizard.validateChangedEmployer) && !wizard.changeMonth), () => {
-                    setWizard(prev => ({ ...prev, employmentChanges: wizard.validateChangedEmployer ? 1 : 0 }))
-                    setWizardStep('validate-q4')
-                  })}
-                </>}
-              >
-                {YesNo(wizard.validateChangedEmployer, v => setWizard(prev => ({ ...prev, validateChangedEmployer: v, changeMonth: v ? prev.changeMonth : '' })))}
-                {yes(wizard.validateChangedEmployer) && (
-                  <div style={{ marginTop: 12 }}>
-                    <label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 6 }}>Which month did you join the new employer?</label>
-                    <select value={wizard.changeMonth} onChange={e => setWizard(prev => ({ ...prev, changeMonth: e.target.value }))} style={{ width: '100%', padding: '10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, fontFamily: 'inherit', background: '#fff', color: C.text }}>
-                      <option value="">Select month…</option>
-                      {allFY.map(mk => <option key={mk} value={mk}>{monthLabel(mk)}</option>)}
-                    </select>
-                  </div>
-                )}
-              </StepShell>
-            )
-          }
-
-          if (wizardStep === 'validate-q4') {
-            const allFY = fyMonths(fyStartYear)
-            return (
-              <StepShell
-                qNum={4}
-                title="Did you receive a salary increment?"
-                footer={<>
-                  {PrevBack('validate-q3')}
-                  {NextBtn(wizard.validateHadIncrement === null, () => setWizardStep('validate-q5'))}
-                </>}
-              >
-                {YesNo(wizard.validateHadIncrement, v => setWizard(prev => ({ ...prev, validateHadIncrement: v, employer1IncrementMonth: v ? prev.employer1IncrementMonth : '', employer1IncrementPercent: v ? prev.employer1IncrementPercent : 0 })))}
-                {yes(wizard.validateHadIncrement) && (
-                  <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <div>
-                      <label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 6 }}>From which month?</label>
-                      <select value={wizard.employer1IncrementMonth} onChange={e => setWizard(prev => ({ ...prev, employer1IncrementMonth: e.target.value }))} style={{ width: '100%', padding: '10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, fontFamily: 'inherit', background: '#fff', color: C.text }}>
-                        <option value="">Month…</option>
-                        {allFY.map(mk => <option key={mk} value={mk}>{monthLabel(mk)}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 6 }}>By how much (%)?</label>
-                      <input type="number" value={wizard.employer1IncrementPercent || ''} onChange={e => setWizard(prev => ({ ...prev, employer1IncrementPercent: parseFloat(e.target.value) || 0 }))} placeholder="e.g. 10" style={{ width: '100%', padding: '10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, fontFamily: 'inherit', color: C.text }} />
-                    </div>
-                    <label style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, color: C.text }}>
-                      <input type="checkbox" checked={wizard.employer1Retroactive} onChange={e => setWizard(prev => ({ ...prev, employer1Retroactive: e.target.checked }))} />
-                      Retroactive — applies from Apr onwards (arrears paid in increment month)
-                    </label>
-                  </div>
-                )}
-              </StepShell>
-            )
-          }
-
-          if (wizardStep === 'validate-q5') {
-            const allFY = fyMonths(fyStartYear)
-            const toggleMonth = (mk: string) => setWizard(prev => ({
-              ...prev,
-              validateFreelanceMonths: prev.validateFreelanceMonths.includes(mk) ? prev.validateFreelanceMonths.filter(m => m !== mk) : [...prev.validateFreelanceMonths, mk]
-            }))
-            return (
-              <StepShell
-                qNum={5}
-                title="Were you freelancing or had a gap before/during employment?"
-                sub="Tick the months. Freelance income belongs in the Other Income tab — we'll note these months for you."
-                footer={<>
-                  {PrevBack('validate-q4')}
-                  {NextBtn(false, () => setWizardStep('validate-q6'))}
-                </>}
-              >
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 6 }}>
-                  {allFY.map(mk => {
-                    const on = wizard.validateFreelanceMonths.includes(mk)
-                    return (
-                      <button key={mk} onClick={() => toggleMonth(mk)} style={{ padding: '8px 4px', background: on ? C.wm : '#fff', color: on ? '#fff' : C.text, border: `1px solid ${on ? C.wm : C.border}`, borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600 }}>
-                        {monthLabel(mk).split(' ')[0]}
-                      </button>
-                    )
-                  })}
-                </div>
-                <p style={{ fontSize: 11, color: C.muted, marginTop: 10, textAlign: 'center' }}>None selected = continuous salaried employment.</p>
-              </StepShell>
-            )
-          }
-
-          if (wizardStep === 'validate-q6') {
-            const allFY = fyMonths(fyStartYear)
-            const toggleMonth = (mk: string) => setWizard(prev => ({
-              ...prev,
-              validateBonusMonths: prev.validateBonusMonths.includes(mk) ? prev.validateBonusMonths.filter(m => m !== mk) : [...prev.validateBonusMonths, mk]
-            }))
-            return (
-              <StepShell
-                qNum={6}
-                title="Any bonuses or one-time payments?"
-                sub="Tick the months with bonuses. You can upload those specific slips after we build the timeline."
-                footer={<>
-                  {PrevBack('validate-q5')}
-                  {NextBtn(false, () => {
-                    buildEmploymentsFromWizard()
-                    setWizardStep('review')
-                  }, 'Build timeline →')}
-                </>}
-              >
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 6 }}>
-                  {allFY.map(mk => {
-                    const on = wizard.validateBonusMonths.includes(mk)
-                    return (
-                      <button key={mk} onClick={() => toggleMonth(mk)} style={{ padding: '8px 4px', background: on ? C.wm : '#fff', color: on ? '#fff' : C.text, border: `1px solid ${on ? C.wm : C.border}`, borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600 }}>
-                        {monthLabel(mk).split(' ')[0]}
-                      </button>
-                    )
-                  })}
-                </div>
-              </StepShell>
-            )
-          }
-
-          return null
         })()}
 
-        {wizardStep === 'step1' && (
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 16px' }}>Did you have employment changes?</h2>
-            <p style={{ fontSize: 13, color: C.muted, margin: '0 0 20px' }}>Between Apr {fyStartYear} and Mar {fyStartYear + 1}, did you change jobs?</p>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
-              <button onClick={() => { setWizard({ ...wizard, employmentChanges: 0 }); setWizardStep('step3') }} style={{ padding: 16, background: wizard.employmentChanges === 0 ? C.wl : '#fff', border: `1px solid ${wizard.employmentChanges === 0 ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, textAlign: 'left', fontWeight: 500, color: C.text }}>No, same employer</button>
-              <button onClick={() => { setWizard({ ...wizard, employmentChanges: 1 }); setWizardStep('step2a') }} style={{ padding: 16, background: wizard.employmentChanges === 1 ? C.wl : '#fff', border: `1px solid ${wizard.employmentChanges === 1 ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, textAlign: 'left', fontWeight: 500, color: C.text }}>Yes, 1 change (2 employers)</button>
-              <button onClick={() => { setWizard({ ...wizard, employmentChanges: 2 }); setWizardStep('step2a') }} style={{ padding: 16, background: wizard.employmentChanges === 2 ? C.wl : '#fff', border: `1px solid ${wizard.employmentChanges === 2 ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, textAlign: 'left', fontWeight: 500, color: C.text }}>Yes, 2+ changes (3+ employers)</button>
-            </div>
-          </div>
-        )}
+        {/* ── v8 forecast-changes: Forecast intent only, right after slip confirmation ── */}
+        {wizardStep === 'forecast-changes' && (() => {
+          const inferred = wizard.intent ? inferFyStartYear(slipsWithMeta.map(m => ({ year: m.year, monthNum: m.monthNum })), wizard.intent) : 0
+          const allFY = fyMonths(inferred)
+          const fc = wizard.forecastChange || { kind: 'increment' as const, monthApplies: '', retroactive: false, retroFromMonth: '', amountMode: 'pct' as const, amountPct: 0, amountAbs: 0 }
+          const update = (patch: Partial<ForecastChange>) => setWizard(prev => ({ ...prev, forecastChange: { ...(prev.forecastChange ?? fc), ...patch } }))
+          const skip = () => { setWizard(prev => ({ ...prev, forecastChange: null })); setWizardStep('confirm-pattern') }
+          return (
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 8px' }}>What changes are you expecting?</h2>
+              <p style={{ fontSize: 13, color: C.muted, margin: '0 0 16px' }}>Layer an expected change on top of the baseline. Skip if no change is expected.</p>
 
-        {wizardStep === 'step2a' && (
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 16px' }}>When did you change employers?</h2>
-            <p style={{ fontSize: 13, color: C.muted, margin: '0 0 20px' }}>Select the month when you switched.</p>
-            
-            <select value={wizard.changeMonth} onChange={(e) => setWizard({ ...wizard, changeMonth: e.target.value })} style={{ width: '100%', padding: '12px', fontSize: 13, borderRadius: 6, border: `1px solid ${C.border}`, fontFamily: 'inherit', marginBottom: 24 }}>
-              <option value="">-- Select month --</option>
-              {['apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec', 'jan', 'feb'].map((m, i) => (
-                <option key={i} value={`${fyStartYear}-${String((i + 4) % 12 || 12).padStart(2, '0')}`}>{m.charAt(0).toUpperCase() + m.slice(1)} {i < 9 ? fyStartYear : fyStartYear + 1}</option>
-              ))}
-            </select>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 12 }}>
+                {(['increment','job_switch','bonus_timing','other'] as const).map(k => (
+                  <button key={k} onClick={() => update({ kind: k })} style={{ padding: '10px', background: fc.kind === k ? C.wl : '#fff', border: `1px solid ${fc.kind === k ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: C.text, textAlign: 'center' }}>
+                    {k === 'increment' ? 'Increment' : k === 'job_switch' ? 'Job switch' : k === 'bonus_timing' ? 'Bonus timing' : 'One time payment'}
+                  </button>
+                ))}
+              </div>
 
-            <div style={{ display: 'flex', gap: 12 }}>
-              <button onClick={() => setWizardStep('step1')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
-              <button onClick={() => setWizardStep('step2b-employer1')} disabled={!wizard.changeMonth} style={{ flex: 1, padding: '12px', background: wizard.changeMonth ? C.fg : '#ccc', color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: wizard.changeMonth ? 'pointer' : 'default', fontFamily: 'inherit', opacity: wizard.changeMonth ? 1 : 0.5 }}>Next →</button>
-            </div>
-          </div>
-        )}
-
-        {wizardStep === 'step2b-employer1' && (
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 16px' }}>Employer 1: Do you have salary slips?</h2>
-            <p style={{ fontSize: 13, color: C.muted, margin: '0 0 20px' }}>For Apr {fyStartYear} to {monthLabel(wizard.changeMonth).split(' ')[0]} {fyStartYear}, which months do you have slips for?</p>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
-              <button onClick={() => setWizard({ ...wizard, employer1HasSlips: 'all' })} style={{ padding: 16, background: wizard.employer1HasSlips === 'all' ? C.wl : '#fff', border: `1px solid ${wizard.employer1HasSlips === 'all' ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, textAlign: 'left', fontWeight: 500, color: C.text }}>All months</button>
-              <button onClick={() => setWizard({ ...wizard, employer1HasSlips: 'some' })} style={{ padding: 16, background: wizard.employer1HasSlips === 'some' ? C.wl : '#fff', border: `1px solid ${wizard.employer1HasSlips === 'some' ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, textAlign: 'left', fontWeight: 500, color: C.text }}>Only some months</button>
-            </div>
-
-            {wizard.employer1HasSlips === 'some' && (
-              <div style={{ marginBottom: 24, padding: 16, background: C.wl, borderRadius: 6 }}>
-                <label style={{ display: 'block', fontSize: 12, color: C.muted, marginBottom: 12 }}>For months without slips, did you get an increment?</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 6 }}>Increment month</label>
-                    <select value={wizard.employer1IncrementMonth} onChange={(e) => setWizard({ ...wizard, employer1IncrementMonth: e.target.value })} style={{ width: '100%', padding: '8px', fontSize: 12, borderRadius: 4, border: `1px solid ${C.border}`, fontFamily: 'inherit' }}>
-                      <option value="">No increment</option>
-                      {['apr', 'may', 'jun', 'jul', 'aug', 'sep'].map((m, i) => (
-                        <option key={i} value={`${fyStartYear}-${String((i + 4) % 12 || 12).padStart(2, '0')}`}>{m}</option>
-                      ))}
-                    </select>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                <div>
+                  <label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 6 }}>When does it take effect?</label>
+                  <select value={fc.monthApplies} onChange={e => update({ monthApplies: e.target.value })} style={{ width: '100%', padding: '10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, fontFamily: 'inherit', background: '#fff', color: C.text }}>
+                    <option value="">Month…</option>
+                    {allFY.map(mk => <option key={mk} value={mk}>{monthLabel(mk)}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <label style={{ fontSize: 11, color: C.muted }}>How much?</label>
+                    <div style={{ display: 'flex', gap: 2 }}>
+                      <button
+                        type="button"
+                        onClick={() => update({ amountMode: 'pct', amountAbs: 0 })}
+                        style={{ padding: '2px 8px', background: fc.amountMode === 'abs' ? '#fff' : C.fg, color: fc.amountMode === 'abs' ? C.fg : '#fff', border: `1px solid ${C.fg}`, borderRadius: 3, fontSize: 10, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                      >%</button>
+                      <button
+                        type="button"
+                        onClick={() => update({ amountMode: 'abs', amountPct: 0 })}
+                        style={{ padding: '2px 8px', background: fc.amountMode === 'abs' ? C.fg : '#fff', color: fc.amountMode === 'abs' ? '#fff' : C.fg, border: `1px solid ${C.fg}`, borderRadius: 3, fontSize: 10, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                      >₹</button>
+                    </div>
                   </div>
-                  {wizard.employer1IncrementMonth && (
-                    <>
-                      <div>
-                        <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 6 }}>Increment % ({wizard.employer1IncrementPercent}%)</label>
-                        <input type="range" min="0" max="50" step="1" value={wizard.employer1IncrementPercent} onChange={(e) => setWizard({ ...wizard, employer1IncrementPercent: parseInt(e.target.value) })} style={{ width: '100%' }} />
-                      </div>
-                      <label style={{ display: 'flex', alignItems: 'center', fontSize: 12, color: C.text, gap: 8, cursor: 'pointer' }}>
-                        <input type="checkbox" checked={wizard.employer1Retroactive} onChange={(e) => setWizard({ ...wizard, employer1Retroactive: e.target.checked })} />
-                        Retroactive (applies to earlier months)
-                      </label>
-                    </>
+                  {fc.amountMode === 'abs' ? (
+                    <input type="number" value={fc.amountAbs || ''} onChange={e => update({ amountAbs: parseFloat(e.target.value) || 0 })} style={{ width: '100%', padding: '10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, fontFamily: 'inherit', color: C.text }} />
+                  ) : (
+                    <input type="number" value={fc.amountPct || ''} onChange={e => update({ amountPct: parseFloat(e.target.value) || 0 })} placeholder="e.g. 10 (%)" style={{ width: '100%', padding: '10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, fontFamily: 'inherit', color: C.text }} />
                   )}
                 </div>
               </div>
-            )}
 
-            <div style={{ display: 'flex', gap: 12 }}>
-              <button onClick={() => setWizardStep('step2a')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
-              <button onClick={() => setWizardStep('step2b-employer2')} disabled={!wizard.employer1HasSlips} style={{ flex: 1, padding: '12px', background: wizard.employer1HasSlips ? C.fg : '#ccc', color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: wizard.employer1HasSlips ? 'pointer' : 'default', fontFamily: 'inherit', opacity: wizard.employer1HasSlips ? 1 : 0.5 }}>Next →</button>
-            </div>
-          </div>
-        )}
+              <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, color: C.text, marginBottom: 6 }}>
+                <input type="checkbox" checked={fc.retroactive} onChange={e => update({ retroactive: e.target.checked })} />
+                Retroactive — applies from an earlier month
+              </label>
+              {fc.retroactive && (
+                <div style={{ marginBottom: 10 }}>
+                  <label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 6 }}>Retroactive from</label>
+                  <select value={fc.retroFromMonth} onChange={e => update({ retroFromMonth: e.target.value })} style={{ width: '100%', padding: '10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, fontFamily: 'inherit', background: '#fff', color: C.text }}>
+                    <option value="">Month…</option>
+                    {allFY.map(mk => <option key={mk} value={mk}>{monthLabel(mk)}</option>)}
+                  </select>
+                </div>
+              )}
 
-        {wizardStep === 'step2b-employer2' && (
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 16px' }}>Employer 2: Use base salary?</h2>
-            <p style={{ fontSize: 13, color: C.muted, margin: '0 0 20px' }}>For {monthLabel(wizard.changeMonth)} to Mar {fyStartYear + 1}, should I use your latest slip as base for all months?</p>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
-              <button onClick={() => setWizard({ ...wizard, employer2UseBase: true })} style={{ padding: 16, background: wizard.employer2UseBase === true ? C.wl : '#fff', border: `1px solid ${wizard.employer2UseBase === true ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, textAlign: 'left', fontWeight: 500, color: C.text }}>Yes, use latest slip as base</button>
-              <button onClick={() => setWizard({ ...wizard, employer2UseBase: false })} style={{ padding: 16, background: wizard.employer2UseBase === false ? C.wl : '#fff', border: `1px solid ${wizard.employer2UseBase === false ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, textAlign: 'left', fontWeight: 500, color: C.text }}>No, I'll enter each month</button>
+              <div style={{ display: 'flex', gap: 12, marginTop: 14 }}>
+                <button onClick={() => setWizardStep('confirm-periods')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
+                <button onClick={skip} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Skip — no change</button>
+                <button onClick={() => setWizardStep('confirm-pattern')} style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Next →</button>
+              </div>
             </div>
+          )
+        })()}
 
-            <div style={{ display: 'flex', gap: 12 }}>
-              <button onClick={() => setWizardStep('step2b-employer1')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
-              <button onClick={() => setWizardStep('step3')} disabled={wizard.employer2UseBase === null} style={{ flex: 1, padding: '12px', background: wizard.employer2UseBase !== null ? C.fg : '#ccc', color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: wizard.employer2UseBase !== null ? 'pointer' : 'default', fontFamily: 'inherit', opacity: wizard.employer2UseBase !== null ? 1 : 0.5 }}>Next →</button>
+        {/* ── v7 confirm-pattern: show inferred mapping, user confirms or remaps ── */}
+        {wizardStep === 'confirm-pattern' && (() => {
+          const slipById = new Map(slipsWithMeta.map(s => [s.id, s]))
+          const inferred = wizard.intent ? inferFyStartYear(slipsWithMeta.map(m => ({ year: m.year, monthNum: m.monthNum })), wizard.intent) : 0
+          return (
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 8px' }}>Based on these slips, I'm building your timeline like this. Does it look right?</h2>
+              <p style={{ fontSize: 13, color: C.muted, margin: '0 0 16px' }}>FY {inferred}-{inferred + 1}{wizard.intent === 'forecast' ? ' — FORECAST' : ''}</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+                {wizard.periodMapping.map((r, i) => {
+                  const src = slipById.get(r.sourceSlipId)
+                  return (
+                    <div key={i} style={{ padding: '10px 12px', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12 }}>
+                      <span style={{ color: C.text, fontWeight: 600 }}>{monthLabel(r.fromMonth)} → {monthLabel(r.toMonth)}</span>
+                      <span style={{ color: C.muted }}> · Using {src ? monthLabel(src.monthKey) : '?'} slip · {fmt(src?.raw?.grossSalary || src?.raw?.basicSalary || 0)}</span>
+                    </div>
+                  )
+                })}
+              </div>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button onClick={() => setWizardStep('confirm-periods')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
+                <button onClick={() => setWizardStep('remap-periods')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Remap…</button>
+                <button onClick={() => setWizardStep('bonuses')} style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Looks right →</button>
+              </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
 
-        {wizardStep === 'step3' && (
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 16px' }}>Any other increments?</h2>
-            <p style={{ fontSize: 13, color: C.muted, margin: '0 0 20px' }}>Did you get salary increments with Employer 2 (after {monthLabel(wizard.changeMonth)})?</p>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
-              <button onClick={() => { buildEmploymentsFromWizard(); setWizardStep('review') }} style={{ padding: 16, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, textAlign: 'left', fontWeight: 500, color: C.text }}>No, no more increments</button>
-              <button onClick={() => { buildEmploymentsFromWizard(); setWizardStep('review') }} style={{ padding: 16, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, textAlign: 'left', fontWeight: 500, color: C.text }}>Yes, but I'll add them in review</button>
+        {/* ── v7 remap-periods: per-month dropdown to pick source slip ── */}
+        {wizardStep === 'remap-periods' && (() => {
+          const inferred = wizard.intent ? inferFyStartYear(slipsWithMeta.map(m => ({ year: m.year, monthNum: m.monthNum })), wizard.intent) : 0
+          const allFY = fyMonths(inferred)
+          // Per-month source slip currently assigned (derived from periodMapping).
+          const monthSlipOf = (mk: string) => wizard.periodMapping.find(r => mk >= r.fromMonth && mk <= r.toMonth)?.sourceSlipId || ''
+          const setMonthSlip = (mk: string, slipId: string) => {
+            // Rewrite mapping: collapse to per-month entries, then merge adjacent same-slip ranges.
+            const perMonth = allFY.map(m => ({ from: m, to: m, slip: m === mk ? slipId : monthSlipOf(m) }))
+            const merged: PeriodMapping[] = []
+            for (const item of perMonth) {
+              if (!item.slip) continue
+              const last = merged[merged.length - 1]
+              if (last && last.sourceSlipId === item.slip && nextMonthKey(last.toMonth) === item.from) {
+                last.toMonth = item.to
+              } else {
+                merged.push({ fromMonth: item.from, toMonth: item.to, sourceSlipId: item.slip })
+              }
+            }
+            setWizard(prev => ({ ...prev, periodMapping: merged }))
+          }
+          return (
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 8px' }}>Pick which slip applies to each month</h2>
+              <p style={{ fontSize: 13, color: C.muted, margin: '0 0 16px' }}>Adjacent months with the same slip are merged into a range automatically.</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6, marginBottom: 16 }}>
+                {allFY.map(mk => (
+                  <div key={mk} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '6px 10px', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4 }}>
+                    <span style={{ fontSize: 12, color: C.text, fontWeight: 600, minWidth: 70 }}>{monthLabel(mk)}</span>
+                    <select value={monthSlipOf(mk)} onChange={e => setMonthSlip(mk, e.target.value)} style={{ flex: 1, padding: '4px 6px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, fontFamily: 'inherit', background: '#fff', color: C.text }}>
+                      <option value="">— None —</option>
+                      {slipsWithMeta.map(s => <option key={s.id} value={s.id}>{monthLabel(s.monthKey)}</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button onClick={() => setWizardStep('confirm-pattern')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
+                <button onClick={() => setWizardStep('bonuses')} style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Next →</button>
+              </div>
             </div>
+          )
+        })()}
 
-            <div style={{ display: 'flex', gap: 12 }}>
-              <button onClick={() => setWizardStep('step2b-employer2')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
-              <button onClick={() => { buildEmploymentsFromWizard(); setWizardStep('review') }} style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Review →</button>
+        {/* ── v7 bonuses: Q4 ── */}
+        {wizardStep === 'bonuses' && (() => {
+          const inferred = wizard.intent ? inferFyStartYear(slipsWithMeta.map(m => ({ year: m.year, monthNum: m.monthNum })), wizard.intent) : 0
+          const allFY = fyMonths(inferred)
+          const toggle = (mk: string) => setWizard(prev => ({
+            ...prev,
+            bonusMonths: prev.bonusMonths.includes(mk) ? prev.bonusMonths.filter(m => m !== mk) : [...prev.bonusMonths, mk],
+          }))
+          // v8: Forecast no longer collects increment pre-build. Always build the baseline
+          // timeline first; the user adds the scenario overlay from the review page.
+          const finishOrForecast = () => {
+            buildEmploymentsFromMapping()
+            setWizardStep('review')
+          }
+          return (
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 8px' }}>Any bonuses or one-time payments?</h2>
+              <p style={{ fontSize: 13, color: C.muted, margin: '0 0 16px' }}>Tick the months. You can upload those specific slips from the timeline after build.</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 6, marginBottom: 16 }}>
+                {allFY.map(mk => {
+                  const on = wizard.bonusMonths.includes(mk)
+                  return (
+                    <button key={mk} onClick={() => toggle(mk)} style={{ padding: '8px 4px', background: on ? C.wm : '#fff', color: on ? '#fff' : C.text, border: `1px solid ${on ? C.wm : C.border}`, borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600 }}>
+                      {monthLabel(mk).split(' ')[0]}
+                    </button>
+                  )
+                })}
+              </div>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button onClick={() => setWizardStep('confirm-pattern')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
+                <button
+                  onClick={() => { setWizard(prev => ({ ...prev, bonusMonths: [] })); finishOrForecast() }}
+                  style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}
+                >Skip — no bonuses</button>
+                <button onClick={finishOrForecast} style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  Build timeline →
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
+
+
+
       </div>
     )
   }
@@ -1167,7 +1058,10 @@ export default function SalaryPageCompleteFinal() {
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '20px 0' }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Salary</h1>
-      <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>FY {fyStartYear}-{fyStartYear + 1}</p>
+      <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>
+        FY {fyStartYear}-{fyStartYear + 1} (Apr {fyStartYear} – Mar {fyStartYear + 1})
+        {wizard.intent === 'forecast' ? ' · FORECAST' : ''}
+      </p>
 
       {/* Preview Modal - Salary Breakup */}
       {previewMonth && previewEmploymentId && (
@@ -1546,9 +1440,19 @@ export default function SalaryPageCompleteFinal() {
                     {emp.months.map(m => {
                       // Forecast intent: projected cells get the dashed-border 🔮 treatment per v6.
                       const isForecastCell = wizard.intent === 'forecast' && m.source === 'projected' && m.gross > 0
-                      const bg = m.source === 'actual' ? C.fg : m.source === 'edited' ? C.wm : C.border
-                      const fg = m.source === 'actual' || m.source === 'edited' ? '#fff' : C.muted
-                      const icon = isForecastCell ? '🔮' : m.source === 'actual' ? '●' : m.source === 'edited' ? '✎' : '○'
+                      const bg = m.source === 'actual' ? C.fg
+                        : m.source === 'edited' ? C.wm
+                        : m.source === 'inferred' ? '#D8D2C5'   // slightly darker than projected to differentiate ◆
+                        : C.border
+                      const fg = m.source === 'actual' || m.source === 'edited' ? '#fff'
+                        : m.source === 'inferred' ? C.fg
+                        : C.muted
+                      const icon = isForecastCell
+                        ? '🔮'
+                        : m.source === 'actual' ? '●'
+                        : m.source === 'edited' ? '✎'
+                        : m.source === 'inferred' ? '◆'
+                        : '○'
                       const anomaly = anomalyByMonth.get(m.monthKey)
                       const cellBorder = anomaly
                         ? `2px solid #E07B3A`
@@ -1578,7 +1482,7 @@ export default function SalaryPageCompleteFinal() {
                   <div style={{ display: 'flex', gap: 12, fontSize: 10.5, color: C.muted, marginBottom: 12, flexWrap: 'wrap' }}>
                     <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: C.fg, marginRight: 4 }} />Actual</span>
                     <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: C.wm, marginRight: 4 }} />Edited</span>
-                    <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: C.border, marginRight: 4 }} />Assumed</span>
+                    <span>◆ Inferred from another slip</span>
                     {wizard.intent === 'forecast' && (
                       <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, border: `1px dashed ${C.fg}`, marginRight: 4 }} />Forecast</span>
                     )}
@@ -1673,41 +1577,34 @@ export default function SalaryPageCompleteFinal() {
         ))}
       </div>
 
-      {/* ── Forecast scenarios (v6 §Intent B) — Baseline / Non-retro / Retro side by side. */}
-      {wizard.intent === 'forecast' && annualGross > 0 && (() => {
-        // Use the first actual/edited month in the first employment as the "current" baseline.
+      {/* ── Forecast scenarios (v7 §Intent B) — Baseline / Non-retro / Retro side by side. */}
+      {wizard.intent === 'forecast' && wizard.forecastChange && annualGross > 0 && (() => {
         const firstEmp = employments[0]
         if (!firstEmp) return null
-        const baseMonth = firstEmp.months.find(m => m.source === 'actual' || m.source === 'edited')
-        if (!baseMonth) return null
-        const baseGross = baseMonth.gross
-        const baseTDSPerMonth = (baseMonth.deductionsList || []).filter(d => /\b(tds|income\s*tax|i\.?t)\b/i.test(d.label)).reduce((s, d) => s + (d.amount || 0), 0)
-        const pct = wizard.employer1IncrementPercent || 0
-        const incrementMonth = wizard.employer1IncrementMonth
+        const baseSlip = slipsWithMeta[0]
+        if (!baseSlip) return null
+        const baseGross = baseSlip.raw.grossSalary || baseSlip.raw.basicSalary || 0
+        const baseTDSPerMonth = (baseSlip.raw.components || []).filter((d: any) => d.type === 'deduction' && /\b(tds|income\s*tax|i\.?t)\b/i.test(d.label || '')).reduce((s: number, d: any) => s + (d.amount || 0), 0)
+        const fc = wizard.forecastChange
         const allFY = fyMonths(fyStartYear)
-        // Find N = number of months before the increment month
-        const incrementIdx = incrementMonth ? allFY.indexOf(incrementMonth) : -1
-        const monthsBefore = incrementIdx > 0 ? incrementIdx : 0
-        const monthsAfter = incrementIdx > 0 ? (12 - incrementIdx) : 12
-        const newGross = Math.round(baseGross * (1 + pct / 100))
-        const newTDS = Math.round(baseTDSPerMonth * (1 + pct / 100))
+        const applyIdx = fc.monthApplies ? allFY.indexOf(fc.monthApplies) : -1
+        const monthsBefore = applyIdx > 0 ? applyIdx : 0
+        const monthsAfter = applyIdx >= 0 ? (12 - applyIdx) : 12
+        const factor = 1 + (fc.amountPct || 0) / 100
+        const newGross = fc.amountAbs > 0 ? fc.amountAbs : Math.round(baseGross * factor)
+        const newTDS = Math.round(baseTDSPerMonth * (newGross / Math.max(baseGross, 1)))
 
         const scenarios = [
-          {
-            id: 'baseline',
-            name: 'Baseline (no change)',
-            annualGross: baseGross * 12,
-            annualTDS: baseTDSPerMonth * 12,
-          },
+          { id: 'baseline', name: 'Baseline (no change)', annualGross: baseGross * 12, annualTDS: baseTDSPerMonth * 12 },
           {
             id: 'non_retro',
-            name: incrementMonth ? `Non-retro · from ${monthLabel(incrementMonth)}` : 'Non-retroactive change',
+            name: fc.monthApplies ? `Non-retro · from ${monthLabel(fc.monthApplies)}` : 'Non-retroactive change',
             annualGross: (baseGross * monthsBefore) + (newGross * monthsAfter),
             annualTDS: (baseTDSPerMonth * monthsBefore) + (newTDS * monthsAfter),
           },
-          ...(wizard.employer1Retroactive ? [{
+          ...(fc.retroactive ? [{
             id: 'retro',
-            name: `Retroactive · from Apr (arrears in ${incrementMonth ? monthLabel(incrementMonth) : 'increment month'})`,
+            name: `Retroactive · from ${fc.retroFromMonth ? monthLabel(fc.retroFromMonth) : 'Apr'} (arrears in ${fc.monthApplies ? monthLabel(fc.monthApplies) : 'change month'})`,
             annualGross: newGross * 12,
             annualTDS: newTDS * 12,
           }] : []),
@@ -1731,7 +1628,7 @@ export default function SalaryPageCompleteFinal() {
               ))}
             </div>
             <p style={{ fontSize: 11, color: C.muted, margin: '12px 0 0', textAlign: 'center' }}>
-              Scenarios derived from baseline slip × increment of {pct}%. Final tax liability is computed in Tax Summary.
+              Scenarios derived from baseline slip × {fc.amountPct}%. Final tax liability is computed in Tax Summary.
             </p>
           </div>
         )

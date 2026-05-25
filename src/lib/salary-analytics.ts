@@ -1,7 +1,7 @@
 // Pure helpers for salary-page analytics — confidence scoring, anomaly detection,
 // TDS aggregation. No side effects, no React. Safe to memoize.
 
-export type SourceKind = 'actual' | 'edited' | 'projected'
+export type SourceKind = 'actual' | 'inferred' | 'edited' | 'projected'
 
 export interface MonthLike {
   monthKey: string
@@ -39,7 +39,7 @@ export function computeConfidence(employments: EmploymentLike[]): ConfidenceResu
     for (const m of emp.months) {
       if (m.monthKey < emp.fromMonth || m.monthKey > emp.toMonth) continue
       totalInRange += 1
-      if (m.source === 'actual' || m.source === 'edited') actualCount += 1
+      if (m.source === 'actual' || m.source === 'edited' || m.source === 'inferred') actualCount += 1
     }
   }
 

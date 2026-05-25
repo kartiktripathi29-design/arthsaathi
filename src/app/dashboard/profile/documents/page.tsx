@@ -1,7 +1,6 @@
 'use client'
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import FYSelector from '@/components/FYSelector'
 import { seedIfMissing, verifyIdentity, setStoredIdentity } from '@/lib/identity'
 
 const C = { bg: '#FDFAF6', card: '#fff', border: '#E4DDD1', fg: '#1C2B22', muted: '#6B7770', primary: '#3A4B41' }
@@ -13,7 +12,6 @@ export default function DocumentsPage() {
   const [form26File, setForm26File] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<string>('')
-  const [showFYSelector, setShowFYSelector] = useState(false)
   const [parsedData, setParsedData] = useState<any>(null)
 
   const salaryRef = useRef<HTMLInputElement>(null)
@@ -110,12 +108,27 @@ export default function DocumentsPage() {
 
       const aggregated = { ...(results.find(r => r.status === 'fulfilled') as any)?.value?.json, data: allSlips, count: allSlips.length, _earliest: earliest }
       setParsedData(aggregated)
-      setShowFYSelector(true)
+      // v7: FY is inferred from slip dates on the salary page — skip the FY selector modal.
+      let existing: unknown
+      try { existing = JSON.parse(localStorage.getItem('av_salary_timeline') || '[]') } catch { existing = [] }
+      const existingArr = Array.isArray(existing) ? existing : []
+      // Merge + dedupe by (year, month) so re-uploading the same month replaces, not appends.
+      const merged = new Map<string, any>()
+      for (const s of existingArr) {
+        const k = `${s?.year || ''}|${String(s?.month || '').toLowerCase()}`
+        if (k !== '|') merged.set(k, s)
+      }
+      for (const s of allSlips) {
+        const k = `${s?.year || ''}|${String(s?.month || '').toLowerCase()}`
+        if (k !== '|') merged.set(k, s)
+      }
+      localStorage.setItem('av_salary_timeline', JSON.stringify(Array.from(merged.values())))
       setUploading(false)
       setUploadProgress('')
       if (failed.length > 0) {
         alert(`${allSlips.length} slip(s) parsed. ${failed.length} file(s) failed:\n\n${failed.join('\n')}`)
       }
+      router.push('/dashboard/profile/salary')
     } catch (e: any) {
       console.error('[Documents] Outer error:', e)
       alert(e.message || 'Upload failed')
@@ -124,15 +137,6 @@ export default function DocumentsPage() {
     }
   }
 
-  const handleFYSelect = (fy: string) => {
-    localStorage.setItem('av_selected_fy', fy)
-    let existing: unknown
-    try { existing = JSON.parse(localStorage.getItem('av_salary_timeline') || '[]') } catch { existing = [] }
-    const existingArr = Array.isArray(existing) ? existing : []
-    const incoming = Array.isArray(parsedData?.data) ? parsedData.data : []
-    localStorage.setItem('av_salary_timeline', JSON.stringify([...existingArr, ...incoming]))
-    router.push('/dashboard/profile/salary')
-  }
 
   const handleSkipToOtherIncome = () => {
     router.push('/dashboard/profile/other-income')
@@ -275,13 +279,6 @@ export default function DocumentsPage() {
         </button>
       </div>
       
-      {showFYSelector && parsedData?.data?.[0] && (
-        <FYSelector
-          month={parsedData.data[0].month}
-          year={parsedData.data[0].year}
-          onSelect={handleFYSelect}
-        />
-      )}
     </div>
   )
 }
