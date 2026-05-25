@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import type { EventType } from "../../generated/prisma/client";
+import type { EventType, Prisma } from "../../generated/prisma/client";
 
 export async function logActivity(
   userId: string,
@@ -13,7 +13,9 @@ export async function logActivity(
         userId,
         eventType,
         targetId: targetId ?? null,
-        metadata: metadata ?? {},
+        // Prisma's Json input type requires InputJsonValue, not Record<string, unknown>.
+        // The values are JSON-serializable in practice, so cast through unknown.
+        metadata: (metadata ?? {}) as unknown as Prisma.InputJsonValue,
       },
     });
   } catch (e) {
