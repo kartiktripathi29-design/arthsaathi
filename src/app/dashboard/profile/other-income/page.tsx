@@ -7,7 +7,7 @@ const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLoc
 
 interface OtherIncomeEntry {
   id: string
-  type: 'freelance' | 'equity' | 'crypto' | 'fno' | 'interest'
+  type: 'freelance' | 'equity' | 'crypto' | 'fno' | 'interest' | 'other'
   sourceName: string
   amount: number
   declarationMethod?: string
@@ -38,6 +38,7 @@ export default function OtherIncomePage() {
     { key: 'crypto', icon: '₿', label: 'Crypto / VDA', desc: 'Digital assets. Taxed at flat 30% — no deductions allowed.' },
     { key: 'fno', icon: '📊', label: 'F&O / Intraday', desc: 'Derivatives trading. Taxed at your slab rate.' },
     { key: 'interest', icon: '🏦', label: 'Interest & Dividends', desc: 'FD interest, savings interest, dividends. Taxed at slab rate.' },
+    { key: 'other', icon: '➕', label: 'Other Income', desc: 'Anything that doesn\'t fit above (royalties, casual income, gifts beyond limit, etc.) Single amount, taxed at slab.' },
   ]
 
   const getTaxablePreview = (entry: OtherIncomeEntry) => {
@@ -46,6 +47,7 @@ export default function OtherIncomePage() {
     if (entry.type === 'crypto') return entry.cryptoGains
     if (entry.type === 'fno') return entry.fnoNetProfit
     if (entry.type === 'interest') return entry.fdInterest + entry.savingsInterest + entry.dividends
+    if (entry.type === 'other') return entry.otherAmount || 0
     return 0
   }
 
@@ -59,7 +61,7 @@ export default function OtherIncomePage() {
   }
 
   const handleAdd = (type: string) => {
-    const newEntry: OtherIncomeEntry = { id: Date.now().toString(), type: type as any, sourceName: '', amount: 0, grossReceipts: 0, expenses: 0, ltcgGains: 0, stcgGains: 0, cryptoGains: 0, fnoNetProfit: 0, fdInterest: 0, savingsInterest: 0, dividends: 0, declarationMethod: 'presumptive_44ada' }
+    const newEntry: OtherIncomeEntry = { id: Date.now().toString(), type: type as any, sourceName: '', amount: 0, grossReceipts: 0, expenses: 0, ltcgGains: 0, stcgGains: 0, cryptoGains: 0, fnoNetProfit: 0, fdInterest: 0, savingsInterest: 0, dividends: 0, otherAmount: 0, declarationMethod: 'presumptive_44ada' }
     setOpenForm(newEntry)
     setMenuOpen(false)
   }
@@ -203,6 +205,19 @@ export default function OtherIncomePage() {
                   <div><label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>Savings account interest</label><input type="text" inputMode="numeric" value={openForm.savingsInterest} onChange={(e) => setOpenForm({ ...openForm, savingsInterest: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }} /><p style={{ fontSize: 10, color: C.muted, margin: '4px 0 0' }}>First ₹10,000 is tax-free (80TTA)</p></div>
                   <div><label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>Dividends</label><input type="text" inputMode="numeric" value={openForm.dividends} onChange={(e) => setOpenForm({ ...openForm, dividends: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }} /></div>
                 </>
+              )}
+
+              {openForm.type === 'other' && (
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>Amount (annual)</label>
+                  <input type="text" inputMode="numeric"
+                    value={openForm.otherAmount > 0 ? openForm.otherAmount : ''}
+                    onChange={(e) => setOpenForm({ ...openForm, otherAmount: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })}
+                    placeholder="₹0"
+                    style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }}
+                  />
+                  <p style={{ fontSize: 10.5, color: C.muted, margin: '4px 0 0' }}>Single number — gets added to your total income at slab rate. Use this for royalties, casual income, gifts beyond the ₹50k limit, or anything that doesn't fit the other categories.</p>
+                </div>
               )}
 
               <div style={{ padding: '12px 14px', background: C.wl, borderRadius: 5 }}>

@@ -73,8 +73,47 @@ function recommendITR(otherEntries: any[], totalIncome: number): { form: 'ITR-1'
 }
 
 // Slab-wise calculator that returns a breakdown for display.
+// Honors regime + senior-citizen status (old regime only — new regime slabs are flat).
+type SeniorStatus = 'normal' | 'senior' | 'super_senior'
 interface SlabRow { label: string; rate: number; inSlab: number; tax: number }
-function slabBreakdown(taxable: number, regime: 'new' | 'old'): { rows: SlabRow[]; basicTax: number; rebate: number; cess: number; total: number } {
+interface SlabResult { rows: SlabRow[]; basicTax: number; rebate: number; surcharge: number; cess: number; total: number }
+
+function oldRegimeSlabs(seniorStatus: SeniorStatus): [number, number, number, string][] {
+  if (seniorStatus === 'super_senior') {
+    return [
+      [0, 500000, 0, '₹0 – ₹5L'],
+      [500000, 1000000, 0.20, '₹5L – ₹10L'],
+      [1000000, Number.POSITIVE_INFINITY, 0.30, '₹10L+'],
+    ]
+  }
+  if (seniorStatus === 'senior') {
+    return [
+      [0, 300000, 0, '₹0 – ₹3L'],
+      [300000, 500000, 0.05, '₹3L – ₹5L'],
+      [500000, 1000000, 0.20, '₹5L – ₹10L'],
+      [1000000, Number.POSITIVE_INFINITY, 0.30, '₹10L+'],
+    ]
+  }
+  return [
+    [0, 250000, 0, '₹0 – ₹2.5L'],
+    [250000, 500000, 0.05, '₹2.5L – ₹5L'],
+    [500000, 1000000, 0.20, '₹5L – ₹10L'],
+    [1000000, Number.POSITIVE_INFINITY, 0.30, '₹10L+'],
+  ]
+}
+
+// Surcharge ladder. Old regime: 10/15/25/37%. New regime: capped at 25%.
+function calcSurcharge(taxableIncome: number, taxAfterRebate: number, regime: 'new' | 'old'): number {
+  if (taxableIncome <= 5000000) return 0
+  let rate = 0
+  if (taxableIncome <= 10000000) rate = 0.10
+  else if (taxableIncome <= 20000000) rate = 0.15
+  else if (taxableIncome <= 50000000) rate = 0.25
+  else rate = regime === 'new' ? 0.25 : 0.37
+  return taxAfterRebate * rate
+}
+
+function slabBreakdown(taxable: number, regime: 'new' | 'old', seniorStatus: SeniorStatus = 'normal'): SlabResult {
   const slabs: [number, number, number, string][] = regime === 'new'
     ? [
         [0, 400000, 0,     '₹0 – ₹4L'],
@@ -85,12 +124,7 @@ function slabBreakdown(taxable: number, regime: 'new' | 'old'): { rows: SlabRow[
         [2000000, 2400000, 0.25, '₹20L – ₹24L'],
         [2400000, Number.POSITIVE_INFINITY, 0.30, '₹24L+'],
       ]
-    : [
-        [0, 250000, 0,     '₹0 – ₹2.5L'],
-        [250000, 500000, 0.05, '₹2.5L – ₹5L'],
-        [500000, 1000000, 0.20, '₹5L – ₹10L'],
-        [1000000, Number.POSITIVE_INFINITY, 0.30, '₹10L+'],
-      ]
+    : oldRegimeSlabs(seniorStatus)
   const rows: SlabRow[] = []
   let basicTax = 0
   for (const [min, max, rate, label] of slabs) {
@@ -99,19 +133,71 @@ function slabBreakdown(taxable: number, regime: 'new' | 'old'): { rows: SlabRow[
     rows.push({ label, rate, inSlab, tax })
     basicTax += tax
   }
-  // 87A rebate
-  const rebate = regime === 'new'
-    ? (taxable <= 700000 ? Math.min(basicTax, 25000) : 0)
-    : (taxable <= 500000 ? Math.min(basicTax, 12500) : 0)
+  // 87A rebate (FY 2025-26):
+  //   New regime: taxable ≤ ₹12L → rebate up to ₹60k + marginal relief above ₹12L
+  //   Old regime: taxable ≤ ₹5L → rebate up to ₹12,500
+  let rebate = 0
+  if (regime === 'new') {
+    if (taxable <= 1200000) {
+      rebate = Math.min(basicTax, 60000)
+    } else {
+      const exceeds12L = taxable - 1200000
+      if (basicTax > exceeds12L) rebate = basicTax - exceeds12L
+    }
+  } else {
+    if (taxable <= 500000) rebate = Math.min(basicTax, 12500)
+  }
   const taxAfterRebate = Math.max(0, basicTax - rebate)
-  const cess = taxAfterRebate * 0.04
-  const total = Math.round(taxAfterRebate + cess)
-  return { rows, basicTax: Math.round(basicTax), rebate: Math.round(rebate), cess: Math.round(cess), total }
+  const surcharge = calcSurcharge(taxable, taxAfterRebate, regime)
+  const cess = (taxAfterRebate + surcharge) * 0.04
+  const total = Math.round(taxAfterRebate + surcharge + cess)
+  return {
+    rows,
+    basicTax: Math.round(basicTax),
+    rebate: Math.round(rebate),
+    surcharge: Math.round(surcharge),
+    cess: Math.round(cess),
+    total,
+  }
 }
 
 export default function TaxOptimizerPage() {
   const router = useRouter()
   const [calc, setCalc] = useState<any>(null)
+  const [calcError, setCalcError] = useState<string | null>(null)
+  // Senior-citizen status — affects old-regime slabs + 80D + 80TTB. Persisted locally.
+  const [seniorStatus, setSeniorStatus] = useState<SeniorStatus>('normal')
+  const [parentsSenior, setParentsSenior] = useState(false)
+
+  // Senior status sync — Deductions tab stores selfSenior/parentsSenior (binary 60+). The optimizer's
+  // own av_user_senior key can escalate self to 'super_senior' (80+). Read deductions first as the
+  // primary truth; only use the optimizer-only key if deductions says no.
+  useEffect(() => {
+    try {
+      const ded = JSON.parse(localStorage.getItem('av_deductions') || '{}')
+      const overlaySenior = localStorage.getItem('av_user_senior') as SeniorStatus | null
+      if (overlaySenior === 'super_senior') setSeniorStatus('super_senior')
+      else if (ded?.selfSenior || overlaySenior === 'senior') setSeniorStatus('senior')
+      if (ded?.parentsSenior) setParentsSenior(true)
+    } catch {}
+  }, [])
+  // Writes propagate to BOTH the deductions data and the optimizer overlay so the two tabs stay aligned.
+  const persistSenior = (s: SeniorStatus) => {
+    setSeniorStatus(s)
+    try {
+      localStorage.setItem('av_user_senior', s)
+      const ded = JSON.parse(localStorage.getItem('av_deductions') || '{}')
+      localStorage.setItem('av_deductions', JSON.stringify({ ...ded, selfSenior: s !== 'normal' }))
+    } catch {}
+  }
+  const persistParentsSenior = (v: boolean) => {
+    setParentsSenior(v)
+    try {
+      localStorage.setItem('av_user_parents_senior', String(v))
+      const ded = JSON.parse(localStorage.getItem('av_deductions') || '{}')
+      localStorage.setItem('av_deductions', JSON.stringify({ ...ded, parentsSenior: v }))
+    } catch {}
+  }
 
   useEffect(() => {
     const salary = localStorage.getItem('av_salary_timeline')
@@ -147,31 +233,72 @@ export default function TaxOptimizerPage() {
         hra.isMetro ? basicSalary * 0.5 : basicSalary * 0.4
       )) : 0
       const hraExempt = Math.round(hraExemptMonthly * 12)
-      const otherExempts = Number(exemptionsData.lta || 0) + Number(exemptionsData.medical || 0) + Number(exemptionsData.other || 0)
+      // Section 10 exemptions beyond HRA — wizard fields from the Exemptions tab.
+      // Caps enforced HERE (defence in depth) so a user entering an unrealistic figure
+      // in the form doesn't silently drop taxable income to zero in old regime.
+      //   LTA u/s 10(5):      effectively capped at ₹50,000 per 4-yr block (approx yearly cap ₹50k)
+      //   Superannuation:     exempt up to 15% of (basic + DA); approximated as 15% of monthly basic × 12
+      //   Gratuity u/s 10(10): cap ₹10,00,000 for non-govt (₹20L for govt) — using non-govt
+      //   Driver salary / Car maintenance / Daily allowance / PF withdrawal:
+      //     no statutory ₹ cap, but only valid under specific conditions (employer-provided car,
+      //     retirement, etc.). Trust user input but flag if total exemptions look excessive.
+      const ltaCap = 50000
+      const superannuationCap = Math.round((basicSalary * 12) * 0.15) || 0
+      const gratuityCap = 1000000
+      const ltaCapped = Math.min(Number(exemptionsData.lta || 0), ltaCap)
+      const superannuationCapped = superannuationCap > 0
+        ? Math.min(Number(exemptionsData.superannuation || 0), superannuationCap)
+        : Number(exemptionsData.superannuation || 0)
+      const gratuityCapped = Math.min(Number(exemptionsData.gratuity || 0), gratuityCap)
+      const otherExempts =
+        ltaCapped +
+        Number(exemptionsData.driverSalary || 0) +
+        Number(exemptionsData.carMaintenance || 0) +
+        Number(exemptionsData.dailyAllowance || 0) +
+        superannuationCapped +
+        Number(exemptionsData.pfWithdrawal || 0) +
+        gratuityCapped +
+        Number(exemptionsData.medical || 0) +
+        Number(exemptionsData.other || 0)
       const totalExemptions = hraExempt + otherExempts
 
       const sec80C = Math.min((deductionsData.ppf || 0) + (deductionsData.elss || 0) + (deductionsData.lic || 0) + (deductionsData.tuition || 0) + (deductionsData.nsc || 0), 150000)
-      const sec80D = Math.min((deductionsData.selfFamily || 0) + (deductionsData.parents || 0), 100000)
+      // 80D — caps depend on senior-citizen status of self and parents.
+      const selfCap = (seniorStatus !== 'normal') ? 50000 : 25000
+      const parentsCap = parentsSenior ? 50000 : 25000
+      const sec80DSelf = Math.min((deductionsData.selfFamily || 0), selfCap)
+      const sec80DParents = Math.min((deductionsData.parents || 0), parentsCap)
+      const sec80D = sec80DSelf + sec80DParents
       const sec24b = Math.min(deductionsData.homeLoanInterest || 0, 200000)
       const nps = Math.min(deductionsData.nps || 0, 50000)
-      const totalDeductions = sec80C + sec80D + sec24b + nps
+      // 80TTA (savings interest) — only available for non-seniors, capped at ₹10k
+      // 80TTB (savings + FD interest) — only available for seniors, capped at ₹50k
+      const sec80TTA = seniorStatus === 'normal' ? Math.min(deductionsData.savingsInterest80TTA || 0, 10000) : 0
+      const sec80TTB = seniorStatus !== 'normal' ? Math.min(deductionsData.interest80TTB || 0, 50000) : 0
+      // 80E (education loan interest) — no cap, full interest paid is deductible up to 8 yrs.
+      const sec80E = Math.max(0, deductionsData.eduLoanInterest80E || 0)
+      // 80G (donations) — user-entered amount; we trust the user's qualifying calc (50%/100% subject to limits).
+      const sec80G = Math.max(0, deductionsData.donations80G || 0)
+      const totalDeductions = sec80C + sec80D + sec24b + nps + sec80TTA + sec80TTB + sec80E + sec80G
 
       const stdDedNew = 75000
       const stdDedOld = 50000
 
       const subTotalNew = grossSalary + otherIncome
-      const taxableNew = Math.max(0, subTotalNew - stdDedNew - totalExemptions)
+      // New regime DISABLES Section 10 exemptions (HRA, LTA, etc.) and Chapter VI-A deductions.
+      // Only standard deduction (₹75k) and employer NPS 80CCD(2) survive. So no HRA subtraction here.
+      const taxableNew = Math.max(0, subTotalNew - stdDedNew)
       const subTotalOld = grossSalary + otherIncome
       const taxableOld = Math.max(0, subTotalOld - stdDedOld - totalExemptions - totalDeductions)
 
-      const newBreak = slabBreakdown(taxableNew, 'new')
-      const oldBreak = slabBreakdown(taxableOld, 'old')
+      const newBreak = slabBreakdown(taxableNew, 'new', 'normal') // new regime slabs are flat regardless
+      const oldBreak = slabBreakdown(taxableOld, 'old', seniorStatus)
       const itr = recommendITR(Array.isArray(otherData) ? otherData : [], grossSalary + otherIncome)
 
       setCalc({
         grossSalary, netSalary, otherIncome,
         hraExempt, otherExempts, totalExemptions,
-        sec80C, sec80D, sec24b, nps, totalDeductions,
+        sec80C, sec80D, sec24b, nps, sec80TTA, sec80TTB, sec80E, sec80G, totalDeductions,
         stdDedNew, stdDedOld,
         subTotalNew, subTotalOld,
         taxableNew, taxableOld,
@@ -182,10 +309,24 @@ export default function TaxOptimizerPage() {
         itrForm: itr.form,
         itrReasons: itr.reasons,
       })
-    } catch (e) {
+    } catch (e: any) {
       console.error('Calc failed:', e)
+      setCalcError(e?.message || 'Could not compute your tax picture.')
     }
-  }, [])
+  }, [seniorStatus, parentsSenior])
+
+  if (calcError) {
+    return (
+      <div style={{ maxWidth: 900, margin: '0 auto', padding: 40, textAlign: 'center' }}>
+        <p style={{ fontSize: 14, color: C.danger, margin: '0 0 8px' }}>Tax Optimizer hit an error: {calcError}</p>
+        <p style={{ fontSize: 12, color: C.muted, margin: '0 0 20px' }}>Your salary data is safe. Try clearing this page's stale state and recomputing.</p>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+          <button onClick={() => { setCalcError(null); router.push('/dashboard/profile/salary') }} style={{ padding: '10px 20px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Back to Salary</button>
+          <button onClick={() => location.reload()} style={{ padding: '10px 20px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Retry</button>
+        </div>
+      </div>
+    )
+  }
 
   if (!calc) {
     return (
@@ -214,7 +355,23 @@ export default function TaxOptimizerPage() {
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '20px 0' }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Tax Optimization</h1>
-      <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>Your tax picture for FY 2025-26</p>
+      <p style={{ fontSize: 13, color: C.muted, margin: '0 0 16px' }}>Your tax picture for FY 2025-26</p>
+
+      {/* Senior-citizen + parents-senior toggles — affect old-regime slabs, 80D limits, 80TTA/80TTB eligibility */}
+      <div style={{ marginBottom: 16, padding: 12, background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>You</span>
+        {(['normal', 'senior', 'super_senior'] as const).map(s => (
+          <label key={s} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: C.text, cursor: 'pointer' }}>
+            <input type="radio" name="senior" checked={seniorStatus === s} onChange={() => persistSenior(s)} />
+            {s === 'normal' ? 'Under 60' : s === 'senior' ? 'Senior (60-79)' : 'Super senior (80+)'}
+          </label>
+        ))}
+        <span style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.05em', marginLeft: 12 }}>Parents</span>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: C.text, cursor: 'pointer' }}>
+          <input type="checkbox" checked={parentsSenior} onChange={e => persistParentsSenior(e.target.checked)} />
+          Parents are 60+ (lifts 80D cap to ₹50k for them)
+        </label>
+      </div>
 
       {/* ── Income (linked to their respective heads) ── */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 16 }}>
@@ -223,7 +380,31 @@ export default function TaxOptimizerPage() {
         <Row label="Net salary" value={fmt(calc.netSalary)} href="/dashboard/profile/salary" />
         <Row label="Total other income" value={fmt(calc.otherIncome)} href="/dashboard/profile/other-income" />
         <Row label="Total exemptions" value={fmt(calc.totalExemptions)} href="/dashboard/profile/exemptions" sub={`HRA ${fmt(calc.hraExempt)} · Other ${fmt(calc.otherExempts)}`} />
-        <Row label="Total deductions" value={fmt(calc.totalDeductions)} href="/dashboard/profile/deductions" sub={`80C ${fmt(calc.sec80C)} · 80D ${fmt(calc.sec80D)} · 24(b) ${fmt(calc.sec24b)} · NPS ${fmt(calc.nps)}`} />
+        {/* Sanity warning — exemptions north of 40% of gross are almost always a data-entry error
+            (e.g., PF withdrawal or gratuity entered while still employed). Flag it and link to fix. */}
+        {calc.grossSalary > 0 && calc.totalExemptions > calc.grossSalary * 0.4 && (
+          <div style={{ marginTop: 8, padding: '10px 12px', background: '#FFF3DD', border: `1px solid ${C.wm}`, borderRadius: 4 }}>
+            <p style={{ fontSize: 11, color: '#856404', margin: 0, lineHeight: 1.5 }}>
+              ⚠️ <strong>Exemptions {fmt(calc.totalExemptions)} are {Math.round(calc.totalExemptions / calc.grossSalary * 100)}% of gross salary</strong> — unusually high. Common causes: <strong>PF withdrawal</strong> or <strong>Gratuity</strong> entered while still employed (these only apply on retirement / separation), or <strong>Driver/Car/Daily-allowance</strong> entered without the employer actually providing those perks. <Link href="/dashboard/profile/exemptions" style={{ color: '#856404', textDecoration: 'underline' }}>Review exemptions →</Link>
+            </p>
+          </div>
+        )}
+        <Row
+          label="Total deductions"
+          value={fmt(calc.totalDeductions)}
+          href="/dashboard/profile/deductions"
+          sub={[
+            `80C ${fmt(calc.sec80C)}`,
+            `80D ${fmt(calc.sec80D)}`,
+            `24(b) ${fmt(calc.sec24b)}`,
+            `NPS ${fmt(calc.nps)}`,
+            calc.sec80TTA > 0 ? `80TTA ${fmt(calc.sec80TTA)}` : null,
+            calc.sec80TTB > 0 ? `80TTB ${fmt(calc.sec80TTB)}` : null,
+            calc.sec80E > 0 ? `80E ${fmt(calc.sec80E)}` : null,
+            calc.sec80G > 0 ? `80G ${fmt(calc.sec80G)}` : null,
+          ].filter(Boolean).join(' · ')}
+        />
+
       </div>
 
       {/* ── How taxable income was computed ── */}
@@ -239,19 +420,27 @@ export default function TaxOptimizerPage() {
             ['+ Other income', calc.otherIncome, calc.otherIncome],
             ['= Sub-total', calc.subTotalNew, calc.subTotalOld],
             ['− Standard deduction', -calc.stdDedNew, -calc.stdDedOld],
-            ['− Exemptions (HRA, LTA, etc.)', -calc.totalExemptions, -calc.totalExemptions],
+            // New regime does NOT allow Section 10 exemptions (HRA / LTA / etc.) — show "—".
+            ['− Exemptions (HRA, LTA, etc.)', 0, -calc.totalExemptions],
+            // New regime also disables Chapter VI-A deductions (80C / 80D / 24(b) / NPS 80CCD(1B)).
             ['− Chapter VI-A deductions', 0, -calc.totalDeductions],
-          ].map((row, i) => (
-            <Fragment key={i}>
-              <div style={{ padding: '6px 8px', borderBottom: `1px solid ${C.border}`, color: C.text }}>{row[0] as string}</div>
-              <div style={{ padding: '6px 8px', borderBottom: `1px solid ${C.border}`, textAlign: 'right', color: (row[1] as number) < 0 ? C.danger : C.fg }}>
-                {(row[1] as number) === 0 && (row[0] as string).startsWith('− Chapter') ? '—' : fmt(Math.abs(row[1] as number))}
-              </div>
-              <div style={{ padding: '6px 8px', borderBottom: `1px solid ${C.border}`, textAlign: 'right', color: (row[2] as number) < 0 ? C.danger : C.fg }}>
-                {fmt(Math.abs(row[2] as number))}
-              </div>
-            </Fragment>
-          ))}
+          ].map((row, i) => {
+            const label = row[0] as string
+            const newVal = row[1] as number
+            const oldVal = row[2] as number
+            const newIsBlocked = newVal === 0 && (label.startsWith('− Chapter') || label.startsWith('− Exemptions'))
+            return (
+              <Fragment key={i}>
+                <div style={{ padding: '6px 8px', borderBottom: `1px solid ${C.border}`, color: C.text }}>{label}</div>
+                <div style={{ padding: '6px 8px', borderBottom: `1px solid ${C.border}`, textAlign: 'right', color: newIsBlocked ? C.muted : (newVal < 0 ? C.danger : C.fg) }}>
+                  {newIsBlocked ? '— (not allowed)' : fmt(Math.abs(newVal))}
+                </div>
+                <div style={{ padding: '6px 8px', borderBottom: `1px solid ${C.border}`, textAlign: 'right', color: oldVal < 0 ? C.danger : C.fg }}>
+                  {fmt(Math.abs(oldVal))}
+                </div>
+              </Fragment>
+            )
+          })}
 
           <div style={{ padding: '8px', background: C.wl, fontWeight: 700, color: C.fg }}>Taxable income</div>
           <div style={{ padding: '8px', background: C.wl, fontWeight: 700, color: C.fg, textAlign: 'right' }}>{fmt(calc.taxableNew)}</div>
@@ -283,6 +472,7 @@ export default function TaxOptimizerPage() {
         <div style={{ marginTop: 10, padding: 10, background: C.bg, borderRadius: 4 }}>
           <Row label="Basic tax" value={fmt(calc.newBreak.basicTax)} />
           {calc.newBreak.rebate > 0 && <Row label="− 87A rebate" value={fmt(calc.newBreak.rebate)} color={C.danger} />}
+          {calc.newBreak.surcharge > 0 && <Row label="+ Surcharge" value={fmt(calc.newBreak.surcharge)} />}
           <Row label="Health & Edu cess (4%)" value={fmt(calc.newBreak.cess)} />
           <Row label="Total tax" value={fmt(calc.newBreak.total)} strong />
         </div>
@@ -311,6 +501,7 @@ export default function TaxOptimizerPage() {
         <div style={{ marginTop: 10, padding: 10, background: C.bg, borderRadius: 4 }}>
           <Row label="Basic tax" value={fmt(calc.oldBreak.basicTax)} />
           {calc.oldBreak.rebate > 0 && <Row label="− 87A rebate" value={fmt(calc.oldBreak.rebate)} color={C.danger} />}
+          {calc.oldBreak.surcharge > 0 && <Row label="+ Surcharge" value={fmt(calc.oldBreak.surcharge)} />}
           <Row label="Health & Edu cess (4%)" value={fmt(calc.oldBreak.cess)} />
           <Row label="Total tax" value={fmt(calc.oldBreak.total)} strong />
         </div>
@@ -355,24 +546,52 @@ export default function TaxOptimizerPage() {
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           {[
-            { label: 'Home Loan Interest', limit: 200000, used: calc.sec24b },
-            { label: '80C Investments', limit: 150000, used: calc.sec80C },
-            { label: 'Health Insurance (80D)', limit: 100000, used: calc.sec80D },
-            { label: 'NPS (80CCD(1B))', limit: 50000, used: calc.nps },
-          ].map(s => (
-            <div key={s.label} style={{ padding: '10px', background: '#fff', borderRadius: 4, border: `1px solid ${C.border}` }}>
-              <p style={{ fontSize: 10, color: C.muted, margin: '0 0 4px', fontWeight: 500 }}>{s.label}</p>
-              <p style={{ fontSize: 12, fontWeight: 600, color: C.fg, margin: 0 }}>{fmt(s.limit - s.used)} unused</p>
-              <p style={{ fontSize: 9, color: C.muted, margin: '4px 0 0' }}>You'd save ~{fmt((s.limit - s.used) * 0.2)}</p>
-            </div>
-          ))}
+            // `project: true` only for wealth-building deductions (80C, NPS) where the unused
+            // gap would be plausibly invested. Health (80D) is a consumed expense and
+            // Home Loan Interest is debt service — neither builds a corpus, so no projection.
+            { label: 'Home Loan Interest', limit: 200000, used: calc.sec24b, project: false },
+            { label: '80C Investments', limit: 150000, used: calc.sec80C, project: true },
+            { label: 'Health Insurance (80D)', limit: 100000, used: calc.sec80D, project: false },
+            { label: 'NPS (80CCD(1B))', limit: 50000, used: calc.nps, project: true },
+          ].map(s => {
+            const gap = Math.max(0, s.limit - s.used)
+            const slabRate = 0.30   // assume 30% marginal slab for upper-middle salary
+            const yearlyTaxSaved = gap * slabRate
+            // FV of yearly contribution at end of each period: FV = P × ((1+r)^n - 1) / r
+            // Using a conservative 8% (closer to long-term Indian debt/bank-MF returns) over 15 yrs.
+            const r = 0.08, n = 15
+            const fv = (yearly: number) => Math.round(yearly * (Math.pow(1 + r, n) - 1) / r)
+            // Pick the "yearly investment" reference: prefer unused headroom (encourages topping up),
+            // otherwise fall back to current contribution (encourages staying the course).
+            const yearlyContrib = gap > 0 ? gap : s.used
+            const corpusFromContrib = yearlyContrib > 0 ? fv(yearlyContrib) : 0
+            const corpusFromTaxSaved = yearlyContrib > 0 ? fv(yearlyContrib * slabRate) : 0
+            return (
+              <div key={s.label} style={{ padding: '10px', background: '#fff', borderRadius: 4, border: `1px solid ${C.border}` }}>
+                <p style={{ fontSize: 10, color: C.muted, margin: '0 0 4px', fontWeight: 500 }}>{s.label}</p>
+                <p style={{ fontSize: 12, fontWeight: 600, color: C.fg, margin: 0 }}>{fmt(gap)} unused</p>
+                <p style={{ fontSize: 9, color: C.muted, margin: '4px 0 0' }}>Annual tax saved ~{fmt(yearlyTaxSaved)}</p>
+                {s.project && corpusFromContrib > 0 && (
+                  <div style={{ marginTop: 6, padding: '6px 8px', background: '#F0F9F4', border: '1px solid #CFE6D8', borderRadius: 4 }}>
+                    <p style={{ fontSize: 9, color: C.muted, margin: '0 0 4px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{gap > 0 ? 'If you top up the headroom' : 'If you keep investing at this rate'} (8% · 15 yrs)</p>
+                    <p style={{ fontSize: 9.5, color: '#2A7A4A', margin: 0, lineHeight: 1.5 }}>
+                      💰 <strong>{fmt(yearlyContrib)}/yr</strong> contribution → <strong>{fmt(corpusFromContrib)}</strong> corpus.
+                    </p>
+                    <p style={{ fontSize: 9.5, color: '#2A7A4A', margin: '2px 0 0', lineHeight: 1.5 }}>
+                      💸 <strong>{fmt(yearlyContrib * slabRate)}/yr</strong> tax saved (@ 30%) → <strong>{fmt(corpusFromTaxSaved)}</strong> corpus.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
         <p style={{ fontSize: 10, color: C.muted, margin: '12px 0 0', fontStyle: 'italic' }}>Only invest if it makes financial sense. Tax saving is a bonus, not the goal.</p>
       </div>
 
       <div style={{ display: 'flex', gap: 12 }}>
         <button onClick={() => router.push('/dashboard/profile/deductions')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Edit Deductions</button>
-        <button onClick={() => router.push('/dashboard')} style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Done</button>
+        <button onClick={() => router.push('/dashboard/profile/salary')} style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Done · Back to Salary</button>
       </div>
     </div>
   )

@@ -7,17 +7,82 @@ const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLoc
 
 export default function DeductionsPage() {
   const router = useRouter()
-  const [ded, setDed] = useState({ ppf: 0, elss: 0, lic: 0, tuition: 0, nsc: 0, selfFamily: 0, parents: 0, selfSenior: false, parentsSenior: false, homeLoanInterest: 0, nps: 0 })
-  const [expanded, setExpanded] = useState<string[]>(['80c', '80d'])
+  const [ded, setDed] = useState({
+    // 80C investments (max ₹1.5L combined)
+    ppf: 0, elss: 0, lic: 0, tuition: 0, nsc: 0,
+    employeePF: 0,            // auto-prefilled from salary slip (employee's EPF contribution, annual)
+    homeLoanPrincipal: 0, termInsurance: 0, other80C: 0,
+    // 80D health insurance + senior toggles
+    selfFamily: 0, parents: 0, parentsMedicalExp: 0, selfSenior: false, parentsSenior: false,
+    // Home loan interest 24(b)
+    homeLoanInterest: 0,
+    // NPS 80CCD(1B)
+    nps: 0,
+    // Other Chapter VI-A
+    savingsInterest80TTA: 0,  // non-seniors only, cap ₹10k
+    interest80TTB: 0,         // seniors only, cap ₹50k
+    eduLoanInterest80E: 0,    // no cap, 8-year window
+    // Legacy single-amount field preserved for migration only. New 80G entries live in `donationRows`.
+    donations80G: 0,
+  })
+  // Section 80G donation rows. Each row = one donation, one of four statutory buckets:
+  //   100NoLimit:    100% deduction, no qualifying ceiling   — e.g. PM CARES, PMNRF, National Defence Fund, Swachh Bharat Kosh, Clean Ganga Fund
+  //   50NoLimit:     50%  deduction, no qualifying ceiling   — e.g. Jawaharlal Nehru Memorial Fund, Indira Gandhi Memorial Trust, Rajiv Gandhi Foundation, PM's Drought Relief Fund
+  //   100WithLimit:  100% deduction, subject to 10% of Adjusted GTI — e.g. Indian Olympic Association, Govt./local authority for promoting family planning
+  //   50WithLimit:   50%  deduction, subject to 10% of Adjusted GTI — most other approved trusts / NGOs
+  type DonationCat = '100NoLimit' | '50NoLimit' | '100WithLimit' | '50WithLimit'
+  const [donationRows, setDonationRows] = useState<Array<{ id: string; category: DonationCat; amount: number }>>([])
+  const [pfAutoApplied, setPfAutoApplied] = useState<{ annual: number } | null>(null)
+  // All sections expanded by default so users see every question on the page
+  // and can collapse the ones that don't apply to them.
+  const [expanded, setExpanded] = useState<string[]>(['80c', '80d', '24b', 'nps', '80tta', '80e', '80g'])
+  // Annual gross from saved salary slips — used as the base for the 10%-of-Adjusted-GTI 80G cap.
+  const [annualGrossForAGTI, setAnnualGrossForAGTI] = useState(0)
 
   useEffect(() => {
     const data = localStorage.getItem('av_deductions')
+    let loadedDed: any = null
     if (data) {
       try {
-        setDed(JSON.parse(data))
+        loadedDed = JSON.parse(data)
+        setDed(prev => ({ ...prev, ...loadedDed }))
       } catch (e) {
         console.error('Failed to load deductions:', e)
       }
+    }
+    // Donation rows live alongside `av_deductions` under their own key.
+    // Migrate any legacy single `donations80G` amount into a 100%-no-limit row.
+    try {
+      const drData = localStorage.getItem('av_donations80G')
+      if (drData) {
+        const rows = JSON.parse(drData)
+        if (Array.isArray(rows)) setDonationRows(rows)
+      } else if (loadedDed && Number(loadedDed.donations80G || 0) > 0) {
+        setDonationRows([{ id: 'mig-' + Date.now(), category: '100NoLimit', amount: Number(loadedDed.donations80G) }])
+      }
+    } catch (e) {
+      console.error('Failed to load 80G rows:', e)
+    }
+
+    // D17: auto-prefill employee PF from the most recent salary slip × 12.
+    // Only prefill if the user hasn't already entered their own PF value.
+    try {
+      const slipData = localStorage.getItem('av_salary_timeline')
+      if (slipData) {
+        const slips = JSON.parse(slipData)
+        const arr = Array.isArray(slips) ? slips : []
+        if (arr.length > 0) {
+          const monthlyPF = arr.reduce((s, slip) => s + (slip.employeePF || 0), 0) / arr.length
+          const annualPF = Math.round(monthlyPF * 12)
+          const existingPF = Number(loadedDed?.employeePF || 0)
+          if (annualPF > 0 && existingPF === 0) {
+            setDed(prev => ({ ...prev, employeePF: annualPF }))
+            setPfAutoApplied({ annual: annualPF })
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Failed to auto-prefill PF:', e)
     }
   }, [])
 
@@ -25,13 +90,62 @@ export default function DeductionsPage() {
     localStorage.setItem('av_deductions', JSON.stringify(ded))
   }, [ded])
 
+  useEffect(() => {
+    localStorage.setItem('av_donations80G', JSON.stringify(donationRows))
+  }, [donationRows])
+
+  useEffect(() => {
+    try {
+      const slipData = localStorage.getItem('av_salary_timeline')
+      if (!slipData) return
+      const slips = JSON.parse(slipData)
+      const arr = Array.isArray(slips) ? slips : []
+      const monthlyAvgGross = arr.length ? arr.reduce((s: number, x: any) => s + (x.gross || 0), 0) / arr.length : 0
+      setAnnualGrossForAGTI(Math.round(monthlyAvgGross * 12))
+    } catch { /* leave at 0 */ }
+  }, [])
+
   const toggle = (key: string) => {
     setExpanded(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
   }
 
-  const sec80C = Math.min(ded.ppf + ded.elss + ded.lic + ded.tuition + ded.nsc, 150000)
-  const sec80D = Math.min(ded.selfFamily + ded.parents, 100000)
-  const taxSavingsOld = (sec80C + sec80D + Math.min(ded.homeLoanInterest, 200000) + Math.min(ded.nps, 50000)) * 0.2 // rough estimate at 20% slab
+  const sec80C = Math.min(
+    ded.ppf + ded.elss + ded.lic + ded.tuition + ded.nsc + ded.employeePF + ded.homeLoanPrincipal + ded.termInsurance + ded.other80C,
+    150000,
+  )
+  const selfCap = ded.selfSenior ? 50000 : 25000
+  const parentsCap = ded.parentsSenior ? 50000 : 25000
+  const sec80DSelf = Math.min(ded.selfFamily, selfCap)
+  // Parents medical expenditure can be claimed under 80D only for uninsured seniors (60+).
+  // For simplicity, allow it when parents are senior. Combined cap is ₹50k for the parents bucket.
+  const sec80DParents = Math.min(ded.parents + (ded.parentsSenior ? ded.parentsMedicalExp : 0), parentsCap)
+  const sec80D = sec80DSelf + sec80DParents
+  const sec80TTA = !ded.selfSenior ? Math.min(ded.savingsInterest80TTA, 10000) : 0
+  const sec80TTB = ded.selfSenior ? Math.min(ded.interest80TTB, 50000) : 0
+  const sec80E = Math.max(0, ded.eduLoanInterest80E)
+  const sec24b = Math.min(ded.homeLoanInterest, 200000)
+  const secNps = Math.min(ded.nps, 50000)
+
+  // Section 80G math — apply the 50%/100% rate, then a 10%-of-Adjusted-GTI ceiling
+  // across the two "with limit" buckets combined (per the Income Tax Act).
+  // Adjusted GTI is approximated here as: annual salary gross − other Chapter VI-A deductions
+  // (excluding 80G itself), which is a fair proxy for a salaried filer.
+  const sum80G = (cat: DonationCat) => donationRows.filter(r => r.category === cat).reduce((s, r) => s + Math.max(0, r.amount || 0), 0)
+  const g100NoLimit = sum80G('100NoLimit')
+  const g50NoLimit = sum80G('50NoLimit')
+  const g100WithLimit = sum80G('100WithLimit')
+  const g50WithLimit = sum80G('50WithLimit')
+
+  const otherChapterVIA = sec80C + sec80D + sec24b + secNps + sec80TTA + sec80TTB + sec80E
+  const adjustedGTI = Math.max(0, annualGrossForAGTI - otherChapterVIA)
+  const cap10pctAGTI = Math.round(adjustedGTI * 0.10)
+  // Apply the rate first, then cap the combined "with-limit" buckets at 10% of AGTI.
+  const eligibleNoLimit = g100NoLimit + 0.5 * g50NoLimit
+  const eligibleWithLimitUncapped = g100WithLimit + 0.5 * g50WithLimit
+  const eligibleWithLimit = Math.min(eligibleWithLimitUncapped, cap10pctAGTI)
+  const sec80G = Math.round(eligibleNoLimit + eligibleWithLimit)
+  const totalDeductions = sec80C + sec80D + sec24b + secNps + sec80TTA + sec80TTB + sec80E + sec80G
+  const taxSavingsOld = totalDeductions * 0.2 // rough estimate at 20% slab
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '20px 0' }}>
@@ -56,10 +170,29 @@ export default function DeductionsPage() {
         </button>
         {expanded.includes('80c') && (
           <div style={{ padding: '14px 16px', background: '#fff' }}>
+            {pfAutoApplied && (
+              <div style={{ marginBottom: 12, padding: '8px 10px', background: '#E8F2EC', border: '1px solid #B8D9C4', borderRadius: 4 }}>
+                <p style={{ fontSize: 11, color: '#1A5634', margin: 0, lineHeight: 1.5 }}>
+                  💡 Auto-filled <strong>Employee PF</strong> = {fmt(pfAutoApplied.annual)} (from your salary slip × 12). Adjust below if needed.
+                </p>
+              </div>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-              {[{ key: 'ppf', label: 'PPF' }, { key: 'elss', label: 'ELSS (Mutual Fund)' }, { key: 'lic', label: 'Life Insurance Premium' }, { key: 'tuition', label: 'Tuition Fees' }, { key: 'nsc', label: 'NSC / Tax Saver FD' }].map(({ key, label }) => (
+              {[
+                { key: 'employeePF', label: 'Employee PF (from slip)', hint: 'auto' },
+                { key: 'ppf', label: 'PPF' },
+                { key: 'elss', label: 'ELSS (Mutual Fund)' },
+                { key: 'lic', label: 'Life Insurance Premium' },
+                { key: 'tuition', label: 'Tuition Fees (children)' },
+                { key: 'nsc', label: 'NSC / Tax Saver FD' },
+                { key: 'homeLoanPrincipal', label: 'Home Loan Principal' },
+                { key: 'termInsurance', label: 'Term Insurance Premium' },
+                { key: 'other80C', label: 'Other 80C (Sukanya, etc.)' },
+              ].map(({ key, label, hint }) => (
                 <div key={key}>
-                  <label style={{ display: 'block', fontSize: 10.5, color: C.muted, marginBottom: 3, fontWeight: 500 }}>{label}</label>
+                  <label style={{ display: 'block', fontSize: 10.5, color: C.muted, marginBottom: 3, fontWeight: 500 }}>
+                    {label}{hint === 'auto' && <span style={{ marginLeft: 4, fontSize: 9.5, color: '#2A7A4A', fontWeight: 700 }}>· prefilled</span>}
+                  </label>
                   <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden' }}>
                     <span style={{ padding: '6px 6px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
                     <input type="text" inputMode="numeric" value={(ded as any)[key] > 0 ? (ded as any)[key] : ''} onChange={(e) => setDed({ ...ded, [key]: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit' }} />
@@ -106,9 +239,19 @@ export default function DeductionsPage() {
                 <input type="checkbox" checked={ded.parentsSenior} onChange={(e) => setDed({ ...ded, parentsSenior: e.target.checked })} /> <span>Parents are 60+? (₹50k limit instead of ₹25k)</span>
               </label>
             </div>
+            {ded.parentsSenior && (
+              <div style={{ marginTop: 12 }}>
+                <label style={{ display: 'block', fontSize: 11, color: C.text, marginBottom: 6, fontWeight: 600 }}>Medical expenditure for parents (uninsured seniors only)</label>
+                <p style={{ fontSize: 10.5, color: C.muted, margin: '0 0 6px' }}>Out-of-pocket medical bills for senior parents who DON'T have health insurance. Combined with parents-premium under the ₹50k cap.</p>
+                <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden' }}>
+                  <span style={{ padding: '6px 6px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
+                  <input type="text" inputMode="numeric" value={ded.parentsMedicalExp > 0 ? ded.parentsMedicalExp : ''} onChange={(e) => setDed({ ...ded, parentsMedicalExp: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit' }} />
+                </div>
+              </div>
+            )}
             <div style={{ padding: '10px 12px', background: C.wl, borderRadius: 4, display: 'flex', justifyContent: 'space-between', marginTop: 12 }}>
               <span style={{ fontSize: 11, color: C.muted }}>Total claimed</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: C.fg }}>{fmt(sec80D)} / ₹1,00,000</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.fg }}>{fmt(sec80D)} / {fmt(selfCap + parentsCap)}</span>
             </div>
           </div>
         )}
@@ -157,6 +300,164 @@ export default function DeductionsPage() {
             <div style={{ padding: '10px 12px', background: C.wl, borderRadius: 4, display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
               <span style={{ fontSize: 11, color: C.muted }}>Claimed (capped at ₹50k)</span>
               <span style={{ fontSize: 13, fontWeight: 700, color: C.fg }}>{fmt(Math.min(ded.nps, 50000))}</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Section 80TTA / 80TTB — savings & FD interest */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 16, overflow: 'hidden' }}>
+        <button onClick={() => toggle('80tta')} style={{ width: '100%', padding: '14px 16px', background: expanded.includes('80tta') ? C.wl : '#fff', border: 'none', borderBottom: expanded.includes('80tta') ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ textAlign: 'left' }}>
+            <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>Did you earn savings / FD interest?</p>
+            <p style={{ fontSize: 10, color: C.muted, margin: 0 }}>Section 80TTA (under 60: savings only, max ₹10k) · 80TTB (60+: savings + FD + RD, max ₹50k)</p>
+          </div>
+          <span style={{ fontSize: 14, color: C.fg }}>{expanded.includes('80tta') ? '−' : '+'}</span>
+        </button>
+        {expanded.includes('80tta') && (
+          <div style={{ padding: '14px 16px', background: '#fff' }}>
+            {!ded.selfSenior ? (
+              <div>
+                <label style={{ display: 'block', fontSize: 11, color: C.text, marginBottom: 4, fontWeight: 600 }}>80TTA — Interest on savings accounts (cap ₹10k)</label>
+                <p style={{ fontSize: 10.5, color: C.muted, margin: '0 0 6px' }}>FD interest is NOT eligible under 80TTA — that's taxable. Only savings-account interest.</p>
+                <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden' }}>
+                  <span style={{ padding: '6px 6px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
+                  <input type="text" inputMode="numeric" value={ded.savingsInterest80TTA > 0 ? ded.savingsInterest80TTA : ''} onChange={(e) => setDed({ ...ded, savingsInterest80TTA: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit' }} />
+                </div>
+                <p style={{ fontSize: 10.5, color: C.muted, marginTop: 8 }}>Tick "You/spouse is 60+" in the 80D section to switch to 80TTB (covers FD too).</p>
+              </div>
+            ) : (
+              <div>
+                <label style={{ display: 'block', fontSize: 11, color: C.text, marginBottom: 4, fontWeight: 600 }}>80TTB — Interest on savings + FDs + RDs (cap ₹50k)</label>
+                <p style={{ fontSize: 10.5, color: C.muted, margin: '0 0 6px' }}>Available because you ticked "You/spouse is 60+" above. Combined cap ₹50k across all deposit interest.</p>
+                <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden' }}>
+                  <span style={{ padding: '6px 6px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
+                  <input type="text" inputMode="numeric" value={ded.interest80TTB > 0 ? ded.interest80TTB : ''} onChange={(e) => setDed({ ...ded, interest80TTB: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit' }} />
+                </div>
+              </div>
+            )}
+            <div style={{ padding: '10px 12px', background: C.wl, borderRadius: 4, display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
+              <span style={{ fontSize: 11, color: C.muted }}>Claimed</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.fg }}>{fmt(sec80TTA + sec80TTB)} / {ded.selfSenior ? '₹50k (80TTB)' : '₹10k (80TTA)'}</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Section 80E — education loan interest */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 16, overflow: 'hidden' }}>
+        <button onClick={() => toggle('80e')} style={{ width: '100%', padding: '14px 16px', background: expanded.includes('80e') ? C.wl : '#fff', border: 'none', borderBottom: expanded.includes('80e') ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ textAlign: 'left' }}>
+            <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>Are you paying education loan interest?</p>
+            <p style={{ fontSize: 10, color: C.muted, margin: 0 }}>Section 80E (no upper cap · only INTEREST, not principal · 8-year limit from loan start)</p>
+          </div>
+          <span style={{ fontSize: 14, color: C.fg }}>{expanded.includes('80e') ? '−' : '+'}</span>
+        </button>
+        {expanded.includes('80e') && (
+          <div style={{ padding: '14px 16px', background: '#fff' }}>
+            <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 6, fontWeight: 500 }}>Interest paid this FY on a higher-education loan (for self / spouse / children / ward you legally guardian)</label>
+            <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden' }}>
+              <span style={{ padding: '8px 8px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
+              <input type="text" inputMode="numeric" value={ded.eduLoanInterest80E > 0 ? ded.eduLoanInterest80E : ''} onChange={(e) => setDed({ ...ded, eduLoanInterest80E: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '8px 8px', fontSize: 13, fontFamily: 'inherit' }} />
+            </div>
+            <div style={{ padding: '10px 12px', background: C.wl, borderRadius: 4, display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
+              <span style={{ fontSize: 11, color: C.muted }}>Claimed (no cap)</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.fg }}>{fmt(sec80E)}</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Section 80G — donations, broken out by the four statutory qualifying-limit buckets */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 24, overflow: 'hidden' }}>
+        <button onClick={() => toggle('80g')} style={{ width: '100%', padding: '14px 16px', background: expanded.includes('80g') ? C.wl : '#fff', border: 'none', borderBottom: expanded.includes('80g') ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ textAlign: 'left' }}>
+            <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>Did you donate to a registered charity / PM CARES / etc.?</p>
+            <p style={{ fontSize: 10, color: C.muted, margin: 0 }}>Section 80G — pick the qualifying-limit bucket per donation. Buckets with limit are capped at 10% of Adjusted GTI.</p>
+          </div>
+          <span style={{ fontSize: 14, color: C.fg }}>{expanded.includes('80g') ? '−' : '+'}</span>
+        </button>
+        {expanded.includes('80g') && (
+          <div style={{ padding: '14px 16px', background: '#fff' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12, fontSize: 10.5, color: C.muted, lineHeight: 1.5 }}>
+              <div><strong style={{ color: C.text }}>100% · No qualifying limit</strong><br/>PM CARES, PMNRF, National Defence Fund, Swachh Bharat Kosh, Clean Ganga Fund</div>
+              <div><strong style={{ color: C.text }}>50% · No qualifying limit</strong><br/>JN Memorial Fund, Indira Gandhi Memorial Trust, Rajiv Gandhi Foundation, PM's Drought Relief Fund</div>
+              <div><strong style={{ color: C.text }}>100% · Subject to 10% AGTI</strong><br/>Indian Olympic Association, Govt./local authority for promoting family planning</div>
+              <div><strong style={{ color: C.text }}>50% · Subject to 10% AGTI</strong><br/>Most other CBDT-approved charitable trusts, registered NGOs, religious institutions</div>
+            </div>
+
+            {donationRows.length === 0 && (
+              <p style={{ fontSize: 11, color: C.muted, margin: '4px 0 10px', fontStyle: 'italic' }}>No donations added. Click "+ Add donation" to enter one.</p>
+            )}
+
+            {donationRows.map((row, idx) => (
+              <div key={row.id} style={{ display: 'flex', gap: 8, alignItems: 'stretch', marginBottom: 8 }}>
+                <select
+                  value={row.category}
+                  onChange={(e) => setDonationRows(prev => prev.map(r => r.id === row.id ? { ...r, category: e.target.value as DonationCat } : r))}
+                  style={{
+                    flex: '0 0 220px', height: 36, padding: '0 28px 0 10px',
+                    border: `1px solid ${C.border}`, borderRadius: 4,
+                    fontSize: 12, fontFamily: 'inherit', background: '#fff', color: C.text,
+                    boxSizing: 'border-box', appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none' as any,
+                    lineHeight: '34px', cursor: 'pointer',
+                    backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%237A8A7E'/></svg>")`,
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 10px center',
+                  }}
+                >
+                  <option value="100NoLimit">100% · No limit</option>
+                  <option value="50NoLimit">50% · No limit</option>
+                  <option value="100WithLimit">100% · 10% AGTI cap</option>
+                  <option value="50WithLimit">50% · 10% AGTI cap</option>
+                </select>
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden', height: 36, boxSizing: 'border-box' }}>
+                  <span style={{ padding: '0 10px', height: '100%', display: 'flex', alignItems: 'center', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
+                  <input
+                    type="text" inputMode="numeric"
+                    value={row.amount > 0 ? row.amount : ''}
+                    onChange={(e) => setDonationRows(prev => prev.map(r => r.id === row.id ? { ...r, amount: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 } : r))}
+                    placeholder="Gross donation amount"
+                    style={{ flex: 1, border: 'none', outline: 'none', padding: '0 10px', fontSize: 13, fontFamily: 'inherit', height: '100%' }}
+                  />
+                </div>
+                <button
+                  onClick={() => setDonationRows(prev => prev.filter(r => r.id !== row.id))}
+                  aria-label={`Remove donation ${idx + 1}`}
+                  style={{ width: 36, height: 36, background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 16, color: C.muted, cursor: 'pointer', fontFamily: 'inherit' }}
+                >×</button>
+              </div>
+            ))}
+
+            <button
+              onClick={() => setDonationRows(prev => [...prev, { id: 'd-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6), category: '100NoLimit', amount: 0 }])}
+              style={{ marginTop: 4, padding: '8px 12px', background: 'transparent', border: `1px dashed ${C.border}`, borderRadius: 4, color: C.fg, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}
+            >+ Add donation</button>
+
+            <div style={{ padding: '8px 10px', background: '#FFF8E6', border: '1px solid #E8D9A8', borderRadius: 4, marginTop: 12 }}>
+              <p style={{ fontSize: 10.5, color: '#7A5C00', margin: 0, lineHeight: 1.45 }}>
+                ⚠️ Cash donations above <strong>₹2,000</strong> are not eligible (must be via cheque/UPI/bank). 80G is <strong>not available under the new tax regime</strong>.
+              </p>
+            </div>
+
+            {donationRows.length > 0 && (
+              <div style={{ marginTop: 12, border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden' }}>
+                <div style={{ padding: '8px 12px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Calculation</div>
+                <div style={{ padding: '10px 12px', display: 'grid', gridTemplateColumns: '1fr auto', gap: '4px 12px', fontSize: 11.5, color: C.text }}>
+                  <span>100% (no limit) eligible</span><span style={{ fontWeight: 600 }}>{fmt(g100NoLimit)}</span>
+                  <span>50% (no limit) eligible <span style={{ color: C.muted }}>({fmt(g50NoLimit)} × 50%)</span></span><span style={{ fontWeight: 600 }}>{fmt(0.5 * g50NoLimit)}</span>
+                  <span>100% (with limit) eligible</span><span style={{ fontWeight: 600 }}>{fmt(g100WithLimit)}</span>
+                  <span>50% (with limit) eligible <span style={{ color: C.muted }}>({fmt(g50WithLimit)} × 50%)</span></span><span style={{ fontWeight: 600 }}>{fmt(0.5 * g50WithLimit)}</span>
+                  <span style={{ color: C.muted }}>↳ Combined "with limit" before cap</span><span style={{ color: C.muted }}>{fmt(eligibleWithLimitUncapped)}</span>
+                  <span style={{ color: C.muted }}>↳ 10% of Adjusted GTI cap <span style={{ fontSize: 10 }}>(AGTI ≈ {fmt(adjustedGTI)})</span></span><span style={{ color: C.muted }}>{fmt(cap10pctAGTI)}</span>
+                  <span style={{ color: C.muted }}>↳ "With limit" after cap</span><span style={{ color: C.muted }}>{fmt(eligibleWithLimit)}</span>
+                </div>
+              </div>
+            )}
+
+            <div style={{ padding: '10px 12px', background: C.wl, borderRadius: 4, display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
+              <span style={{ fontSize: 11, color: C.muted }}>Total 80G claimed</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.fg }}>{fmt(sec80G)}</span>
             </div>
           </div>
         )}
