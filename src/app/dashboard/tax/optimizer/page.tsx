@@ -262,12 +262,25 @@ export default function TaxOptimizerPage() {
         Number(exemptionsData.other || 0)
       const totalExemptions = hraExempt + otherExempts
 
-      const sec80C = Math.min((deductionsData.ppf || 0) + (deductionsData.elss || 0) + (deductionsData.lic || 0) + (deductionsData.tuition || 0) + (deductionsData.nsc || 0), 150000)
+      // 80C — must sum the SAME nine components the Deductions page counts, else the tax calc
+      // silently drops the user's largest items. employeePF (auto-prefilled from the salary slip),
+      // homeLoanPrincipal, termInsurance and other80C are all valid 80C and were previously omitted.
+      const sec80C = Math.min(
+        (deductionsData.ppf || 0) + (deductionsData.elss || 0) + (deductionsData.lic || 0) +
+        (deductionsData.tuition || 0) + (deductionsData.nsc || 0) + (deductionsData.employeePF || 0) +
+        (deductionsData.homeLoanPrincipal || 0) + (deductionsData.termInsurance || 0) + (deductionsData.other80C || 0),
+        150000,
+      )
       // 80D — caps depend on senior-citizen status of self and parents.
       const selfCap = (seniorStatus !== 'normal') ? 50000 : 25000
       const parentsCap = parentsSenior ? 50000 : 25000
       const sec80DSelf = Math.min((deductionsData.selfFamily || 0), selfCap)
-      const sec80DParents = Math.min((deductionsData.parents || 0), parentsCap)
+      // Parents bucket includes medical expenditure for uninsured senior parents — same as the
+      // Deductions page. Previously omitted here, so that expenditure gave no tax benefit.
+      const sec80DParents = Math.min(
+        (deductionsData.parents || 0) + (parentsSenior ? (deductionsData.parentsMedicalExp || 0) : 0),
+        parentsCap,
+      )
       const sec80D = sec80DSelf + sec80DParents
       const sec24b = Math.min(deductionsData.homeLoanInterest || 0, 200000)
       const nps = Math.min(deductionsData.nps || 0, 50000)
@@ -277,8 +290,33 @@ export default function TaxOptimizerPage() {
       const sec80TTB = seniorStatus !== 'normal' ? Math.min(deductionsData.interest80TTB || 0, 50000) : 0
       // 80E (education loan interest) — no cap, full interest paid is deductible up to 8 yrs.
       const sec80E = Math.max(0, deductionsData.eduLoanInterest80E || 0)
-      // 80G (donations) — user-entered amount; we trust the user's qualifying calc (50%/100% subject to limits).
-      const sec80G = Math.max(0, deductionsData.donations80G || 0)
+      // 80G (donations) — donation rows live under their own key (`av_donations80G`), written by
+      // the Deductions page. The legacy single `donations80G` field on av_deductions is no longer
+      // populated by the UI, so reading it gave every filer ₹0 regardless of what they donated.
+      // Read the rows here and apply the statutory 50%/100% rates, capping the two "with limit"
+      // buckets at 10% of Adjusted GTI — mirroring the Deductions page so both screens agree.
+      let sec80G = 0
+      try {
+        const drData = localStorage.getItem('av_donations80G')
+        const rows = drData ? JSON.parse(drData) : []
+        if (Array.isArray(rows) && rows.length > 0) {
+          const sumCat = (cat: string) => rows
+            .filter((r: any) => r.category === cat)
+            .reduce((s: number, r: any) => s + Math.max(0, r.amount || 0), 0)
+          const eligibleNoLimit = sumCat('100NoLimit') + 0.5 * sumCat('50NoLimit')
+          const eligibleWithLimitUncapped = sumCat('100WithLimit') + 0.5 * sumCat('50WithLimit')
+          // Adjusted GTI ≈ annual gross − other Chapter VI-A deductions (excluding 80G itself).
+          const otherChapterVIA = sec80C + sec80D + sec24b + nps + sec80TTA + sec80TTB + sec80E
+          const adjustedGTI = Math.max(0, grossSalary - otherChapterVIA)
+          const eligibleWithLimit = Math.min(eligibleWithLimitUncapped, Math.round(adjustedGTI * 0.10))
+          sec80G = Math.round(eligibleNoLimit + eligibleWithLimit)
+        } else {
+          // Back-compat: honour a legacy single-amount entry if rows were never created.
+          sec80G = Math.max(0, deductionsData.donations80G || 0)
+        }
+      } catch {
+        sec80G = Math.max(0, deductionsData.donations80G || 0)
+      }
       const totalDeductions = sec80C + sec80D + sec24b + nps + sec80TTA + sec80TTB + sec80E + sec80G
 
       const stdDedNew = 75000
