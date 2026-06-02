@@ -798,6 +798,17 @@ export default function SalaryPageCompleteFinal() {
     [employments],
   )
 
+  // Persist the careful month-by-month annual summary so the Tax Optimizer uses the SAME number
+  // the user reviewed here — instead of re-deriving it as avg(slip) × 12, which ignored raises,
+  // one-time bonuses and corrections. Guarded on annualGross > 0 so a transient empty `employments`
+  // (e.g. right after reload, before the wizard rebuilds it) never clobbers a good saved summary.
+  useEffect(() => {
+    if (annualGross <= 0) return
+    try {
+      localStorage.setItem('av_salary_summary', JSON.stringify({ annualGross, annualNet, annualTDS, fyStartYear }))
+    } catch {}
+  }, [annualGross, annualNet, annualTDS, fyStartYear])
+
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: C.muted }}>Loading...</div>
 
   if (slips.length === 0) {

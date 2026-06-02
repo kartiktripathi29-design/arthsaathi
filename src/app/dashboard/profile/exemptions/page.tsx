@@ -150,7 +150,18 @@ export default function ExemptionsPage() {
   useEffect(() => {
     try {
       localStorage.setItem('av_exemptions', JSON.stringify({
-        hra: { hraReceived: s.hraReceived, rentPaid: s.rentPaid, isMetro: s.isMetro },
+        // Persist the COMPUTED HRA exemption alongside its raw inputs so the Tax Optimizer
+        // consumes the exact figure shown here instead of recomputing (which diverged when basic
+        // pay changed mid-year — the two pages used different slips). monthlyExemption/annualExemption
+        // are the source of truth; basicUsed records which basic this was computed against.
+        hra: {
+          hraReceived: s.hraReceived,
+          rentPaid: s.rentPaid,
+          isMetro: s.isMetro,
+          monthlyExemption: hraExemption,
+          annualExemption: hraExemption * 12,
+          basicUsed: salary?.basicSalary || 0,
+        },
         lta: s.lta,
         driverSalary: s.driverSalary,
         carMaintenance: s.carMaintenance,
@@ -160,7 +171,7 @@ export default function ExemptionsPage() {
         gratuity: gratuityCapped,
       }))
     } catch {}
-  }, [s.hraReceived, s.rentPaid, s.isMetro, s.lta, s.driverSalary, s.carMaintenance, s.dailyAllowance, s.superannuation, s.pfWithdrawal, gratuityCapped])
+  }, [s.hraReceived, s.rentPaid, s.isMetro, s.lta, s.driverSalary, s.carMaintenance, s.dailyAllowance, s.superannuation, s.pfWithdrawal, gratuityCapped, hraExemption, salary])
 
   const toggle = (key: string) => setExpanded(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
   const update = (k: keyof ExemptionsState, v: any) => setS(prev => ({ ...prev, [k]: v }))

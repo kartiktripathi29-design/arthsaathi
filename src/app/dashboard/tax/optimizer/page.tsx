@@ -220,19 +220,55 @@ export default function TaxOptimizerPage() {
       const monthlyAvgNet = slipsArr.length > 0
         ? slipsArr.reduce((s: number, slip: any) => s + (slip.netSalary || slip.basicSalary || 0), 0) / slipsArr.length
         : 0
-      const grossSalary = Math.round(monthlyAvgGross * 12)
-      const netSalary = Math.round(monthlyAvgNet * 12)
+      // Annual income: prefer the Salary page's careful month-by-month summary (raises, bonuses,
+      // corrections) so the tax verdict is computed off the number the user actually reviewed.
+      // Fall back to avg(slip) × 12 only for users who haven't re-saved the salary wizard.
+      const salarySummary = (() => {
+        try { return JSON.parse(localStorage.getItem('av_salary_summary') || 'null') } catch { return null }
+      })()
+      const grossSalary = (salarySummary && (salarySummary.annualGross || 0) > 0)
+        ? Math.round(salarySummary.annualGross)
+        : Math.round(monthlyAvgGross * 12)
+      const netSalary = (salarySummary && (salarySummary.annualGross || 0) > 0)
+        ? Math.round(salarySummary.annualNet || 0)
+        : Math.round(monthlyAvgNet * 12)
 
-      const otherIncome = Array.isArray(otherData) ? otherData.reduce((s: number, inc: any) => s + (inc.amount || 0), 0) : 0
+      // ─── Other income: split slab-taxed from special-rate (capital gains / crypto) ───────
+      // Equity LTCG (12.5% above ₹1.25L aggregate), equity STCG (20%), crypto/VDA (30%) are taxed
+      // at special rates in BOTH regimes — they must NOT enter the slab base. Everything else
+      // (freelance, F&O, interest, other) is slab income, using each entry's precomputed taxable `amount`.
+      const otherEntries: any[] = Array.isArray(otherData) ? otherData : []
+      let slabOtherIncome = 0
+      let ltcgEquityTotal = 0, stcgEquityTotal = 0, cryptoTotal = 0
+      for (const e of otherEntries) {
+        if (e?.type === 'equity') {
+          ltcgEquityTotal += Math.max(0, Number(e.ltcgGains) || 0)
+          stcgEquityTotal += Math.max(0, Number(e.stcgGains) || 0)
+        } else if (e?.type === 'crypto') {
+          cryptoTotal += Math.max(0, Number(e.cryptoGains) || 0)
+        } else {
+          slabOtherIncome += Math.max(0, Number(e?.amount) || 0)
+        }
+      }
+      const ltcgEquityTaxable = Math.max(0, ltcgEquityTotal - 125000)   // ₹1.25L exemption on aggregate LTCG
+      const specialIncomeTotal = ltcgEquityTotal + stcgEquityTotal + cryptoTotal
+      // Special-rate tax + its own 4% cess. No 87A rebate applies to STCG 111A / LTCG 112A / VDA.
+      const specialRateTax = Math.round(ltcgEquityTaxable * 0.125 + stcgEquityTotal * 0.20 + cryptoTotal * 0.30)
+      const specialCess = Math.round(specialRateTax * 0.04)
+      const specialTaxTotal = specialRateTax + specialCess
 
       const hra = exemptionsData.hra || {}
-      const basicSalary = (slipsArr[0]?.basicSalary || 0)
-      const hraExemptMonthly = hra.rentPaid ? Math.max(0, Math.min(
-        hra.hraReceived || 0,
-        (hra.rentPaid || 0) - basicSalary * 0.1,
-        hra.isMetro ? basicSalary * 0.5 : basicSalary * 0.4
-      )) : 0
-      const hraExempt = Math.round(hraExemptMonthly * 12)
+      // HRA: consume the Exemptions page's computed annual figure (source of truth). Fall back to a
+      // recompute using the LATEST slip's basic — the same slip the Exemptions page uses — so the two
+      // agree even for legacy data saved before the computed value was persisted.
+      const lastBasic = (slipsArr[slipsArr.length - 1]?.basicSalary || 0)
+      const hraExempt = (typeof hra.annualExemption === 'number' && (hra.rentPaid || 0) > 0)
+        ? Math.round(hra.annualExemption)
+        : Math.round((hra.rentPaid ? Math.max(0, Math.min(
+            hra.hraReceived || 0,
+            (hra.rentPaid || 0) - lastBasic * 0.1,
+            hra.isMetro ? lastBasic * 0.5 : lastBasic * 0.4
+          )) : 0) * 12)
       // Section 10 exemptions beyond HRA — wizard fields from the Exemptions tab.
       // Caps enforced HERE (defence in depth) so a user entering an unrealistic figure
       // in the form doesn't silently drop taxable income to zero in old regime.
@@ -243,7 +279,7 @@ export default function TaxOptimizerPage() {
       //     no statutory ₹ cap, but only valid under specific conditions (employer-provided car,
       //     retirement, etc.). Trust user input but flag if total exemptions look excessive.
       const ltaCap = 50000
-      const superannuationCap = Math.round((basicSalary * 12) * 0.15) || 0
+      const superannuationCap = Math.round((lastBasic * 12) * 0.15) || 0
       const gratuityCap = 1000000
       const ltaCapped = Math.min(Number(exemptionsData.lta || 0), ltaCap)
       const superannuationCapped = superannuationCap > 0
@@ -322,27 +358,40 @@ export default function TaxOptimizerPage() {
       const stdDedNew = 75000
       const stdDedOld = 50000
 
-      const subTotalNew = grossSalary + otherIncome
+      // Only slab-taxed other income enters the slab base. Special-rate income (CG/crypto) is taxed
+      // separately below and added to the final bill in both regimes.
+      const subTotalNew = grossSalary + slabOtherIncome
       // New regime DISABLES Section 10 exemptions (HRA, LTA, etc.) and Chapter VI-A deductions.
       // Only standard deduction (₹75k) and employer NPS 80CCD(2) survive. So no HRA subtraction here.
       const taxableNew = Math.max(0, subTotalNew - stdDedNew)
-      const subTotalOld = grossSalary + otherIncome
+      const subTotalOld = grossSalary + slabOtherIncome
       const taxableOld = Math.max(0, subTotalOld - stdDedOld - totalExemptions - totalDeductions)
 
       const newBreak = slabBreakdown(taxableNew, 'new', 'normal') // new regime slabs are flat regardless
       const oldBreak = slabBreakdown(taxableOld, 'old', seniorStatus)
-      const itr = recommendITR(Array.isArray(otherData) ? otherData : [], grossSalary + otherIncome)
+      // Grand totals add the (regime-independent) special-rate tax on capital gains / crypto.
+      const newTotal = newBreak.total + specialTaxTotal
+      const oldTotal = oldBreak.total + specialTaxTotal
+      // ITR recommendation uses the full economic income (slab + special-rate) for the ₹50L threshold.
+      const itr = recommendITR(otherEntries, grossSalary + slabOtherIncome + specialIncomeTotal)
 
       setCalc({
-        grossSalary, netSalary, otherIncome,
+        grossSalary, netSalary, slabOtherIncome,
+        // Special-rate (capital gains / crypto) income + tax
+        specialIncome: { ltcg: ltcgEquityTotal, ltcgTaxable: ltcgEquityTaxable, stcg: stcgEquityTotal, crypto: cryptoTotal, total: specialIncomeTotal },
+        specialRateTax, specialCess, specialTaxTotal,
         hraExempt, otherExempts, totalExemptions,
         sec80C, sec80D, sec24b, nps, sec80TTA, sec80TTB, sec80E, sec80G, totalDeductions,
         stdDedNew, stdDedOld,
         subTotalNew, subTotalOld,
         taxableNew, taxableOld,
         newBreak, oldBreak,
-        recommendation: newBreak.total <= oldBreak.total ? 'new' : 'old',
-        savings: Math.abs(newBreak.total - oldBreak.total),
+        newTotal, oldTotal,
+        // Recommendation/savings are based on grand totals. (Special-rate tax is equal in both
+        // regimes, so the difference is driven by the slab portion — but the headline now reflects
+        // the full bill the user actually owes.)
+        recommendation: newTotal <= oldTotal ? 'new' : 'old',
+        savings: Math.abs(newTotal - oldTotal),
         hraFilled: hra.rentPaid > 0,
         itrForm: itr.form,
         itrReasons: itr.reasons,
@@ -416,7 +465,10 @@ export default function TaxOptimizerPage() {
         <h3 style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: '0 0 12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Income & components</h3>
         <Row label="Gross salary" value={fmt(calc.grossSalary)} href="/dashboard/profile/salary" />
         <Row label="Net salary" value={fmt(calc.netSalary)} href="/dashboard/profile/salary" />
-        <Row label="Total other income" value={fmt(calc.otherIncome)} href="/dashboard/profile/other-income" />
+        <Row label="Other income (slab-taxed)" value={fmt(calc.slabOtherIncome)} href="/dashboard/profile/other-income" sub="freelance · F&O · interest · other" />
+        {calc.specialIncome.total > 0 && (
+          <Row label="Capital gains / crypto (special rate)" value={fmt(calc.specialIncome.total)} href="/dashboard/profile/other-income" sub="taxed separately — not at slab" />
+        )}
         <Row label="Total exemptions" value={fmt(calc.totalExemptions)} href="/dashboard/profile/exemptions" sub={`HRA ${fmt(calc.hraExempt)} · Other ${fmt(calc.otherExempts)}`} />
         {/* Sanity warning — exemptions north of 40% of gross are almost always a data-entry error
             (e.g., PF withdrawal or gratuity entered while still employed). Flag it and link to fix. */}
@@ -455,7 +507,7 @@ export default function TaxOptimizerPage() {
 
           {[
             ['Gross salary', calc.grossSalary, calc.grossSalary],
-            ['+ Other income', calc.otherIncome, calc.otherIncome],
+            ['+ Other income (slab)', calc.slabOtherIncome, calc.slabOtherIncome],
             ['= Sub-total', calc.subTotalNew, calc.subTotalOld],
             ['− Standard deduction', -calc.stdDedNew, -calc.stdDedOld],
             // New regime does NOT allow Section 10 exemptions (HRA / LTA / etc.) — show "—".
@@ -484,7 +536,41 @@ export default function TaxOptimizerPage() {
           <div style={{ padding: '8px', background: C.wl, fontWeight: 700, color: C.fg, textAlign: 'right' }}>{fmt(calc.taxableNew)}</div>
           <div style={{ padding: '8px', background: C.wl, fontWeight: 700, color: C.fg, textAlign: 'right' }}>{fmt(calc.taxableOld)}</div>
         </div>
+        <p style={{ fontSize: 10.5, color: C.muted, margin: '10px 0 0', lineHeight: 1.5 }}>
+          Capital gains and crypto are <strong>excluded</strong> from the slab income above — they are taxed at their own statutory rates (shown below) and added to the final bill in both regimes.
+        </p>
       </div>
+
+      {/* ── Capital gains & crypto — special-rate breakdown (both regimes) ── */}
+      {calc.specialIncome.total > 0 && (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 16 }}>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Capital gains &amp; crypto · special rates</h3>
+          <p style={{ fontSize: 11, color: C.muted, margin: '0 0 10px' }}>Taxed at flat statutory rates, not slab. Same in both regimes.</p>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', fontSize: 11.5 }}>
+            <div style={{ padding: '6px 8px', background: C.bg, fontWeight: 700, color: C.muted, borderBottom: `1px solid ${C.border}` }}>Type</div>
+            <div style={{ padding: '6px 8px', background: C.bg, fontWeight: 700, color: C.muted, textAlign: 'right', borderBottom: `1px solid ${C.border}` }}>Gains</div>
+            <div style={{ padding: '6px 8px', background: C.bg, fontWeight: 700, color: C.muted, textAlign: 'right', borderBottom: `1px solid ${C.border}` }}>Rate</div>
+            <div style={{ padding: '6px 8px', background: C.bg, fontWeight: 700, color: C.muted, textAlign: 'right', borderBottom: `1px solid ${C.border}` }}>Tax</div>
+            {[
+              { label: 'Equity LTCG (>1yr)', gains: calc.specialIncome.ltcg, taxable: calc.specialIncome.ltcgTaxable, rate: 0.125, tax: Math.round(calc.specialIncome.ltcgTaxable * 0.125), note: 'after ₹1.25L exemption' },
+              { label: 'Equity STCG (≤1yr)', gains: calc.specialIncome.stcg, taxable: calc.specialIncome.stcg, rate: 0.20, tax: Math.round(calc.specialIncome.stcg * 0.20), note: '' },
+              { label: 'Crypto / VDA', gains: calc.specialIncome.crypto, taxable: calc.specialIncome.crypto, rate: 0.30, tax: Math.round(calc.specialIncome.crypto * 0.30), note: 'no deductions' },
+            ].filter(r => r.gains > 0).map((r, i) => (
+              <Fragment key={i}>
+                <div style={{ padding: '6px 8px', borderBottom: `1px solid ${C.border}`, color: C.text }}>{r.label}{r.note ? <span style={{ color: C.muted, fontSize: 10 }}> · {r.note}</span> : null}</div>
+                <div style={{ padding: '6px 8px', borderBottom: `1px solid ${C.border}`, textAlign: 'right', color: C.text }}>{fmt(r.gains)}</div>
+                <div style={{ padding: '6px 8px', borderBottom: `1px solid ${C.border}`, textAlign: 'right', color: C.text }}>{r.rate * 100}%</div>
+                <div style={{ padding: '6px 8px', borderBottom: `1px solid ${C.border}`, textAlign: 'right', fontWeight: 600, color: C.fg }}>{fmt(r.tax)}</div>
+              </Fragment>
+            ))}
+          </div>
+          <div style={{ marginTop: 10, padding: 10, background: C.bg, borderRadius: 4 }}>
+            <Row label="Special-rate tax" value={fmt(calc.specialRateTax)} />
+            <Row label="Health & Edu cess (4%)" value={fmt(calc.specialCess)} />
+            <Row label="Total (added to both regimes)" value={fmt(calc.specialTaxTotal)} strong />
+          </div>
+        </div>
+      )}
 
       {/* ── Slab-wise breakup — side-by-side comparison ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
@@ -512,7 +598,15 @@ export default function TaxOptimizerPage() {
           {calc.newBreak.rebate > 0 && <Row label="− 87A rebate" value={fmt(calc.newBreak.rebate)} color={C.danger} />}
           {calc.newBreak.surcharge > 0 && <Row label="+ Surcharge" value={fmt(calc.newBreak.surcharge)} />}
           <Row label="Health & Edu cess (4%)" value={fmt(calc.newBreak.cess)} />
-          <Row label="Total tax" value={fmt(calc.newBreak.total)} strong />
+          {calc.specialTaxTotal > 0 ? (
+            <>
+              <Row label="Tax on salary / slab income" value={fmt(calc.newBreak.total)} />
+              <Row label="+ Capital gains / crypto tax" value={fmt(calc.specialTaxTotal)} sub="incl. 4% cess" />
+              <Row label="Total tax payable" value={fmt(calc.newTotal)} strong />
+            </>
+          ) : (
+            <Row label="Total tax" value={fmt(calc.newBreak.total)} strong />
+          )}
         </div>
       </div>
 
@@ -541,7 +635,15 @@ export default function TaxOptimizerPage() {
           {calc.oldBreak.rebate > 0 && <Row label="− 87A rebate" value={fmt(calc.oldBreak.rebate)} color={C.danger} />}
           {calc.oldBreak.surcharge > 0 && <Row label="+ Surcharge" value={fmt(calc.oldBreak.surcharge)} />}
           <Row label="Health & Edu cess (4%)" value={fmt(calc.oldBreak.cess)} />
-          <Row label="Total tax" value={fmt(calc.oldBreak.total)} strong />
+          {calc.specialTaxTotal > 0 ? (
+            <>
+              <Row label="Tax on salary / slab income" value={fmt(calc.oldBreak.total)} />
+              <Row label="+ Capital gains / crypto tax" value={fmt(calc.specialTaxTotal)} sub="incl. 4% cess" />
+              <Row label="Total tax payable" value={fmt(calc.oldTotal)} strong />
+            </>
+          ) : (
+            <Row label="Total tax" value={fmt(calc.oldBreak.total)} strong />
+          )}
         </div>
       </div>
       </div>
