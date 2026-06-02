@@ -26,6 +26,33 @@ export default function DocumentsPage() {
       reader.readAsDataURL(file)
     })
 
+  // Parse an AIS / Form 26AS document via /api/parse-ais and return the parsed object (with
+  // totalTaxCredit, TDS entries, etc.), or null on skip/failure. Portal AIS PDFs are usually
+  // password-protected (PAN + DOB) — if so, prompt once and retry. Optional, so never throws.
+  const parseAisDoc = async (file: File): Promise<any | null> => {
+    const base64 = await readFileAsBase64(file)
+    const mediaType = file.type || 'application/pdf'
+    const call = (password?: string) => fetch('/api/parse-ais', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ base64Data: base64, mediaType, password }),
+    })
+    let res = await call()
+    if (res.status === 422) {
+      const j = await res.json().catch(() => ({} as any))
+      if (j?.error === 'incorrect_password') {
+        const pwd = window.prompt(
+          `"${file.name}" is password-protected.\n\nThe AIS / 26AS password is usually your PAN in lowercase + date of birth as DDMMYYYY (e.g. abcde1234f01011990).\n\nEnter it to read the document, or Cancel to skip:`
+        )
+        if (!pwd) return null
+        res = await call(pwd)
+      }
+    }
+    if (!res.ok) return null
+    const j = await res.json().catch(() => null)
+    return j?.data || null
+  }
+
   const handleProceed = async () => {
     if (salaryFiles.length === 0) {
       alert('Please upload at least one salary slip to continue.')
@@ -128,6 +155,21 @@ export default function DocumentsPage() {
       if (failed.length > 0) {
         alert(`${allSlips.length} slip(s) parsed. ${failed.length} file(s) failed:\n\n${failed.join('\n')}`)
       }
+
+      // Parse AIS / 26AS (optional) so its TDS / tax-credit actually feeds the tax optimizer —
+      // previously only the filename was stored and the document was never read. Prefer AIS (it's a
+      // superset of 26AS); fall back to 26AS. Non-blocking: a failure here never stops the flow.
+      const taxDoc = aisFile || form26File
+      if (taxDoc) {
+        setUploadProgress('Reading AIS / 26AS…')
+        try {
+          const ais = await parseAisDoc(taxDoc)
+          if (ais) localStorage.setItem('as_ais', JSON.stringify(ais))
+        } catch (e) {
+          console.error('[Documents] AIS / 26AS parse failed (non-blocking):', e)
+        }
+      }
+
       router.push('/dashboard/profile/salary')
     } catch (e: any) {
       console.error('[Documents] Outer error:', e)
