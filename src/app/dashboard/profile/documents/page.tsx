@@ -13,6 +13,11 @@ export default function DocumentsPage() {
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<string>('')
   const [parsedData, setParsedData] = useState<any>(null)
+  // AIS / 26AS are parsed the moment they're attached (independent of the salary slip), so an
+  // AIS-only upload works and "Skip to Other Income" carries the data through.
+  type DocStatus = { state: 'idle' | 'reading' | 'done' | 'error'; msg?: string }
+  const [aisStatus, setAisStatus] = useState<DocStatus>({ state: 'idle' })
+  const [form26Status, setForm26Status] = useState<DocStatus>({ state: 'idle' })
 
   const salaryRef = useRef<HTMLInputElement>(null)
   const aisRef = useRef<HTMLInputElement>(null)
@@ -51,6 +56,33 @@ export default function DocumentsPage() {
     if (!res.ok) return null
     const j = await res.json().catch(() => null)
     return j?.data || null
+  }
+
+  // Parse a just-attached AIS/26AS and persist to as_ais (prefer AIS as the superset of 26AS).
+  // Runs on selection so it doesn't depend on the salary slip or the Proceed button.
+  const processTaxDoc = async (file: File, which: 'ais' | 'form26as') => {
+    const setStatus = which === 'ais' ? setAisStatus : setForm26Status
+    setStatus({ state: 'reading' })
+    try {
+      const parsed = await parseAisDoc(file)
+      if (!parsed) {
+        setStatus({ state: 'error', msg: 'Couldn’t read this document — skipped. You can still continue.' })
+        return
+      }
+      // 26AS only writes as_ais when no AIS is attached (AIS is the superset).
+      if (which === 'ais' || !aisFile) localStorage.setItem('as_ais', JSON.stringify(parsed))
+      const credit = Number(parsed.totalTaxCredit) || 0
+      setStatus({ state: 'done', msg: credit > 0 ? `Read ✓ · TDS / tax credit ₹${Math.round(credit).toLocaleString('en-IN')}` : 'Read ✓' })
+    } catch (e: any) {
+      setStatus({ state: 'error', msg: 'Couldn’t read this document — skipped. You can still continue.' })
+    }
+  }
+
+  const DocStatusLine = ({ status }: { status: DocStatus }) => {
+    if (status.state === 'idle') return null
+    const color = status.state === 'done' ? '#2A7A4A' : status.state === 'error' ? '#B94040' : C.muted
+    const text = status.state === 'reading' ? 'Reading document…' : status.msg
+    return <p style={{ fontSize: 11, color, margin: '8px 0 0', fontWeight: 500 }}>{text}</p>
   }
 
   const handleProceed = async () => {
@@ -155,21 +187,7 @@ export default function DocumentsPage() {
       if (failed.length > 0) {
         alert(`${allSlips.length} slip(s) parsed. ${failed.length} file(s) failed:\n\n${failed.join('\n')}`)
       }
-
-      // Parse AIS / 26AS (optional) so its TDS / tax-credit actually feeds the tax optimizer —
-      // previously only the filename was stored and the document was never read. Prefer AIS (it's a
-      // superset of 26AS); fall back to 26AS. Non-blocking: a failure here never stops the flow.
-      const taxDoc = aisFile || form26File
-      if (taxDoc) {
-        setUploadProgress('Reading AIS / 26AS…')
-        try {
-          const ais = await parseAisDoc(taxDoc)
-          if (ais) localStorage.setItem('as_ais', JSON.stringify(ais))
-        } catch (e) {
-          console.error('[Documents] AIS / 26AS parse failed (non-blocking):', e)
-        }
-      }
-
+      // AIS / 26AS are already parsed on attach (see processTaxDoc), so nothing to do here.
       router.push('/dashboard/profile/salary')
     } catch (e: any) {
       console.error('[Documents] Outer error:', e)
@@ -262,7 +280,7 @@ export default function DocumentsPage() {
               <div style={{ fontSize: 13, fontWeight: 500, color: C.fg }}>{aisFile.name}</div>
               <div style={{ fontSize: 11, color: C.muted }}>{(aisFile.size / 1024).toFixed(1)} KB</div>
             </div>
-            <button onClick={() => setAisFile(null)} style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 18 }}>×</button>
+            <button onClick={() => { setAisFile(null); setAisStatus({ state: 'idle' }) }} style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 18 }}>×</button>
           </div>
         ) : (
           <button onClick={() => aisRef.current?.click()} style={{
@@ -272,7 +290,8 @@ export default function DocumentsPage() {
             Click to upload (optional)
           </button>
         )}
-        <input ref={aisRef} type="file" accept=".pdf" style={{ display: 'none' }} onChange={e => e.target.files?.[0] && setAisFile(e.target.files[0])} />
+        <DocStatusLine status={aisStatus} />
+        <input ref={aisRef} type="file" accept=".pdf" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) { setAisFile(f); processTaxDoc(f, 'ais') } }} />
       </div>
 
       {/* Form 26AS - Optional */}
@@ -291,7 +310,7 @@ export default function DocumentsPage() {
               <div style={{ fontSize: 13, fontWeight: 500, color: C.fg }}>{form26File.name}</div>
               <div style={{ fontSize: 11, color: C.muted }}>{(form26File.size / 1024).toFixed(1)} KB</div>
             </div>
-            <button onClick={() => setForm26File(null)} style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 18 }}>×</button>
+            <button onClick={() => { setForm26File(null); setForm26Status({ state: 'idle' }) }} style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 18 }}>×</button>
           </div>
         ) : (
           <button onClick={() => form26Ref.current?.click()} style={{
@@ -301,7 +320,8 @@ export default function DocumentsPage() {
             Click to upload (optional)
           </button>
         )}
-        <input ref={form26Ref} type="file" accept=".pdf" style={{ display: 'none' }} onChange={e => e.target.files?.[0] && setForm26File(e.target.files[0])} />
+        <DocStatusLine status={form26Status} />
+        <input ref={form26Ref} type="file" accept=".pdf" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) { setForm26File(f); processTaxDoc(f, 'form26as') } }} />
       </div>
 
       <div style={{ display: 'flex', gap: 12 }}>
