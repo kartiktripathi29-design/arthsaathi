@@ -234,26 +234,41 @@ export default function TaxOptimizerPage() {
         : Math.round(monthlyAvgNet * 12)
 
       // ─── Other income: split slab-taxed from special-rate (capital gains / crypto) ───────
-      // Equity LTCG (12.5% above ₹1.25L aggregate), equity STCG (20%), crypto/VDA (30%) are taxed
-      // at special rates in BOTH regimes — they must NOT enter the slab base. Everything else
-      // (freelance, F&O, interest, other) is slab income, using each entry's precomputed taxable `amount`.
+      // Capital-gains tax depends on the ASSET behind each gain (chosen on the Other-Income form):
+      //   Listed equity / equity MF → LTCG 12.5% above the ₹1.25L aggregate exemption · STCG 20%
+      //   Unlisted shares           → LTCG 12.5% (NO ₹1.25L exemption) · STCG at slab
+      //   Debt mutual funds         → both LTCG & STCG at slab
+      // Crypto/VDA → 30% flat. Special-rate buckets are taxed in BOTH regimes and never enter the
+      // slab base; the slab-taxed portions (debt MF, unlisted STCG) are folded into slabOtherIncome.
+      // Legacy equity entries with no asset field default to listed_equity (prior behaviour).
+      const isEquityAsset = (a: string) => a === 'listed_equity' || a === 'equity_mf'
       const otherEntries: any[] = Array.isArray(otherData) ? otherData : []
       let slabOtherIncome = 0
-      let ltcgEquityTotal = 0, stcgEquityTotal = 0, cryptoTotal = 0
+      let ltcgEquityTotal = 0, stcgEquityTotal = 0, ltcgUnlistedTotal = 0, cgSlabIncome = 0, cryptoTotal = 0
       for (const e of otherEntries) {
         if (e?.type === 'equity') {
-          ltcgEquityTotal += Math.max(0, Number(e.ltcgGains) || 0)
-          stcgEquityTotal += Math.max(0, Number(e.stcgGains) || 0)
+          const ltAsset = e.ltcgAsset || 'listed_equity'
+          const stAsset = e.stcgAsset || 'listed_equity'
+          const lt = Math.max(0, Number(e.ltcgGains) || 0)
+          const st = Math.max(0, Number(e.stcgGains) || 0)
+          if (isEquityAsset(ltAsset)) ltcgEquityTotal += lt
+          else if (ltAsset === 'unlisted') ltcgUnlistedTotal += lt
+          else cgSlabIncome += lt                                   // debt_mf LTCG → slab
+          if (isEquityAsset(stAsset)) stcgEquityTotal += st
+          else cgSlabIncome += st                                   // debt_mf / unlisted STCG → slab
         } else if (e?.type === 'crypto') {
           cryptoTotal += Math.max(0, Number(e.cryptoGains) || 0)
         } else {
           slabOtherIncome += Math.max(0, Number(e?.amount) || 0)
         }
       }
-      const ltcgEquityTaxable = Math.max(0, ltcgEquityTotal - 125000)   // ₹1.25L exemption on aggregate LTCG
-      const specialIncomeTotal = ltcgEquityTotal + stcgEquityTotal + cryptoTotal
-      // Special-rate tax + its own 4% cess. No 87A rebate applies to STCG 111A / LTCG 112A / VDA.
-      const specialRateTax = Math.round(ltcgEquityTaxable * 0.125 + stcgEquityTotal * 0.20 + cryptoTotal * 0.30)
+      slabOtherIncome += cgSlabIncome   // debt-MF gains + unlisted STCG are taxed at slab
+      const ltcgEquityTaxable = Math.max(0, ltcgEquityTotal - 125000)   // ₹1.25L exemption on aggregate equity LTCG
+      const specialIncomeTotal = ltcgEquityTotal + ltcgUnlistedTotal + stcgEquityTotal + cryptoTotal
+      // Special-rate tax + its own 4% cess. No 87A rebate applies to STCG 111A / LTCG 112A / 112 / VDA.
+      const specialRateTax = Math.round(
+        ltcgEquityTaxable * 0.125 + ltcgUnlistedTotal * 0.125 + stcgEquityTotal * 0.20 + cryptoTotal * 0.30
+      )
       const specialCess = Math.round(specialRateTax * 0.04)
       const specialTaxTotal = specialRateTax + specialCess
 
@@ -415,7 +430,7 @@ export default function TaxOptimizerPage() {
       setCalc({
         grossSalary, netSalary, slabOtherIncome,
         // Special-rate (capital gains / crypto) income + tax
-        specialIncome: { ltcg: ltcgEquityTotal, ltcgTaxable: ltcgEquityTaxable, stcg: stcgEquityTotal, crypto: cryptoTotal, total: specialIncomeTotal },
+        specialIncome: { ltcg: ltcgEquityTotal, ltcgTaxable: ltcgEquityTaxable, ltcgUnlisted: ltcgUnlistedTotal, stcg: stcgEquityTotal, crypto: cryptoTotal, cgSlab: cgSlabIncome, total: specialIncomeTotal },
         specialRateTax, specialCess, specialTaxTotal,
         hraExempt, otherExempts, totalExemptions,
         sec80C, sec80D, sec24b, nps, sec80TTA, sec80TTB, sec80E, sec80G, totalDeductions,
@@ -591,6 +606,7 @@ export default function TaxOptimizerPage() {
             <div style={{ padding: '6px 8px', background: C.bg, fontWeight: 700, color: C.muted, textAlign: 'right', borderBottom: `1px solid ${C.border}` }}>Tax</div>
             {[
               { label: 'Equity LTCG (>1yr)', gains: calc.specialIncome.ltcg, taxable: calc.specialIncome.ltcgTaxable, rate: 0.125, tax: Math.round(calc.specialIncome.ltcgTaxable * 0.125), note: 'after ₹1.25L exemption' },
+              { label: 'Unlisted shares LTCG', gains: calc.specialIncome.ltcgUnlisted, taxable: calc.specialIncome.ltcgUnlisted, rate: 0.125, tax: Math.round(calc.specialIncome.ltcgUnlisted * 0.125), note: 'no ₹1.25L exemption' },
               { label: 'Equity STCG (≤1yr)', gains: calc.specialIncome.stcg, taxable: calc.specialIncome.stcg, rate: 0.20, tax: Math.round(calc.specialIncome.stcg * 0.20), note: '' },
               { label: 'Crypto / VDA', gains: calc.specialIncome.crypto, taxable: calc.specialIncome.crypto, rate: 0.30, tax: Math.round(calc.specialIncome.crypto * 0.30), note: 'no deductions' },
             ].filter(r => r.gains > 0).map((r, i) => (
