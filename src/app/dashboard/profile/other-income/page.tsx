@@ -14,11 +14,49 @@ interface OtherIncomeEntry {
   [key: string]: any
 }
 
+// Map an AIS capital-gains assetType to the Other-Income asset-type dropdown values.
+// property → unlisted is tax-equivalent here (12.5% LTCG without indexation, slab STCG).
+function aisAssetToType(a: string): string {
+  const x = (a || '').toLowerCase()
+  if (x.includes('mutual') || x === 'mf') return 'equity_mf'
+  if (x.includes('debt')) return 'debt_mf'
+  if (x.includes('property') || x.includes('unlisted')) return 'unlisted'
+  return 'listed_equity' // equity / default
+}
+
+// Build Other-Income entries from a parsed AIS object (interest + dividends → one interest entry;
+// capital gains grouped by asset type into equity entries). Entries are tagged _fromAis so a
+// re-import can replace them cleanly without touching the user's manually-added rows.
+function buildAisEntries(ais: any): OtherIncomeEntry[] {
+  const base: any = { grossReceipts: 0, expenses: 0, ltcgGains: 0, stcgGains: 0, ltcgAsset: 'listed_equity', stcgAsset: 'listed_equity', cryptoGains: 0, cryptoTDS: 0, fnoNetProfit: 0, fdInterest: 0, savingsInterest: 0, dividends: 0, otherAmount: 0, declarationMethod: 'presumptive_44ada', _fromAis: true }
+  const out: OtherIncomeEntry[] = []
+  const interest = Math.max(0, Number(ais?.totalInterestIncome) || 0)
+  const dividends = Math.max(0, Number(ais?.dividendIncome) || 0)
+  if (interest > 0 || dividends > 0) {
+    out.push({ ...base, id: 'ais-int', type: 'interest', sourceName: 'From AIS', amount: interest + dividends, fdInterest: interest, dividends })
+  }
+  const cg = Array.isArray(ais?.capitalGains) ? ais.capitalGains : []
+  const byAsset: Record<string, { lt: number; st: number }> = {}
+  for (const c of cg) {
+    const gain = Math.max(0, Number(c?.gain) || 0)
+    if (gain <= 0) continue
+    const t = aisAssetToType(c?.assetType)
+    byAsset[t] = byAsset[t] || { lt: 0, st: 0 }
+    if (String(c?.gainType || '').toUpperCase() === 'STCG') byAsset[t].st += gain
+    else byAsset[t].lt += gain
+  }
+  for (const [asset, g] of Object.entries(byAsset)) {
+    out.push({ ...base, id: 'ais-cg-' + asset, type: 'equity', sourceName: 'From AIS', ltcgGains: g.lt, ltcgAsset: asset, stcgGains: g.st, stcgAsset: asset, amount: 0 })
+  }
+  return out
+}
+
 export default function OtherIncomePage() {
   const router = useRouter()
   const [entries, setEntries] = useState<OtherIncomeEntry[]>([])
   const [openForm, setOpenForm] = useState<OtherIncomeEntry | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [aisData, setAisData] = useState<any>(null)
 
   useEffect(() => {
     const data = localStorage.getItem('av_other_income')
@@ -30,6 +68,11 @@ export default function OtherIncomePage() {
         console.error('Failed to load other income:', e)
       }
     }
+    // AIS (parsed on the Documents page) lets us prefill / cross-check this income.
+    try {
+      const ais = JSON.parse(localStorage.getItem('as_ais') || 'null')
+      if (ais) setAisData(ais)
+    } catch { /* ignore */ }
   }, [])
 
   const types = [
@@ -80,6 +123,25 @@ export default function OtherIncomePage() {
     localStorage.setItem('av_other_income', JSON.stringify(updated))
   }
 
+  // Import income from the parsed AIS: replace any prior AIS-sourced rows, keep the user's manual
+  // ones. `amount` (taxable) is computed the same way as a manually-saved entry.
+  const handleImportFromAis = () => {
+    if (!aisData) return
+    const built = buildAisEntries(aisData).map(e => ({ ...e, amount: getTaxablePreview(e) }))
+    const manual = entries.filter(e => !(e as any)._fromAis)
+    const next = [...manual, ...built]
+    setEntries(next)
+    localStorage.setItem('av_other_income', JSON.stringify(next))
+    setMenuOpen(false)
+  }
+
+  // AIS-reported totals (for the prefill banner + a light reconciliation against what's entered).
+  const aisInterest = Math.max(0, Number(aisData?.totalInterestIncome) || 0)
+  const aisDividends = Math.max(0, Number(aisData?.dividendIncome) || 0)
+  const aisCG = Math.max(0, Number(aisData?.totalCapitalGains) || 0)
+  const aisHasIncome = aisInterest > 0 || aisDividends > 0 || aisCG > 0
+  const hasAisImported = entries.some(e => (e as any)._fromAis)
+
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '20px 0' }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Other Income</h1>
@@ -91,6 +153,30 @@ export default function OtherIncomePage() {
           All income here is added to your salary for tax calculation. Each type has different tax rules — fill in what applies to you.
         </p>
       </div>
+
+      {/* AIS prefill / reconciliation — shown when an AIS/26AS was parsed on the Documents page */}
+      {aisData && aisHasIncome && (
+        <div style={{ background: '#EAF4EF', border: '1px solid #BCDCCB', borderRadius: 8, padding: 16, marginBottom: 24 }}>
+          <p style={{ fontSize: 12, fontWeight: 600, color: C.fg, margin: '0 0 6px' }}>📄 Income found in your AIS / 26AS</p>
+          <p style={{ fontSize: 12, color: C.text, margin: '0 0 10px', lineHeight: 1.6 }}>
+            Interest <strong>{fmt(aisInterest)}</strong> · Dividends <strong>{fmt(aisDividends)}</strong> · Capital gains <strong>{fmt(aisCG)}</strong>
+          </p>
+          {hasAisImported && (
+            <p style={{ fontSize: 11, color: '#2A7A4A', margin: '0 0 10px', lineHeight: 1.5 }}>
+              ✓ Imported into the entries below (rows marked “From AIS”). Edit any of them to adjust, or re-import to refresh from the latest AIS.
+            </p>
+          )}
+          <button
+            onClick={handleImportFromAis}
+            style={{ padding: '9px 16px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+          >
+            {hasAisImported ? 'Re-import from AIS' : 'Import from AIS'}
+          </button>
+          <p style={{ fontSize: 10.5, color: C.muted, margin: '8px 0 0', lineHeight: 1.5 }}>
+            We map AIS capital gains to the right asset type (equity / debt MF / unlisted) and apply the correct rate. Review the imported rows — AIS figures can lag or differ from your records.
+          </p>
+        </div>
+      )}
 
       {entries.length === 0 && !menuOpen ? (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24, textAlign: 'center', marginBottom: 24 }}>
