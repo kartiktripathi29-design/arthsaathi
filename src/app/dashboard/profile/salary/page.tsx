@@ -416,6 +416,11 @@ export default function SalaryPageCompleteFinal() {
               net: Math.round(m.net * ratio),
               deductions: Math.round((m.deductions || 0) * ratio),
               earnings: (m.earnings || []).map(e => ({ ...e, amount: Math.round((e.amount || 0) * ratio) })),
+              // Scale the per-component deduction breakdown by the same ratio. Previously this was
+              // left untouched, so after an increment the Income Tax / PF lines stayed at their
+              // pre-raise values — the breakdown contradicted the (scaled) aggregate `deductions`
+              // and net, and the modal showed a frozen TDS while every earning had grown.
+              deductionsList: (m.deductionsList || []).map(d => ({ ...d, amount: Math.round((d.amount || 0) * ratio) })),
             }
           }
           const fromKey = fc.retroactive && fc.retroFromMonth ? fc.retroFromMonth : fc.monthApplies
