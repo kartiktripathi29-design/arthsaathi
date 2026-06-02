@@ -86,8 +86,16 @@ export default function DocumentsPage() {
   }
 
   const handleProceed = async () => {
-    if (salaryFiles.length === 0) {
-      alert('Please upload at least one salary slip to continue.')
+    const hasSalary = salaryFiles.length > 0
+    if (!hasSalary && !aisFile && !form26File) {
+      alert('Please upload a salary slip, AIS, or Form 26AS to continue.')
+      return
+    }
+    // AIS / 26AS-only path: those documents are already parsed on attach, so there's nothing more to
+    // parse here. Go straight to Other Income, where the AIS income lands and the import banner shows.
+    // (A salary slip is NOT required — e.g. a Sep/Dec filer may have AIS data but no new slip.)
+    if (!hasSalary) {
+      router.push('/dashboard/profile/other-income')
       return
     }
 
@@ -325,10 +333,10 @@ export default function DocumentsPage() {
       </div>
 
       <div style={{ display: 'flex', gap: 12 }}>
-        <button onClick={handleProceed} disabled={salaryFiles.length === 0 || uploading} style={{
-          flex: 1, padding: '12px', background: salaryFiles.length > 0 && !uploading ? C.primary : '#CCC',
+        <button onClick={handleProceed} disabled={!(salaryFiles.length > 0 || aisFile || form26File) || uploading} style={{
+          flex: 1, padding: '12px', background: (salaryFiles.length > 0 || aisFile || form26File) && !uploading ? C.primary : '#CCC',
           color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600,
-          cursor: salaryFiles.length > 0 && !uploading ? 'pointer' : 'not-allowed', fontFamily: 'inherit',
+          cursor: (salaryFiles.length > 0 || aisFile || form26File) && !uploading ? 'pointer' : 'not-allowed', fontFamily: 'inherit',
         }}>
           {uploading ? (uploadProgress || 'Parsing…') : (salaryFiles.length > 1 ? `Proceed (${salaryFiles.length} slips)` : 'Proceed')}
         </button>
