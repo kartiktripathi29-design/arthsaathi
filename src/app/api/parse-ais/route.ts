@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { join } from 'path'
+import { pathToFileURL } from 'url'
 import { createRequire } from 'module'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
@@ -17,11 +18,10 @@ async function extractTextFromPDF(base64Data: string, password?: string): Promis
 
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs' as any)
 
-  // Use the bundled worker file
-  const workerPath = new URL(
-    join(process.cwd(), 'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs'),
-    'file://'
-  ).href
+  // Use the bundled worker file. pathToFileURL handles Windows drive letters correctly —
+  // `new URL(absPath, 'file://')` parses the leading "C:" as a URL scheme on Windows and yields a
+  // broken worker URL ("Received protocol 'c:'"), which killed PDF text extraction in local dev.
+  const workerPath = pathToFileURL(join(process.cwd(), 'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs')).href
   ;(pdfjs as any).GlobalWorkerOptions.workerSrc = workerPath
 
   const pdfBuffer = Buffer.from(base64Data, 'base64')
