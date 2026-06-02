@@ -771,8 +771,10 @@ export default function TaxOptimizerPage() {
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          {[
+        {(() => {
+          // Only surface deductions that still have UNUSED headroom — a fully-claimed deduction
+          // (gap = 0) is not a saving opportunity, so it must not appear under "save more".
+          const saveItems = [
             // `project: true` only for wealth-building deductions (80C, NPS) where the unused
             // gap would be plausibly invested. Health (80D) is a consumed expense and
             // Home Loan Interest is debt service — neither builds a corpus, so no projection.
@@ -780,7 +782,17 @@ export default function TaxOptimizerPage() {
             { label: '80C Investments', limit: 150000, used: calc.sec80C, project: true },
             { label: 'Health Insurance (80D)', limit: 100000, used: calc.sec80D, project: false },
             { label: 'NPS (80CCD(1B))', limit: 50000, used: calc.nps, project: true },
-          ].map(s => {
+          ].filter(s => Math.max(0, s.limit - s.used) > 0)
+          if (saveItems.length === 0) {
+            return (
+              <div style={{ padding: '12px', background: '#F0F9F4', border: '1px solid #CFE6D8', borderRadius: 6 }}>
+                <p style={{ fontSize: 11.5, color: '#2A7A4A', margin: 0, fontWeight: 500 }}>✓ You&apos;ve used all the major deduction limits (80C, 80D, NPS, home-loan interest). Nothing more to claim here.</p>
+              </div>
+            )
+          }
+          return (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          {saveItems.map(s => {
             const gap = Math.max(0, s.limit - s.used)
             const slabRate = 0.30   // assume 30% marginal slab for upper-middle salary
             const yearlyTaxSaved = gap * slabRate
@@ -812,7 +824,9 @@ export default function TaxOptimizerPage() {
               </div>
             )
           })}
-        </div>
+          </div>
+          )
+        })()}
         <p style={{ fontSize: 10, color: C.muted, margin: '12px 0 0', fontStyle: 'italic' }}>Only invest if it makes financial sense. Tax saving is a bonus, not the goal.</p>
       </div>
 
