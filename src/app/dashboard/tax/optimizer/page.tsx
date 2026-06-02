@@ -372,6 +372,12 @@ export default function TaxOptimizerPage() {
       // Grand totals add the (regime-independent) special-rate tax on capital gains / crypto.
       const newTotal = newBreak.total + specialTaxTotal
       const oldTotal = oldBreak.total + specialTaxTotal
+      // TDS already deducted (from the salary slips, via the persisted summary). Reconciling the
+      // computed liability against TDS shows whether the user still owes (balance payable) or is
+      // due a refund. Only available when the Salary page has saved a summary; 0 otherwise (block hidden).
+      const tdsPaid = (salarySummary && (salarySummary.annualGross || 0) > 0) ? Math.round(salarySummary.annualTDS || 0) : 0
+      const newBalance = newTotal - tdsPaid   // > 0 → still payable, < 0 → refund
+      const oldBalance = oldTotal - tdsPaid
       // ITR recommendation uses the full economic income (slab + special-rate) for the ₹50L threshold.
       const itr = recommendITR(otherEntries, grossSalary + slabOtherIncome + specialIncomeTotal)
 
@@ -387,6 +393,7 @@ export default function TaxOptimizerPage() {
         taxableNew, taxableOld,
         newBreak, oldBreak,
         newTotal, oldTotal,
+        tdsPaid, newBalance, oldBalance,
         // Recommendation/savings are based on grand totals. (Special-rate tax is equal in both
         // regimes, so the difference is driven by the slab portion — but the headline now reflects
         // the full bill the user actually owes.)
@@ -607,6 +614,12 @@ export default function TaxOptimizerPage() {
           ) : (
             <Row label="Total tax" value={fmt(calc.newBreak.total)} strong />
           )}
+          {calc.tdsPaid > 0 && (
+            <>
+              <Row label="− TDS already deducted" value={fmt(calc.tdsPaid)} color={C.danger} />
+              <Row label={calc.newBalance >= 0 ? 'Balance tax payable' : 'Expected refund'} value={fmt(Math.abs(calc.newBalance))} strong color={calc.newBalance >= 0 ? C.fg : '#2A7A4A'} />
+            </>
+          )}
         </div>
       </div>
 
@@ -644,9 +657,29 @@ export default function TaxOptimizerPage() {
           ) : (
             <Row label="Total tax" value={fmt(calc.oldBreak.total)} strong />
           )}
+          {calc.tdsPaid > 0 && (
+            <>
+              <Row label="− TDS already deducted" value={fmt(calc.tdsPaid)} color={C.danger} />
+              <Row label={calc.oldBalance >= 0 ? 'Balance tax payable' : 'Expected refund'} value={fmt(Math.abs(calc.oldBalance))} strong color={calc.oldBalance >= 0 ? C.fg : '#2A7A4A'} />
+            </>
+          )}
         </div>
       </div>
       </div>
+
+      {/* ── Balance payable / refund — headline for the recommended regime ── */}
+      {calc.tdsPaid > 0 && (() => {
+        const bal = calc.recommendation === 'new' ? calc.newBalance : calc.oldBalance
+        const total = calc.recommendation === 'new' ? calc.newTotal : calc.oldTotal
+        const refund = bal < 0
+        return (
+          <div style={{ background: refund ? '#F0F9F4' : '#FEF4E8', border: `1px solid ${refund ? '#CFE6D8' : C.wm}`, borderRadius: 8, padding: 20, marginBottom: 16, textAlign: 'center' }}>
+            <p style={{ fontSize: 11, color: C.muted, margin: '0 0 8px', fontWeight: 600, textTransform: 'uppercase' as const }}>{refund ? 'Expected refund' : 'Balance tax still payable'} · {calc.recommendation === 'new' ? 'New' : 'Old'} regime</p>
+            <p style={{ fontSize: 24, fontWeight: 700, color: refund ? '#2A7A4A' : C.fg, margin: 0 }}>{fmt(Math.abs(bal))}</p>
+            <p style={{ fontSize: 10.5, color: C.muted, margin: '8px 0 0' }}>Tax liability {fmt(total)} − TDS already deducted {fmt(calc.tdsPaid)}{refund ? ' = refund due' : ' = still to pay'}</p>
+          </div>
+        )
+      })()}
 
       {/* ── Savings ── */}
       <div style={{ background: '#F0F9F7', border: `1px solid #D1E8E4`, borderRadius: 8, padding: 20, marginBottom: 16, textAlign: 'center' }}>
