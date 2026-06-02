@@ -43,7 +43,15 @@ export default function OtherIncomePage() {
 
   const getTaxablePreview = (entry: OtherIncomeEntry) => {
     if (entry.type === 'freelance') return entry.declarationMethod === 'presumptive_44ada' ? Math.round(entry.grossReceipts * 0.5) : Math.max(0, entry.grossReceipts - entry.expenses)
-    if (entry.type === 'equity') return Math.max(0, entry.ltcgGains - 125000) + entry.stcgGains
+    if (entry.type === 'equity') {
+      // LTCG taxable depends on the asset: listed equity / equity MF get the ₹1.25L exemption;
+      // debt MF and unlisted shares don't. STCG is fully taxable regardless of asset.
+      const ltAsset = entry.ltcgAsset || 'listed_equity'
+      const ltTaxable = (ltAsset === 'listed_equity' || ltAsset === 'equity_mf')
+        ? Math.max(0, entry.ltcgGains - 125000)
+        : entry.ltcgGains
+      return ltTaxable + entry.stcgGains
+    }
     if (entry.type === 'crypto') return entry.cryptoGains
     if (entry.type === 'fno') return entry.fnoNetProfit
     if (entry.type === 'interest') return entry.fdInterest + entry.savingsInterest + entry.dividends
@@ -61,7 +69,7 @@ export default function OtherIncomePage() {
   }
 
   const handleAdd = (type: string) => {
-    const newEntry: OtherIncomeEntry = { id: Date.now().toString(), type: type as any, sourceName: '', amount: 0, grossReceipts: 0, expenses: 0, ltcgGains: 0, stcgGains: 0, cryptoGains: 0, cryptoTDS: 0, fnoNetProfit: 0, fdInterest: 0, savingsInterest: 0, dividends: 0, otherAmount: 0, declarationMethod: 'presumptive_44ada' }
+    const newEntry: OtherIncomeEntry = { id: Date.now().toString(), type: type as any, sourceName: '', amount: 0, grossReceipts: 0, expenses: 0, ltcgGains: 0, stcgGains: 0, ltcgAsset: 'listed_equity', stcgAsset: 'listed_equity', cryptoGains: 0, cryptoTDS: 0, fnoNetProfit: 0, fdInterest: 0, savingsInterest: 0, dividends: 0, otherAmount: 0, declarationMethod: 'presumptive_44ada' }
     setOpenForm(newEntry)
     setMenuOpen(false)
   }
@@ -169,20 +177,39 @@ export default function OtherIncomePage() {
                 </>
               )}
 
-              {openForm.type === 'equity' && (
-                <>
-                  <div>
-                    <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>Long-term gains (held &gt; 1 year)</label>
-                    <input type="text" inputMode="numeric" value={openForm.ltcgGains} onChange={(e) => setOpenForm({ ...openForm, ltcgGains: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }} />
-                    <p style={{ fontSize: 10, color: C.muted, margin: '4px 0 0' }}>First ₹1,25,000 is tax-free</p>
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>Short-term gains (held ≤ 1 year)</label>
-                    <input type="text" inputMode="numeric" value={openForm.stcgGains} onChange={(e) => setOpenForm({ ...openForm, stcgGains: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }} />
-                    <p style={{ fontSize: 10, color: C.muted, margin: '4px 0 0' }}>Taxed at 20% flat</p>
-                  </div>
-                </>
-              )}
+              {openForm.type === 'equity' && (() => {
+                const ASSETS = [
+                  { v: 'listed_equity', label: 'Listed equity shares' },
+                  { v: 'equity_mf', label: 'Equity mutual fund' },
+                  { v: 'debt_mf', label: 'Debt mutual fund' },
+                  { v: 'unlisted', label: 'Unlisted shares' },
+                ]
+                const ltHint = (a: string) => a === 'debt_mf' ? 'Debt funds (bought after Apr 2023): taxed at your slab rate.'
+                  : a === 'unlisted' ? '12.5% — the ₹1.25L exemption does NOT apply to unlisted shares.'
+                  : 'First ₹1,25,000 across listed equity / equity MF is tax-free; balance at 12.5%.'
+                const stHint = (a: string) => (a === 'debt_mf' || a === 'unlisted') ? 'Taxed at your slab rate.' : 'Taxed at 20% flat.'
+                const selStyle: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit', background: '#fff', color: C.text, marginBottom: 8 }
+                return (
+                  <>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>Long-term gains (held &gt; 1 year)</label>
+                      <select value={openForm.ltcgAsset || 'listed_equity'} onChange={(e) => setOpenForm({ ...openForm, ltcgAsset: e.target.value })} style={selStyle}>
+                        {ASSETS.map(a => <option key={a.v} value={a.v}>{a.label}</option>)}
+                      </select>
+                      <input type="text" inputMode="numeric" value={openForm.ltcgGains} onChange={(e) => setOpenForm({ ...openForm, ltcgGains: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }} />
+                      <p style={{ fontSize: 10, color: C.muted, margin: '4px 0 0' }}>{ltHint(openForm.ltcgAsset || 'listed_equity')}</p>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>Short-term gains (held ≤ 1 year)</label>
+                      <select value={openForm.stcgAsset || 'listed_equity'} onChange={(e) => setOpenForm({ ...openForm, stcgAsset: e.target.value })} style={selStyle}>
+                        {ASSETS.map(a => <option key={a.v} value={a.v}>{a.label}</option>)}
+                      </select>
+                      <input type="text" inputMode="numeric" value={openForm.stcgGains} onChange={(e) => setOpenForm({ ...openForm, stcgGains: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }} />
+                      <p style={{ fontSize: 10, color: C.muted, margin: '4px 0 0' }}>{stHint(openForm.stcgAsset || 'listed_equity')}</p>
+                    </div>
+                  </>
+                )
+              })()}
 
               {openForm.type === 'crypto' && (
                 <>
