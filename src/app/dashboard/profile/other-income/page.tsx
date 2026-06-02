@@ -61,7 +61,7 @@ export default function OtherIncomePage() {
   }
 
   const handleAdd = (type: string) => {
-    const newEntry: OtherIncomeEntry = { id: Date.now().toString(), type: type as any, sourceName: '', amount: 0, grossReceipts: 0, expenses: 0, ltcgGains: 0, stcgGains: 0, cryptoGains: 0, fnoNetProfit: 0, fdInterest: 0, savingsInterest: 0, dividends: 0, otherAmount: 0, declarationMethod: 'presumptive_44ada' }
+    const newEntry: OtherIncomeEntry = { id: Date.now().toString(), type: type as any, sourceName: '', amount: 0, grossReceipts: 0, expenses: 0, ltcgGains: 0, stcgGains: 0, cryptoGains: 0, cryptoTDS: 0, fnoNetProfit: 0, fdInterest: 0, savingsInterest: 0, dividends: 0, otherAmount: 0, declarationMethod: 'presumptive_44ada' }
     setOpenForm(newEntry)
     setMenuOpen(false)
   }
@@ -185,11 +185,18 @@ export default function OtherIncomePage() {
               )}
 
               {openForm.type === 'crypto' && (
-                <div>
-                  <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>Net gains from crypto trading</label>
-                  <input type="text" inputMode="numeric" value={openForm.cryptoGains} onChange={(e) => setOpenForm({ ...openForm, cryptoGains: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }} />
-                  <p style={{ fontSize: 10, color: C.danger, margin: '4px 0 0' }}>Taxed at 30% flat. No loss set-off allowed.</p>
-                </div>
+                <>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>Net gains from crypto trading</label>
+                    <input type="text" inputMode="numeric" value={openForm.cryptoGains} onChange={(e) => setOpenForm({ ...openForm, cryptoGains: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }} />
+                    <p style={{ fontSize: 10, color: C.danger, margin: '4px 0 0' }}>Taxed at 30% flat. No loss set-off allowed.</p>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>TDS already deducted (1% u/s 194S) — optional</label>
+                    <input type="text" inputMode="numeric" value={openForm.cryptoTDS > 0 ? openForm.cryptoTDS : ''} onChange={(e) => setOpenForm({ ...openForm, cryptoTDS: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }} />
+                    <p style={{ fontSize: 10, color: C.muted, margin: '4px 0 0' }}>Exchanges deduct 1% of the <strong>transfer value</strong> (not gains). Copy the figure from your exchange statement — it&apos;s credited against your tax. Leave blank if unsure or if you upload your AIS/26AS.</p>
+                  </div>
+                </>
               )}
 
               {openForm.type === 'fno' && (

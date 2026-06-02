@@ -372,10 +372,41 @@ export default function TaxOptimizerPage() {
       // Grand totals add the (regime-independent) special-rate tax on capital gains / crypto.
       const newTotal = newBreak.total + specialTaxTotal
       const oldTotal = oldBreak.total + specialTaxTotal
-      // TDS already deducted (from the salary slips, via the persisted summary). Reconciling the
-      // computed liability against TDS shows whether the user still owes (balance payable) or is
-      // due a refund. Only available when the Salary page has saved a summary; 0 otherwise (block hidden).
-      const tdsPaid = (salarySummary && (salarySummary.annualGross || 0) > 0) ? Math.round(salarySummary.annualTDS || 0) : 0
+      // ── Tax already deducted (TDS), resolved by source priority ──────────────────────────
+      // 1) AIS / 26AS is authoritative — its totalTaxCredit aggregates every head (salary,
+      //    crypto 194S, interest, dividends) plus advance / self-assessment tax. If present, it
+      //    overrides everything else.
+      // 2) Otherwise: salary-slip TDS (from the summary) + TDS on other income. Interest/dividend
+      //    and freelance are estimated at 10% (194A/194/194J); crypto uses the user-entered 194S
+      //    figure (1% of turnover, which can't be derived from gains). Equity capital gains carry
+      //    no TDS for resident individuals, so nothing is added there.
+      let aisCredit = 0
+      try {
+        const ais = JSON.parse(localStorage.getItem('as_ais') || 'null')
+        if (ais && Number(ais.totalTaxCredit) > 0) aisCredit = Math.round(Number(ais.totalTaxCredit))
+      } catch { /* ignore */ }
+      const salaryTDS = (salarySummary && (salarySummary.annualGross || 0) > 0) ? Math.round(salarySummary.annualTDS || 0) : 0
+      let otherIncomeTDS = 0
+      let otherTDSEstimated = false
+      for (const e of otherEntries) {
+        if (e?.type === 'interest') {
+          const base = (Number(e.fdInterest) || 0) + (Number(e.dividends) || 0) // savings interest: no TDS
+          if (base > 0) { otherIncomeTDS += Math.round(base * 0.10); otherTDSEstimated = true }
+        } else if (e?.type === 'freelance') {
+          const gross = Number(e.grossReceipts) || Number(e.amount) || 0
+          if (gross > 0) { otherIncomeTDS += Math.round(gross * 0.10); otherTDSEstimated = true }
+        } else if (e?.type === 'crypto') {
+          otherIncomeTDS += Math.max(0, Number(e.cryptoTDS) || 0) // exact, user-entered from exchange
+        }
+      }
+      let tdsPaid: number
+      let tdsSource: 'ais' | 'estimated' | 'slip' | 'none'
+      if (aisCredit > 0) {
+        tdsPaid = aisCredit; tdsSource = 'ais'
+      } else {
+        tdsPaid = salaryTDS + otherIncomeTDS
+        tdsSource = tdsPaid > 0 ? (otherTDSEstimated ? 'estimated' : 'slip') : 'none'
+      }
       const newBalance = newTotal - tdsPaid   // > 0 → still payable, < 0 → refund
       const oldBalance = oldTotal - tdsPaid
       // ITR recommendation uses the full economic income (slab + special-rate) for the ₹50L threshold.
@@ -393,7 +424,7 @@ export default function TaxOptimizerPage() {
         taxableNew, taxableOld,
         newBreak, oldBreak,
         newTotal, oldTotal,
-        tdsPaid, newBalance, oldBalance,
+        tdsPaid, tdsSource, newBalance, oldBalance,
         // Recommendation/savings are based on grand totals. (Special-rate tax is equal in both
         // regimes, so the difference is driven by the slab portion — but the headline now reflects
         // the full bill the user actually owes.)
@@ -677,6 +708,13 @@ export default function TaxOptimizerPage() {
             <p style={{ fontSize: 11, color: C.muted, margin: '0 0 8px', fontWeight: 600, textTransform: 'uppercase' as const }}>{refund ? 'Expected refund' : 'Balance tax still payable'} · {calc.recommendation === 'new' ? 'New' : 'Old'} regime</p>
             <p style={{ fontSize: 24, fontWeight: 700, color: refund ? '#2A7A4A' : C.fg, margin: 0 }}>{fmt(Math.abs(bal))}</p>
             <p style={{ fontSize: 10.5, color: C.muted, margin: '8px 0 0' }}>Tax liability {fmt(total)} − TDS already deducted {fmt(calc.tdsPaid)}{refund ? ' = refund due' : ' = still to pay'}</p>
+            <p style={{ fontSize: 10, color: C.muted, margin: '4px 0 0', fontStyle: 'italic' }}>
+              {calc.tdsSource === 'ais'
+                ? '✓ TDS from your uploaded AIS / 26AS (covers all heads incl. crypto, interest, dividends)'
+                : calc.tdsSource === 'estimated'
+                ? 'TDS = salary slips + estimated on other income (interest/dividend/freelance @10%, crypto as entered). Upload AIS / 26AS for an exact figure.'
+                : 'TDS from your salary slips. Add other-income TDS or upload AIS / 26AS for an exact figure.'}
+            </p>
           </div>
         )
       })()}
