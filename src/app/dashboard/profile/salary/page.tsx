@@ -132,6 +132,20 @@ interface PeriodMapping {
   sourceSlipId: string  // id of the slip whose components fill these months
 }
 
+// Monthly component breakdown from an uploaded offer letter. When present on a job_switch change,
+// the timeline builder creates a SECOND employment from the switch month using these figures —
+// so HRA (Rule 2A) is computed on the new employer's real basic, not a scaled approximation.
+interface OfferBreakdown {
+  employerName: string
+  grossMonthly: number
+  netMonthly: number
+  basicMonthly: number
+  hraMonthly: number
+  specialMonthly: number
+  employeePfMonthly: number
+  ptMonthly: number
+}
+
 interface ForecastChange {
   kind: 'increment' | 'job_switch' | 'bonus_timing' | 'other'
   monthApplies: string      // YYYY-MM — the month the change takes effect
@@ -140,6 +154,7 @@ interface ForecastChange {
   amountMode: 'pct' | 'abs' // which input the user is using
   amountPct: number         // e.g. 10 for 10%
   amountAbs: number         // absolute new monthly salary in ₹
+  offer?: OfferBreakdown    // set when a job switch is prefilled from an offer letter (2-employer split)
 }
 
 interface WizardData {
@@ -257,6 +272,21 @@ export default function SalaryPageCompleteFinal() {
       const fixed = d.fixedCTC || d.totalCTC || 0
       const monthlyGross = Math.max(0, Math.round((fixed - (d.employerPF || 0)) / 12))
       if (monthlyGross <= 0) throw new Error('No salary figure found in the offer')
+      // Per-month component breakdown for the new employer (annual offer fields ÷ 12). This drives a
+      // real second employment so HRA is computed on the new employer's basic, not a scaled estimate.
+      const mo = (n: number) => Math.max(0, Math.round((n || 0) / 12))
+      const employeePfMonthly = mo(d.employeePF || (d.basicSalary ? Math.min(d.basicSalary * 0.12, 21600) : 0))
+      const ptMonthly = mo(d.professionalTax)
+      const offer: OfferBreakdown = {
+        employerName: d.employerName || 'New employer',
+        grossMonthly: monthlyGross,
+        basicMonthly: mo(d.basicSalary),
+        hraMonthly: mo(d.hra),
+        specialMonthly: mo((d.specialAllowance || 0) + (d.da || 0) + (d.ta || 0) + (d.lta || 0) + (d.medicalAllowance || 0) + (d.otherAllowances || 0)),
+        employeePfMonthly,
+        ptMonthly,
+        netMonthly: Math.max(0, monthlyGross - employeePfMonthly - ptMonthly),
+      }
       const mk = joiningMonthKey(d.joiningDate)
       // Same FY window the change dropdown offers: this FY, at-or-after the latest uploaded slip.
       const fullFY = fyMonths(fyStartYear)
@@ -266,10 +296,10 @@ export default function SalaryPageCompleteFinal() {
       setWizard(prev => ({
         ...prev,
         forecastChanges: prev.forecastChanges.map((c, i) => i === idx
-          ? { ...c, kind: 'job_switch', amountMode: 'abs', amountAbs: monthlyGross, amountPct: 0, ...(inFy ? { monthApplies: mk } : {}) }
+          ? { ...c, kind: 'job_switch', amountMode: 'abs', amountAbs: monthlyGross, amountPct: 0, offer, ...(inFy ? { monthApplies: mk } : {}) }
           : c),
       }))
-      setOfferStatus({ idx, state: 'done', msg: `${d.employerName || 'New employer'} · ${fmt(monthlyGross)}/mo${inFy ? ` · from ${monthLabel(mk)}` : (mk ? ` · joins ${monthLabel(mk)} (outside this FY — pick a month)` : ' · pick the switch month')}` })
+      setOfferStatus({ idx, state: 'done', msg: `${offer.employerName} · ${fmt(monthlyGross)}/mo${inFy ? ` · from ${monthLabel(mk)}` : (mk ? ` · joins ${monthLabel(mk)} (outside this FY — pick a month)` : ' · pick the switch month')}` })
     } catch (e: any) {
       setOfferStatus({ idx, state: 'error', msg: e?.message || 'Could not read the offer letter' })
     }
@@ -445,6 +475,9 @@ export default function SalaryPageCompleteFinal() {
       })
       for (const fc of sorted) {
         if (!fc.monthApplies) continue
+        // Offer-letter-backed job switches aren't scaled here — they split the timeline into a
+        // second employment below, using the offer's real component breakdown.
+        if (fc.kind === 'job_switch' && fc.offer) continue
         const isOneShot = fc.kind === 'bonus_timing' || fc.kind === 'other'
         if (isOneShot) {
           // Top-up: add the absolute amount (or % of current gross) to monthApplies only.
@@ -490,6 +523,50 @@ export default function SalaryPageCompleteFinal() {
     }
 
     const empName = (slipsWithMeta[0]?.raw?.employerName) || 'Employment'
+
+    // Full job switch: if a job_switch change carries an offer breakdown, split the FY into TWO
+    // employments at the join month — the old employer up to the prior month, the new employer
+    // (with the offer's own basic/HRA/PF) from the join month on. extractHraBasis/extractAnnualGross
+    // already sum across employments, and the optimizer applies the standard deduction once on the
+    // combined total, so the two-employer split is tax-correct.
+    const offerSwitch = (wizard.intent === 'forecast')
+      ? wizard.forecastChanges.find(fc => fc.kind === 'job_switch' && fc.offer && fc.monthApplies)
+      : undefined
+
+    if (offerSwitch && offerSwitch.offer) {
+      const o = offerSwitch.offer
+      const joinKey = offerSwitch.monthApplies
+      const monthBefore = (mk: string) => {
+        const [y, m] = mk.split('-').map(Number)
+        return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`
+      }
+      const bMonth = (mk: string): MonthData => ({
+        monthKey: mk,
+        gross: o.grossMonthly,
+        net: o.netMonthly,
+        deductions: o.grossMonthly - o.netMonthly,
+        source: 'projected',
+        earnings: [
+          { label: 'Basic', amount: o.basicMonthly, frequency: 'monthly' as const },
+          { label: 'HRA', amount: o.hraMonthly, frequency: 'monthly' as const },
+          { label: 'Special Allowance', amount: o.specialMonthly, frequency: 'monthly' as const },
+        ].filter(e => e.amount > 0),
+        deductionsList: [
+          { label: 'EPF', amount: o.employeePfMonthly, frequency: 'monthly' as const },
+          { label: 'Professional Tax', amount: o.ptMonthly, frequency: 'monthly' as const },
+        ].filter(d => d.amount > 0),
+      })
+      const aMonths = months.filter(m => m.monthKey < joinKey)
+      const bMonths = allFY.filter(mk => mk >= joinKey).map(bMonth)
+      const result: Employment[] = []
+      if (aMonths.length > 0) {
+        result.push({ id: 'emp-a', name: empName, fromMonth: `${fyStart}-04`, toMonth: monthBefore(joinKey), months: aMonths, baseGross: aMonths[0]?.gross || 0, baseNet: aMonths[0]?.net || 0 })
+      }
+      result.push({ id: 'emp-b', name: o.employerName, fromMonth: joinKey, toMonth: `${fyStart + 1}-03`, months: bMonths, baseGross: o.grossMonthly, baseNet: o.netMonthly })
+      setEmployments(result)
+      return
+    }
+
     setEmployments([{
       id: 'emp-v7',
       name: empName,
@@ -1180,7 +1257,9 @@ export default function SalaryPageCompleteFinal() {
                           </p>
                         )}
                         <p style={{ fontSize: 10, color: C.muted, margin: '6px 0 0', lineHeight: 1.5 }}>
-                          We read the offer's CTC and joining date to set the new monthly pay and switch month. HRA from the switch month is scaled from your current slip, not the offer's exact basic — review if you claim HRA.
+                          {fc.offer
+                            ? `Modeled as a separate employment (${fc.offer.employerName}) from the switch month, using the offer's own basic / HRA / PF — so HRA is computed correctly per employer. Standard deduction still applies once across both jobs.`
+                            : `We read the offer's CTC and joining date, then model the new job as a separate employment from the switch month (with its own basic/HRA) for accurate per-employer HRA.`}
                         </p>
                       </div>
                     )}
