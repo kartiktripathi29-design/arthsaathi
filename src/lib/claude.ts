@@ -118,6 +118,28 @@ export async function parseSalaryFromBase64(
   return parsed
 }
 
+// Excel/CSV salary slips can't be sent to the vision model — the route converts the workbook to
+// CSV-like text and parses it here using the same schema/prompt as the image/PDF path.
+export async function parseSalaryFromText(sheetText: string): Promise<ParsedSalaryData> {
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 1200,
+    system: SALARY_PARSE_SYSTEM,
+    messages: [{
+      role: 'user',
+      content: [{
+        type: 'text',
+        text: `Parse this Indian salary slip, exported as spreadsheet/CSV text, and return the JSON as specified. Extract every number accurately.\n\n${sheetText}`,
+      }],
+    }],
+  })
+
+  const text = response.content[0].type === 'text' ? response.content[0].text : ''
+  const jsonMatch = text.match(/\{[\s\S]*\}/)
+  if (!jsonMatch) throw new Error('Could not extract JSON from Claude response')
+  return JSON.parse(jsonMatch[0]) as ParsedSalaryData
+}
+
 // ─── Offer Letter Parser ─────────────────────────────────────────────────
 
 const OFFER_LETTER_PARSE_SYSTEM = `You are a precise Indian offer letter parser. Extract ALL compensation components from any Indian offer letter — regardless of company, format, or layout.
