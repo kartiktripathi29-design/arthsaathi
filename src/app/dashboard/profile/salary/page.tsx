@@ -2,10 +2,12 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { seedIfMissing, verifyIdentity, setStoredIdentity } from '@/lib/identity'
+import { confirmDialog } from '@/components/Dialog'
 import {
   detectAnomalies,
   extractAnnualGross,
   extractAnnualTDS,
+  extractHraBasis,
   type Anomaly,
 } from '@/lib/salary-analytics'
 
@@ -584,7 +586,7 @@ export default function SalaryPageCompleteFinal() {
 
   // Manually enter a salary breakdown for a month — no slip needed.
   // Gross = sum of earnings, Net = gross - sum of deductions. Persisted as 'edited'.
-  const submitManualEntry = (employmentId: string) => {
+  const submitManualEntry = async (employmentId: string) => {
     setManualError(null)
     if (!manualMonthKey) { setManualError('Pick a month'); return }
 
@@ -606,7 +608,7 @@ export default function SalaryPageCompleteFinal() {
     if (!emp) return
     const existing = emp.months.find(m => m.monthKey === manualMonthKey)
     if (existing && (existing.source === 'actual' || existing.source === 'edited')) {
-      if (!window.confirm(`A slip already exists for ${monthLabel(manualMonthKey)}. Replace it?`)) return
+      if (!(await confirmDialog(`A slip already exists for ${monthLabel(manualMonthKey)}. Replace it?`))) return
     }
 
     setEmployments(prev => prev.map(e => {
@@ -651,7 +653,7 @@ export default function SalaryPageCompleteFinal() {
       const res = await fetch('/api/parse-salary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ base64Data: base64, mediaType: file.type }),
+        body: JSON.stringify({ base64Data: base64, mediaType: file.type, fileName: file.name }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json?.error || 'Parse failed')
@@ -663,11 +665,14 @@ export default function SalaryPageCompleteFinal() {
       if (!seeded) {
         const check = verifyIdentity(parsed)
         if (!check.ok) {
-          const proceed = window.confirm(
-            `This slip may belong to someone else:\n\n` +
-            check.mismatches.map(m => `• ${m}`).join('\n') +
-            `\n\nUpload only your own salary slips. Continue anyway?`
-          )
+          const proceed = await confirmDialog({
+            title: 'Possible identity mismatch',
+            message:
+              `This slip may belong to someone else:\n\n` +
+              check.mismatches.map(m => `• ${m}`).join('\n') +
+              `\n\nUpload only your own salary slips. Continue anyway?`,
+            confirmLabel: 'Continue', danger: true,
+          })
           if (!proceed) {
             setMonthUploadError('Upload cancelled — identity mismatch.')
             return
@@ -686,12 +691,14 @@ export default function SalaryPageCompleteFinal() {
 
       let monthKey = selectedMonthKey
       if (parsedKey && parsedKey !== selectedMonthKey) {
-        const useParsed = window.confirm(
-          `This slip looks like it's for ${monthLabel(parsedKey)}, ` +
-          `but you selected ${monthLabel(selectedMonthKey)}.\n\n` +
-          `Click OK to attach it to ${monthLabel(parsedKey)} instead, ` +
-          `or Cancel to abort the upload.`
-        )
+        const useParsed = await confirmDialog({
+          title: 'Slip month doesn\'t match',
+          message:
+            `This slip looks like it's for ${monthLabel(parsedKey)}, ` +
+            `but you selected ${monthLabel(selectedMonthKey)}.\n\n` +
+            `Attach it to ${monthLabel(parsedKey)} instead, or cancel to abort the upload.`,
+          confirmLabel: `Attach to ${monthLabel(parsedKey)}`, cancelLabel: 'Abort',
+        })
         if (!useParsed) {
           setMonthUploadError(`Upload cancelled — slip month did not match selection.`)
           return
@@ -710,7 +717,7 @@ export default function SalaryPageCompleteFinal() {
       // Now confirm overwrite of an actual/edited month (using the resolved monthKey).
       const existing = emp.months.find(m => m.monthKey === monthKey)
       if (existing && (existing.source === 'actual' || existing.source === 'edited')) {
-        const ok = window.confirm(`A slip already exists for ${monthLabel(monthKey)}. Replace it?`)
+        const ok = await confirmDialog(`A slip already exists for ${monthLabel(monthKey)}. Replace it?`)
         if (!ok) return
       }
 
@@ -735,11 +742,14 @@ export default function SalaryPageCompleteFinal() {
       }
       if (conflicts.length > 0) {
         const summary = conflicts.slice(0, 3).map(c => `• "${c.label}" was marked One-Time in ${monthLabel(c.otherMonth)}`).join('\n')
-        const keepBoth = window.confirm(
-          `Frequency conflict:\n\n${summary}\n\n` +
-          `OK = count both months (will un-mark as one-time).\n` +
-          `Cancel = ignore the new occurrence, keep the prior one-time tag.`
-        )
+        const keepBoth = await confirmDialog({
+          title: 'Frequency conflict',
+          message:
+            `${summary}\n\n` +
+            `Count both months (will un-mark as one-time), ` +
+            `or ignore the new occurrence and keep the prior one-time tag.`,
+          confirmLabel: 'Count both', cancelLabel: 'Keep one-time',
+        })
         if (!keepBoth) {
           // Drop the conflicting earnings from this slip's incoming list.
           const drop = new Set(conflicts.map(c => c.label.toLowerCase()))
@@ -803,6 +813,11 @@ export default function SalaryPageCompleteFinal() {
     [employments],
   )
 
+  // Per-month Basic + HRA series, so the Exemptions page can compute the HRA
+  // exemption month-by-month (Rule 2A) instead of single-month × 12 — which was
+  // wrong whenever pay changed mid-year.
+  const hraBasis = useMemo(() => extractHraBasis(employments), [employments])
+
   // Persist the careful month-by-month annual summary so the Tax Optimizer uses the SAME number
   // the user reviewed here — instead of re-deriving it as avg(slip) × 12, which ignored raises,
   // one-time bonuses and corrections. Guarded on annualGross > 0 so a transient empty `employments`
@@ -810,9 +825,9 @@ export default function SalaryPageCompleteFinal() {
   useEffect(() => {
     if (annualGross <= 0) return
     try {
-      localStorage.setItem('av_salary_summary', JSON.stringify({ annualGross, annualNet, annualTDS, fyStartYear }))
+      localStorage.setItem('av_salary_summary', JSON.stringify({ annualGross, annualNet, annualTDS, fyStartYear, hraBasis }))
     } catch {}
-  }, [annualGross, annualNet, annualTDS, fyStartYear])
+  }, [annualGross, annualNet, annualTDS, fyStartYear, hraBasis])
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: C.muted }}>Loading...</div>
 
@@ -888,8 +903,8 @@ export default function SalaryPageCompleteFinal() {
                         <button onClick={() => setWizard(prev => ({ ...prev, slipConfirmations: { ...prev.slipConfirmations, [s.id]: 'confirmed' } }))} style={{ padding: '6px 12px', background: status === 'confirmed' ? '#2A7A4A' : '#fff', color: status === 'confirmed' ? '#fff' : C.fg, border: `1px solid ${status === 'confirmed' ? '#2A7A4A' : C.border}`, borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>✓ Yes</button>
                         <button onClick={() => setWizard(prev => ({ ...prev, slipConfirmations: { ...prev.slipConfirmations, [s.id]: 'edit' } }))} style={{ padding: '6px 12px', background: status === 'edit' ? '#E07B3A' : '#fff', color: status === 'edit' ? '#fff' : C.fg, border: `1px solid ${status === 'edit' ? '#E07B3A' : C.border}`, borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Edit</button>
                         <button
-                          onClick={() => {
-                            if (!window.confirm(`Delete ${monthLabel(s.monthKey)} salary slip? This can't be undone.`)) return
+                          onClick={async () => {
+                            if (!(await confirmDialog({ message: `Delete ${monthLabel(s.monthKey)} salary slip? This can't be undone.`, confirmLabel: 'Delete', danger: true }))) return
                             const nextSlips = slips.filter((raw: any, idx: number) => {
                               const k = `${raw?.year || ''}|${String(raw?.month || '').toLowerCase()}`
                               const sk = `${s.year}|${String(s.raw.month || '').toLowerCase()}`
@@ -920,8 +935,8 @@ export default function SalaryPageCompleteFinal() {
               {slipsWithMeta.length > 0 && (
                 <div style={{ marginBottom: 12, textAlign: 'right' }}>
                   <button
-                    onClick={() => {
-                      if (!window.confirm(`Delete all ${slipsWithMeta.length} uploaded slip(s)? This will reset the timeline.`)) return
+                    onClick={async () => {
+                      if (!(await confirmDialog({ message: `Delete all ${slipsWithMeta.length} uploaded slip(s)? This will reset the timeline.`, confirmLabel: 'Delete all', danger: true }))) return
                       setSlips([])
                       setEmployments([])
                       try {
