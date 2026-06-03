@@ -243,15 +243,24 @@ export default function TaxOptimizerPage() {
       let ltcgEquityTotal = 0, stcgEquityTotal = 0, ltcgUnlistedTotal = 0, cgSlabIncome = 0, cryptoTotal = 0
       for (const e of otherEntries) {
         if (e?.type === 'equity') {
-          const ltAsset = e.ltcgAsset || 'listed_equity'
-          const stAsset = e.stcgAsset || 'listed_equity'
-          const lt = Math.max(0, Number(e.ltcgGains) || 0)
-          const st = Math.max(0, Number(e.stcgGains) || 0)
-          if (isEquityAsset(ltAsset)) ltcgEquityTotal += lt
-          else if (ltAsset === 'unlisted') ltcgUnlistedTotal += lt
-          else cgSlabIncome += lt                                   // debt_mf LTCG → slab
-          if (isEquityAsset(stAsset)) stcgEquityTotal += st
-          else cgSlabIncome += st                                   // debt_mf / unlisted STCG → slab
+          // An equity entry now holds one row per asset (rows: [{asset, ltcg, stcg}]). Older entries
+          // had single ltcgAsset/stcgAsset fields — fall back to a one-row-per-leg shape for those.
+          const rows: any[] = Array.isArray(e.rows) && e.rows.length
+            ? e.rows
+            : [
+                { asset: e.ltcgAsset || 'listed_equity', ltcg: Number(e.ltcgGains) || 0, stcg: 0 },
+                { asset: e.stcgAsset || 'listed_equity', ltcg: 0, stcg: Number(e.stcgGains) || 0 },
+              ]
+          for (const r of rows) {
+            const asset = r.asset || 'listed_equity'
+            const lt = Math.max(0, Number(r.ltcg) || 0)
+            const st = Math.max(0, Number(r.stcg) || 0)
+            if (isEquityAsset(asset)) ltcgEquityTotal += lt
+            else if (asset === 'unlisted') ltcgUnlistedTotal += lt
+            else cgSlabIncome += lt                                 // debt_mf LTCG → slab
+            if (isEquityAsset(asset)) stcgEquityTotal += st
+            else cgSlabIncome += st                                 // debt_mf / unlisted STCG → slab
+          }
         } else if (e?.type === 'crypto') {
           cryptoTotal += Math.max(0, Number(e.cryptoGains) || 0)
         } else {

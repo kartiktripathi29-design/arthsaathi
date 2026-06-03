@@ -14,6 +14,49 @@ interface OtherIncomeEntry {
   [key: string]: any
 }
 
+// One capital-gains line for a single asset type, inside an equity entry. An equity entry can hold
+// several of these so all the user's assets live in ONE source (instead of one source per asset).
+interface EquityRow { asset: string; ltcg: number; stcg: number }
+
+const EQUITY_ASSETS = [
+  { v: 'listed_equity', label: 'Listed equity shares' },
+  { v: 'equity_mf', label: 'Equity mutual fund' },
+  { v: 'debt_mf', label: 'Debt mutual fund' },
+  { v: 'unlisted', label: 'Unlisted shares' },
+]
+const isEquityAsset = (a: string) => a === 'listed_equity' || a === 'equity_mf'
+const ltAssetHint = (a: string) => a === 'debt_mf' ? 'Debt funds (post Apr 2023): slab rate.'
+  : a === 'unlisted' ? '12.5% — no ₹1.25L exemption.'
+  : 'Listed equity / equity MF share one ₹1.25L LT exemption; balance 12.5%.'
+const stAssetHint = (a: string) => (a === 'debt_mf' || a === 'unlisted') ? 'Slab rate.' : '20% flat.'
+
+// Rebuild rows from the legacy single-asset fields (ltcgGains/ltcgAsset/stcgGains/stcgAsset) so
+// entries saved before the rows layout still edit and compute correctly.
+function equityRowsFromLegacy(e: any): EquityRow[] {
+  const map: Record<string, EquityRow> = {}
+  const add = (asset: string, lt: number, st: number) => {
+    const a = asset || 'listed_equity'
+    map[a] = map[a] || { asset: a, ltcg: 0, stcg: 0 }
+    map[a].ltcg += lt; map[a].stcg += st
+  }
+  if ((e.ltcgGains || 0) > 0) add(e.ltcgAsset || 'listed_equity', e.ltcgGains || 0, 0)
+  if ((e.stcgGains || 0) > 0) add(e.stcgAsset || 'listed_equity', 0, e.stcgGains || 0)
+  const rows = Object.values(map)
+  return rows.length ? rows : [{ asset: 'listed_equity', ltcg: 0, stcg: 0 }]
+}
+
+// Ensure an equity entry has rows, and keep the legacy aggregate fields in sync with them so the
+// optimizer's fallback path and the profile-page reader stay correct without a tax-logic change.
+function syncEquityLegacy(e: any): any {
+  if (e.type !== 'equity') return e
+  const rows: EquityRow[] = Array.isArray(e.rows) && e.rows.length ? e.rows : equityRowsFromLegacy(e)
+  const ltcgGains = rows.reduce((s, r) => s + (Math.max(0, r.ltcg) || 0), 0)
+  const stcgGains = rows.reduce((s, r) => s + (Math.max(0, r.stcg) || 0), 0)
+  const ltcgAsset = rows.find(r => (r.ltcg || 0) > 0)?.asset || rows[0].asset
+  const stcgAsset = rows.find(r => (r.stcg || 0) > 0)?.asset || rows[0].asset
+  return { ...e, rows, ltcgGains, stcgGains, ltcgAsset, stcgAsset }
+}
+
 // Map an AIS capital-gains assetType to the Other-Income asset-type dropdown values.
 // property → unlisted is tax-equivalent here (12.5% LTCG without indexation, slab STCG).
 function aisAssetToType(a: string): string {
@@ -45,8 +88,10 @@ function buildAisEntries(ais: any): OtherIncomeEntry[] {
     if (String(c?.gainType || '').toUpperCase() === 'STCG') byAsset[t].st += gain
     else byAsset[t].lt += gain
   }
-  for (const [asset, g] of Object.entries(byAsset)) {
-    out.push({ ...base, id: 'ais-cg-' + asset, type: 'equity', sourceName: 'From AIS', ltcgGains: g.lt, ltcgAsset: asset, stcgGains: g.st, stcgAsset: asset, amount: 0 })
+  // All AIS capital gains go into ONE equity source, one row per asset type.
+  const rows: EquityRow[] = Object.entries(byAsset).map(([asset, g]) => ({ asset, ltcg: g.lt, stcg: g.st }))
+  if (rows.length > 0) {
+    out.push(syncEquityLegacy({ ...base, id: 'ais-cg', type: 'equity', sourceName: 'From AIS', rows, amount: 0 }))
   }
   return out
 }
@@ -63,7 +108,8 @@ export default function OtherIncomePage() {
     if (data) {
       try {
         const parsed = JSON.parse(data)
-        setEntries(Array.isArray(parsed) ? parsed : [])
+        // Migrate equity entries saved before the rows layout so they edit/compute correctly.
+        setEntries(Array.isArray(parsed) ? parsed.map(e => e?.type === 'equity' ? syncEquityLegacy(e) : e) : [])
       } catch (e) {
         console.error('Failed to load other income:', e)
       }
@@ -87,13 +133,16 @@ export default function OtherIncomePage() {
   const getTaxablePreview = (entry: OtherIncomeEntry) => {
     if (entry.type === 'freelance') return entry.declarationMethod === 'presumptive_44ada' ? Math.round(entry.grossReceipts * 0.5) : Math.max(0, entry.grossReceipts - entry.expenses)
     if (entry.type === 'equity') {
-      // LTCG taxable depends on the asset: listed equity / equity MF get the ₹1.25L exemption;
-      // debt MF and unlisted shares don't. STCG is fully taxable regardless of asset.
-      const ltAsset = entry.ltcgAsset || 'listed_equity'
-      const ltTaxable = (ltAsset === 'listed_equity' || ltAsset === 'equity_mf')
-        ? Math.max(0, entry.ltcgGains - 125000)
-        : entry.ltcgGains
-      return ltTaxable + entry.stcgGains
+      // Sum across asset rows. LTCG taxable depends on the asset: listed equity / equity MF share
+      // one ₹1.25L exemption; debt MF and unlisted don't. STCG is fully taxable regardless.
+      const rows: EquityRow[] = Array.isArray(entry.rows) && entry.rows.length ? entry.rows : equityRowsFromLegacy(entry)
+      let equityLt = 0, otherLt = 0, st = 0
+      for (const r of rows) {
+        const lt = Math.max(0, r.ltcg || 0)
+        if (isEquityAsset(r.asset)) equityLt += lt; else otherLt += lt
+        st += Math.max(0, r.stcg || 0)
+      }
+      return Math.max(0, equityLt - 125000) + otherLt + st
     }
     if (entry.type === 'crypto') return entry.cryptoGains
     if (entry.type === 'fno') return entry.fnoNetProfit
@@ -104,15 +153,19 @@ export default function OtherIncomePage() {
 
   const handleSave = () => {
     if (openForm) {
+      // For equity, sync the legacy aggregate fields from the rows before saving.
+      const normalized = syncEquityLegacy(openForm)
+      const saved = { ...normalized, amount: getTaxablePreview(normalized) }
       const updated = entries.filter(e => e.id !== openForm.id)
-      setEntries([...updated, { ...openForm, amount: getTaxablePreview(openForm) }])
-      localStorage.setItem('av_other_income', JSON.stringify([...updated, { ...openForm, amount: getTaxablePreview(openForm) }]))
+      const next = [...updated, saved]
+      setEntries(next)
+      localStorage.setItem('av_other_income', JSON.stringify(next))
       setOpenForm(null)
     }
   }
 
   const handleAdd = (type: string) => {
-    const newEntry: OtherIncomeEntry = { id: Date.now().toString(), type: type as any, sourceName: '', amount: 0, grossReceipts: 0, expenses: 0, ltcgGains: 0, stcgGains: 0, ltcgAsset: 'listed_equity', stcgAsset: 'listed_equity', cryptoGains: 0, cryptoTDS: 0, fnoNetProfit: 0, fdInterest: 0, savingsInterest: 0, dividends: 0, otherAmount: 0, declarationMethod: 'presumptive_44ada' }
+    const newEntry: OtherIncomeEntry = { id: Date.now().toString(), type: type as any, sourceName: '', amount: 0, grossReceipts: 0, expenses: 0, ltcgGains: 0, stcgGains: 0, ltcgAsset: 'listed_equity', stcgAsset: 'listed_equity', rows: type === 'equity' ? [{ asset: 'listed_equity', ltcg: 0, stcg: 0 }] : undefined, cryptoGains: 0, cryptoTDS: 0, fnoNetProfit: 0, fdInterest: 0, savingsInterest: 0, dividends: 0, otherAmount: 0, declarationMethod: 'presumptive_44ada' }
     setOpenForm(newEntry)
     setMenuOpen(false)
   }
@@ -190,8 +243,9 @@ export default function OtherIncomePage() {
           {entries.map(entry => (
             <div key={entry.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16, marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <p style={{ fontSize: 13, fontWeight: 600, color: C.text, margin: '0 0 4px' }}>{entry.sourceName || 'Unnamed'}</p>
-                <p style={{ fontSize: 11, color: C.muted, margin: 0 }}>{types.find(t => t.key === entry.type)?.label}</p>
+                {/* Equity has no source name (all assets in one source) — title it by type instead. */}
+                <p style={{ fontSize: 13, fontWeight: 600, color: C.text, margin: '0 0 4px' }}>{entry.sourceName?.trim() || types.find(t => t.key === entry.type)?.label}</p>
+                {entry.sourceName?.trim() && <p style={{ fontSize: 11, color: C.muted, margin: 0 }}>{types.find(t => t.key === entry.type)?.label}</p>}
               </div>
               <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                 <div style={{ textAlign: 'right' }}>
@@ -232,10 +286,13 @@ export default function OtherIncomePage() {
             <p style={{ fontSize: 11.5, color: C.muted, margin: '0 0 16px', lineHeight: 1.6 }}>{types.find(t => t.key === openForm.type)?.desc}</p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div>
-                <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>Source name</label>
-                <input type="text" value={openForm.sourceName} onChange={(e) => setOpenForm({ ...openForm, sourceName: e.target.value })} placeholder="e.g. Freelance clients" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }} />
-              </div>
+              {/* Equity holds all assets in one consolidated source, so it needs no source name. */}
+              {openForm.type !== 'equity' && (
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>Source name</label>
+                  <input type="text" value={openForm.sourceName} onChange={(e) => setOpenForm({ ...openForm, sourceName: e.target.value })} placeholder="e.g. Freelance clients" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }} />
+                </div>
+              )}
 
               {openForm.type === 'freelance' && (
                 <>
@@ -264,36 +321,42 @@ export default function OtherIncomePage() {
               )}
 
               {openForm.type === 'equity' && (() => {
-                const ASSETS = [
-                  { v: 'listed_equity', label: 'Listed equity shares' },
-                  { v: 'equity_mf', label: 'Equity mutual fund' },
-                  { v: 'debt_mf', label: 'Debt mutual fund' },
-                  { v: 'unlisted', label: 'Unlisted shares' },
-                ]
-                const ltHint = (a: string) => a === 'debt_mf' ? 'Debt funds (bought after Apr 2023): taxed at your slab rate.'
-                  : a === 'unlisted' ? '12.5% — the ₹1.25L exemption does NOT apply to unlisted shares.'
-                  : 'First ₹1,25,000 across listed equity / equity MF is tax-free; balance at 12.5%.'
-                const stHint = (a: string) => (a === 'debt_mf' || a === 'unlisted') ? 'Taxed at your slab rate.' : 'Taxed at 20% flat.'
-                const selStyle: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit', background: '#fff', color: C.text, marginBottom: 8 }
+                const rows: EquityRow[] = Array.isArray(openForm.rows) ? openForm.rows : []
+                const selStyle: React.CSSProperties = { flex: 1, padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit', background: '#fff', color: C.text }
+                const numStyle: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }
+                const setRow = (i: number, patch: Partial<EquityRow>) => setOpenForm(f => f && ({ ...f, rows: (f.rows || []).map((r: EquityRow, j: number) => j === i ? { ...r, ...patch } : r) }))
+                const addRow = () => setOpenForm(f => f && ({ ...f, rows: [...(f.rows || []), { asset: 'listed_equity', ltcg: 0, stcg: 0 }] }))
+                const removeRow = (i: number) => setOpenForm(f => f && ({ ...f, rows: (f.rows || []).filter((_: EquityRow, j: number) => j !== i) }))
+                const numVal = (n: number) => (n > 0 ? String(n) : '')
                 return (
-                  <>
-                    <div>
-                      <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>Long-term gains (held &gt; 1 year)</label>
-                      <select value={openForm.ltcgAsset || 'listed_equity'} onChange={(e) => setOpenForm({ ...openForm, ltcgAsset: e.target.value })} style={selStyle}>
-                        {ASSETS.map(a => <option key={a.v} value={a.v}>{a.label}</option>)}
-                      </select>
-                      <input type="text" inputMode="numeric" value={openForm.ltcgGains} onChange={(e) => setOpenForm({ ...openForm, ltcgGains: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }} />
-                      <p style={{ fontSize: 10, color: C.muted, margin: '4px 0 0' }}>{ltHint(openForm.ltcgAsset || 'listed_equity')}</p>
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>Short-term gains (held ≤ 1 year)</label>
-                      <select value={openForm.stcgAsset || 'listed_equity'} onChange={(e) => setOpenForm({ ...openForm, stcgAsset: e.target.value })} style={selStyle}>
-                        {ASSETS.map(a => <option key={a.v} value={a.v}>{a.label}</option>)}
-                      </select>
-                      <input type="text" inputMode="numeric" value={openForm.stcgGains} onChange={(e) => setOpenForm({ ...openForm, stcgGains: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }} />
-                      <p style={{ fontSize: 10, color: C.muted, margin: '4px 0 0' }}>{stHint(openForm.stcgAsset || 'listed_equity')}</p>
-                    </div>
-                  </>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 6, fontWeight: 500 }}>Capital gains by asset</label>
+                    {rows.map((r, i) => (
+                      <div key={i} style={{ border: `1px solid ${C.border}`, borderRadius: 6, padding: 12, marginBottom: 10, background: C.bg }}>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                          <select value={r.asset} onChange={(e) => setRow(i, { asset: e.target.value })} style={selStyle}>
+                            {EQUITY_ASSETS.map(a => <option key={a.v} value={a.v}>{a.label}</option>)}
+                          </select>
+                          {rows.length > 1 && (
+                            <button onClick={() => removeRow(i)} title="Remove asset" style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: '0 4px' }}>×</button>
+                          )}
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                          <div>
+                            <label style={{ display: 'block', fontSize: 10.5, color: C.muted, marginBottom: 3 }}>Long-term (&gt; 1 yr)</label>
+                            <input type="text" inputMode="numeric" value={numVal(r.ltcg)} onChange={(e) => setRow(i, { ltcg: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={numStyle} />
+                            <p style={{ fontSize: 9.5, color: C.muted, margin: '3px 0 0' }}>{ltAssetHint(r.asset)}</p>
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', fontSize: 10.5, color: C.muted, marginBottom: 3 }}>Short-term (≤ 1 yr)</label>
+                            <input type="text" inputMode="numeric" value={numVal(r.stcg)} onChange={(e) => setRow(i, { stcg: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={numStyle} />
+                            <p style={{ fontSize: 9.5, color: C.muted, margin: '3px 0 0' }}>{stAssetHint(r.asset)}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    <button onClick={addRow} style={{ width: '100%', padding: '9px', background: '#fff', color: C.fg, border: `1px dashed ${C.wm}`, borderRadius: 6, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>+ Add asset</button>
+                  </div>
                 )
               })()}
 
