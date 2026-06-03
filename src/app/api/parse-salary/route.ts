@@ -14,10 +14,14 @@ const MAX_PAGES = 6
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { base64Data, mediaType, fileName } = body
+    const { base64Data } = body
+    // Normalise: some browsers send an empty MIME for .xls/.xlsx, so we fall back to the filename
+    // extension below. mediaType defaults to '' so the .includes()/.startsWith() checks stay safe.
+    const mediaType: string = body.mediaType || ''
+    const fileName: string = body.fileName || ''
 
-    if (!base64Data || !mediaType) {
-      return NextResponse.json({ error: 'base64Data and mediaType are required' }, { status: 400 })
+    if (!base64Data) {
+      return NextResponse.json({ error: 'base64Data is required' }, { status: 400 })
     }
 
     // ─── PAGES TO PARSE ─────────────────────────────────────────────
