@@ -27,6 +27,20 @@ const fyMonths = (fyStartYear: number) => {
   return months
 }
 
+// Best-effort parse of an offer letter's joining date into a YYYY-MM key. Handles ISO (2026-06-01),
+// "June 2026" / "1 Jun 2026", and DD/MM/YYYY. Returns '' if it can't tell.
+const joiningMonthKey = (s: string): string => {
+  if (!s || typeof s !== 'string') return ''
+  const iso = s.match(/(\d{4})[-/](\d{1,2})/)               // 2026-06 / 2026/6
+  if (iso) return `${iso[1]}-${String(+iso[2]).padStart(2, '0')}`
+  const mon = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+  const named = s.toLowerCase().match(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*,?\s*(\d{4})/) // June 2026
+  if (named) return `${named[2]}-${String(mon.indexOf(named[1]) + 1).padStart(2, '0')}`
+  const dmy = s.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/)   // DD/MM/YYYY
+  if (dmy) return `${dmy[3]}-${String(+dmy[2]).padStart(2, '0')}`
+  return ''
+}
+
 type Frequency = 'monthly' | 'quarterly' | 'half_yearly' | 'yearly' | 'one_time'
 
 interface Earning {
@@ -218,6 +232,48 @@ export default function SalaryPageCompleteFinal() {
     bonusMonths: [],
     forecastChanges: [],
   })
+  // Per-change status for the offer-letter prefill on a job-switch forecast change.
+  const [offerStatus, setOfferStatus] = useState<{ idx: number; state: 'loading' | 'done' | 'error'; msg: string } | null>(null)
+
+  // Parse an uploaded offer letter and prefill a job-switch change with the new monthly gross
+  // (≈ (fixedCTC − employer PF) / 12) and the switch month derived from the offer's joining date.
+  const applyOfferLetter = async (idx: number, file: File) => {
+    setOfferStatus({ idx, state: 'loading', msg: 'Reading offer letter…' })
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(((reader.result as string) || '').split(',')[1])
+        reader.onerror = () => reject(new Error('Could not read file'))
+        reader.readAsDataURL(file)
+      })
+      const res = await fetch('/api/parse-offer-letter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base64Data: base64, mediaType: file.type || 'application/pdf' }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json?.error || 'Parse failed')
+      const d = json.data || {}
+      const fixed = d.fixedCTC || d.totalCTC || 0
+      const monthlyGross = Math.max(0, Math.round((fixed - (d.employerPF || 0)) / 12))
+      if (monthlyGross <= 0) throw new Error('No salary figure found in the offer')
+      const mk = joiningMonthKey(d.joiningDate)
+      // Same FY window the change dropdown offers: this FY, at-or-after the latest uploaded slip.
+      const fullFY = fyMonths(fyStartYear)
+      const latest = slipsWithMeta.length > 0 ? [...slipsWithMeta].sort((a, b) => b.monthKey.localeCompare(a.monthKey))[0] : null
+      const allFY = latest ? fullFY.filter(m => m >= latest.monthKey) : fullFY
+      const inFy = !!mk && allFY.includes(mk)
+      setWizard(prev => ({
+        ...prev,
+        forecastChanges: prev.forecastChanges.map((c, i) => i === idx
+          ? { ...c, kind: 'job_switch', amountMode: 'abs', amountAbs: monthlyGross, amountPct: 0, ...(inFy ? { monthApplies: mk } : {}) }
+          : c),
+      }))
+      setOfferStatus({ idx, state: 'done', msg: `${d.employerName || 'New employer'} · ${fmt(monthlyGross)}/mo${inFy ? ` · from ${monthLabel(mk)}` : (mk ? ` · joins ${monthLabel(mk)} (outside this FY — pick a month)` : ' · pick the switch month')}` })
+    } catch (e: any) {
+      setOfferStatus({ idx, state: 'error', msg: e?.message || 'Could not read the offer letter' })
+    }
+  }
 
   useEffect(() => {
     const data = localStorage.getItem('av_salary_timeline')
@@ -1109,6 +1165,24 @@ export default function SalaryPageCompleteFinal() {
                           </div>
                         )}
                       </>
+                    )}
+
+                    {/* Job switch: prefill the new pay + switch month from an offer letter. */}
+                    {fc.kind === 'job_switch' && (
+                      <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${C.border}` }}>
+                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: C.wl, border: `1px solid ${C.border}`, borderRadius: 6, cursor: 'pointer', fontSize: 11.5, fontWeight: 600, color: C.fg, fontFamily: 'inherit' }}>
+                          📄 Upload offer letter to prefill
+                          <input type="file" accept=".pdf,image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) applyOfferLetter(idx, f); e.target.value = '' }} />
+                        </label>
+                        {offerStatus?.idx === idx && (
+                          <p style={{ fontSize: 10.5, margin: '6px 0 0', color: offerStatus.state === 'error' ? C.danger : offerStatus.state === 'done' ? '#2A7A4A' : C.muted }}>
+                            {offerStatus.state === 'loading' ? '⏳ ' : offerStatus.state === 'done' ? '✓ ' : '⚠ '}{offerStatus.msg}
+                          </p>
+                        )}
+                        <p style={{ fontSize: 10, color: C.muted, margin: '6px 0 0', lineHeight: 1.5 }}>
+                          We read the offer's CTC and joining date to set the new monthly pay and switch month. HRA from the switch month is scaled from your current slip, not the offer's exact basic — review if you claim HRA.
+                        </p>
+                      </div>
                     )}
                   </div>
                 )
