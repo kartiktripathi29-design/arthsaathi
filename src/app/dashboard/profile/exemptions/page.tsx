@@ -1,6 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { computeAnnualHraExemption, type HraMonth } from '@/lib/salary-analytics'
+import { getSalaryFacts } from '@/lib/salary-facts'
 
 const C = { fg:'#3A4B41', wheat:'#E6CFA7', wl:'#F5ECD8', wm:'#D4B98A', bg:'#FDFAF6', card:'#fff', border:'#E4DDD1', text:'#1C2B22', muted:'#7A8A7E', danger:'#B94040' }
 const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`
@@ -89,6 +91,10 @@ function ltaBlockFor(y: number) {
 export default function ExemptionsPage() {
   const router = useRouter()
   const [salary, setSalary] = useState<any>(null)
+  // Per-month Basic + HRA series from the Salary page (av_salary_summary). When
+  // present, HRA is computed month-by-month (Rule 2A) so a mid-year raise is
+  // handled correctly; when absent (legacy data), we fall back to single-slip × 12.
+  const [hraBasis, setHraBasis] = useState<HraMonth[]>([])
   const [s, setS] = useState<ExemptionsState>(DEFAULT)
   // All Section-10 accordions expanded by default — users see every question
   // immediately and can collapse the ones that don't apply.
@@ -109,6 +115,10 @@ export default function ExemptionsPage() {
         console.error('Failed to load salary:', e)
       }
     }
+    // Per-month HRA basis from the ONE shared salary reader (getSalaryFacts) — the Salary page's
+    // authoritative timeline that already accounts for mid-year raises, bonuses and job switches.
+    // Same source the Tax and Deductions pages read, so HRA is no longer figured a different way here.
+    setHraBasis(getSalaryFacts().hraBasis)
     const ex = localStorage.getItem('av_exemptions')
     if (ex) {
       try {
@@ -130,36 +140,53 @@ export default function ExemptionsPage() {
     }
   }, [])
 
-  const calculateHRA = () => {
+  // HRA exemption (Rule 2A) is a PER-MONTH minimum, summed over the year — not a
+  // single month's figure × 12. When the Salary page has handed us a per-month
+  // Basic + HRA series we compute it month-by-month (so a mid-year raise is handled
+  // correctly). Otherwise we fall back to the legacy single-slip estimate.
+  const hasBasis = hraBasis.length > 0 && hraBasis.some(m => m.basic > 0) && hraBasis.some(m => m.hra > 0)
+  const hraComp = (s.rentPaid > 0 && hasBasis)
+    ? computeAnnualHraExemption(hraBasis, s.rentPaid, s.isMetro)
+    : null
+
+  // Fallback: legacy data with no timeline — best-effort single-slip basic × 12.
+  const fallbackAnnual = (() => {
     if (!s.hraReceived || !s.rentPaid || !salary) return 0
     const basic = salary.basicSalary || 0
-    const actual = s.hraReceived
-    const rentMinus10 = s.rentPaid - basic * 0.1
-    const cityLimit = s.isMetro ? basic * 0.5 : basic * 0.4
-    return Math.max(0, Math.min(actual, rentMinus10, cityLimit))
-  }
-  const hraExemption = calculateHRA()
+    const monthly = Math.max(0, Math.min(
+      s.hraReceived,
+      s.rentPaid - basic * 0.1,
+      s.isMetro ? basic * 0.5 : basic * 0.4,
+    ))
+    return Math.round(monthly * 12)
+  })()
+
+  const hraAnnualExemption = hraComp ? hraComp.annualExemption : fallbackAnnual
+  const hraMonthlyDisplay = Math.round(hraAnnualExemption / 12)
+  const hraBasicVaried = !!hraComp?.basicVaried
 
   // Gratuity is capped at ₹10L for non-government employees.
   const gratuityCapped = Math.min(s.gratuity, 1000000)
   // Superannuation: theoretical cap = 15% of (basic+DA)*12. We don't have DA reliably,
   // so we just display the user's entered amount and warn in the description.
   const totalOtherExempts = s.lta + s.driverSalary + s.carMaintenance + s.dailyAllowance + s.superannuation + s.pfWithdrawal + gratuityCapped
-  const totalAnnualExempt = (hraExemption * 12) + totalOtherExempts
+  const totalAnnualExempt = hraAnnualExemption + totalOtherExempts
 
   useEffect(() => {
     try {
       localStorage.setItem('av_exemptions', JSON.stringify({
         // Persist the COMPUTED HRA exemption alongside its raw inputs so the Tax Optimizer
         // consumes the exact figure shown here instead of recomputing (which diverged when basic
-        // pay changed mid-year — the two pages used different slips). monthlyExemption/annualExemption
-        // are the source of truth; basicUsed records which basic this was computed against.
+        // pay changed mid-year — the two pages used different slips). annualExemption is the
+        // source of truth and is now computed month-by-month (Rule 2A) across the whole FY;
+        // monthlyExemption is just annual/12 for display. basicUsed records the latest slip's
+        // basic for the Optimizer's legacy fallback only.
         hra: {
           hraReceived: s.hraReceived,
           rentPaid: s.rentPaid,
           isMetro: s.isMetro,
-          monthlyExemption: hraExemption,
-          annualExemption: hraExemption * 12,
+          monthlyExemption: hraMonthlyDisplay,
+          annualExemption: hraAnnualExemption,
           basicUsed: salary?.basicSalary || 0,
         },
         lta: s.lta,
@@ -171,7 +198,7 @@ export default function ExemptionsPage() {
         gratuity: gratuityCapped,
       }))
     } catch {}
-  }, [s.hraReceived, s.rentPaid, s.isMetro, s.lta, s.driverSalary, s.carMaintenance, s.dailyAllowance, s.superannuation, s.pfWithdrawal, gratuityCapped, hraExemption, salary])
+  }, [s.hraReceived, s.rentPaid, s.isMetro, s.lta, s.driverSalary, s.carMaintenance, s.dailyAllowance, s.superannuation, s.pfWithdrawal, gratuityCapped, hraAnnualExemption, hraMonthlyDisplay, salary])
 
   const toggle = (key: string) => setExpanded(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
   const update = (k: keyof ExemptionsState, v: any) => setS(prev => ({ ...prev, [k]: v }))
@@ -235,7 +262,14 @@ export default function ExemptionsPage() {
             {s.rentPaid > 0 ? (
               <div style={{ padding: '12px 14px', background: '#F0F9F7', border: '1px solid #D1E8E4', borderRadius: 4 }}>
                 <p style={{ fontSize: 10.5, color: C.muted, margin: '0 0 4px', fontWeight: 500, textTransform: 'uppercase' as const }}>Tax-free HRA exemption</p>
-                <p style={{ fontSize: 16, fontWeight: 700, color: C.fg, margin: 0 }}>{fmt(hraExemption)}/month · {fmt(hraExemption * 12)}/year</p>
+                <p style={{ fontSize: 16, fontWeight: 700, color: C.fg, margin: 0 }}>{fmt(hraAnnualExemption)}/year{hraAnnualExemption > 0 ? ` · ~${fmt(hraMonthlyDisplay)}/month avg` : ''}</p>
+                {hraComp && (
+                  <p style={{ fontSize: 10.5, color: C.muted, margin: '6px 0 0', lineHeight: 1.45 }}>
+                    {hraBasicVaried
+                      ? <>Computed month-by-month across {hraComp.monthsCounted} months — your basic pay changed during the year, so each month's exemption is the min of (HRA · rent − 10% basic · {s.isMetro ? '50%' : '40%'} basic) and they're summed.</>
+                      : <>Computed across {hraComp.monthsCounted} months of salary data.</>}
+                  </p>
+                )}
               </div>
             ) : (
               <div style={{ padding: '10px 12px', background: '#FFF3DD', border: `1px solid ${C.wm}`, borderRadius: 4 }}>
@@ -354,7 +388,7 @@ export default function ExemptionsPage() {
       <div style={{ background: '#F0F9F7', border: `1px solid #D1E8E4`, borderRadius: 8, padding: 16, marginBottom: 24 }}>
         <p style={{ fontSize: 11, color: C.muted, margin: '0 0 6px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>Total exemptions claimed (annual)</p>
         <p style={{ fontSize: 18, fontWeight: 700, color: C.fg, margin: 0 }}>{fmt(totalAnnualExempt)}</p>
-        <p style={{ fontSize: 10.5, color: C.muted, margin: '6px 0 0' }}>HRA {fmt(hraExemption * 12)} · LTA {fmt(s.lta)} · Driver {fmt(s.driverSalary)} · Car {fmt(s.carMaintenance)} · DA {fmt(s.dailyAllowance)} · Super-ann {fmt(s.superannuation)} · PF {fmt(s.pfWithdrawal)} · Gratuity {fmt(gratuityCapped)}</p>
+        <p style={{ fontSize: 10.5, color: C.muted, margin: '6px 0 0' }}>HRA {fmt(hraAnnualExemption)} · LTA {fmt(s.lta)} · Driver {fmt(s.driverSalary)} · Car {fmt(s.carMaintenance)} · DA {fmt(s.dailyAllowance)} · Super-ann {fmt(s.superannuation)} · PF {fmt(s.pfWithdrawal)} · Gratuity {fmt(gratuityCapped)}</p>
         <p style={{ fontSize: 10.5, color: C.muted, margin: '6px 0 0', fontStyle: 'italic' }}>These count only under Old Regime. New Regime disables Section 10 exemptions.</p>
       </div>
 

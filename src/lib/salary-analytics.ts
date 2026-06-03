@@ -8,6 +8,7 @@ export interface MonthLike {
   gross: number
   net: number
   source: SourceKind
+  earnings?: { label: string; amount: number }[]
   deductionsList?: { label: string; amount: number }[]
 }
 
@@ -140,4 +141,77 @@ export function extractAnnualGross(employments: EmploymentLike[]): number {
     }
   }
   return total
+}
+
+// ─── HRA basis (per-month Basic + HRA) ──────────────────────────────────────
+//
+// HRA exemption under Rule 2A is computed PER MONTH — the min() of the three
+// limits is taken for each month and the results are summed. Multiplying a
+// single month's exemption by 12 is wrong the moment basic pay, HRA, rent or
+// metro status changes mid-year. To compute it correctly the Exemptions page
+// needs each month's Basic and HRA, which we read off the timeline's per-month
+// earnings (these scale correctly for inferred/projected/forecast months too).
+
+const BASIC_PATTERN = /\bbasic\b/i
+const HRA_PATTERN = /\b(hra|house\s*rent)\b/i
+
+export interface HraMonth {
+  monthKey: string
+  basic: number  // basic pay for the month (₹)
+  hra: number    // HRA actually received for the month (₹)
+}
+
+// Pull the per-month Basic + HRA series across all employments, in month order.
+// Sums any line items whose label matches (some slips split Basic across rows).
+export function extractHraBasis(employments: EmploymentLike[]): HraMonth[] {
+  const out: HraMonth[] = []
+  for (const emp of employments) {
+    for (const m of emp.months) {
+      if (m.monthKey < emp.fromMonth || m.monthKey > emp.toMonth) continue
+      let basic = 0
+      let hra = 0
+      for (const e of m.earnings || []) {
+        const label = e.label || ''
+        if (BASIC_PATTERN.test(label)) basic += e.amount || 0
+        else if (HRA_PATTERN.test(label)) hra += e.amount || 0
+      }
+      out.push({ monthKey: m.monthKey, basic, hra })
+    }
+  }
+  return out.sort((a, b) => a.monthKey.localeCompare(b.monthKey))
+}
+
+export interface HraComputation {
+  annualExemption: number   // sum of the per-month exemptions (₹/year)
+  monthsCounted: number     // months that fed the calculation
+  annualHraReceived: number // total HRA received across the year (₹)
+  basicVaried: boolean      // true if monthly basic changed during the year
+}
+
+// Compute the annual HRA exemption the statutory way: for each month take
+// min(HRA received, rent − 10% basic, cityPct × basic), clamp at 0, and sum.
+// Rent and metro status are treated as constant across the year (single inputs
+// on the Exemptions page). cityPct = 50% for metros (Delhi/Mumbai/Kolkata/Chennai),
+// otherwise 40% per Rule 2A.
+export function computeAnnualHraExemption(
+  basis: HraMonth[],
+  monthlyRent: number,
+  isMetro: boolean,
+): HraComputation {
+  const cityPct = isMetro ? 0.5 : 0.4
+  let annualExemption = 0
+  let annualHraReceived = 0
+  const distinctBasics = new Set<number>()
+  for (const m of basis) {
+    const exempt = Math.max(0, Math.min(m.hra, monthlyRent - m.basic * 0.1, m.basic * cityPct))
+    annualExemption += exempt
+    annualHraReceived += m.hra
+    distinctBasics.add(Math.round(m.basic))
+  }
+  return {
+    annualExemption: Math.round(annualExemption),
+    monthsCounted: basis.length,
+    annualHraReceived: Math.round(annualHraReceived),
+    basicVaried: distinctBasics.size > 1,
+  }
 }

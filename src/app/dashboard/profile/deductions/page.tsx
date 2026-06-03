@@ -1,6 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { computeSec80G, type DonationCat } from '@/lib/deductions'
+import { getSalaryFacts } from '@/lib/salary-facts'
 
 const C = { fg:'#3A4B41', wheat:'#E6CFA7', wl:'#F5ECD8', wm:'#D4B98A', bg:'#FDFAF6', card:'#fff', border:'#E4DDD1', text:'#1C2B22', muted:'#7A8A7E', danger:'#B94040' }
 const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`
@@ -12,8 +14,12 @@ export default function DeductionsPage() {
     ppf: 0, elss: 0, lic: 0, tuition: 0, nsc: 0,
     employeePF: 0,            // auto-prefilled from salary slip (employee's EPF contribution, annual)
     homeLoanPrincipal: 0, termInsurance: 0, other80C: 0,
-    // 80D health insurance + senior toggles
-    selfFamily: 0, parents: 0, parentsMedicalExp: 0, selfSenior: false, parentsSenior: false,
+    // 80D health insurance + senior toggles.
+    // selfSeniorStatus is the lossless three-way age band ('normal' | 'senior' | 'super_senior')
+    // shared with the Tax Optimizer. selfSenior is a derived mirror kept for backward compatibility
+    // (this page's caps only care about senior-or-not; the 80+ distinction matters to old-regime slabs
+    // on the optimizer). Keeping the full status here means the 80+ band survives the round trip.
+    selfFamily: 0, parents: 0, parentsMedicalExp: 0, selfSenior: false, selfSeniorStatus: 'normal', parentsSenior: false,
     // Home loan interest 24(b)
     homeLoanInterest: 0,
     // NPS 80CCD(1B)
@@ -30,7 +36,7 @@ export default function DeductionsPage() {
   //   50NoLimit:     50%  deduction, no qualifying ceiling   — e.g. Jawaharlal Nehru Memorial Fund, Indira Gandhi Memorial Trust, Rajiv Gandhi Foundation, PM's Drought Relief Fund
   //   100WithLimit:  100% deduction, subject to 10% of Adjusted GTI — e.g. Indian Olympic Association, Govt./local authority for promoting family planning
   //   50WithLimit:   50%  deduction, subject to 10% of Adjusted GTI — most other approved trusts / NGOs
-  type DonationCat = '100NoLimit' | '50NoLimit' | '100WithLimit' | '50WithLimit'
+  // (DonationCat lives in @/lib/deductions so the Deductions page and the Tax Optimizer share one type.)
   const [donationRows, setDonationRows] = useState<Array<{ id: string; category: DonationCat; amount: number }>>([])
   const [pfAutoApplied, setPfAutoApplied] = useState<{ annual: number } | null>(null)
   // All sections expanded by default so users see every question on the page
@@ -45,6 +51,14 @@ export default function DeductionsPage() {
     if (data) {
       try {
         loadedDed = JSON.parse(data)
+        // Migrate records saved before selfSeniorStatus existed: recover the 80+ band from the
+        // optimizer-only overlay key, else fall back to the binary flag. Keep selfSenior in sync.
+        if (!loadedDed.selfSeniorStatus) {
+          const overlay = localStorage.getItem('av_user_senior')
+          loadedDed.selfSeniorStatus = overlay === 'super_senior' ? 'super_senior'
+            : (loadedDed.selfSenior || overlay === 'senior') ? 'senior' : 'normal'
+        }
+        loadedDed.selfSenior = loadedDed.selfSeniorStatus !== 'normal'
         setDed(prev => ({ ...prev, ...loadedDed }))
       } catch (e) {
         console.error('Failed to load deductions:', e)
@@ -88,6 +102,8 @@ export default function DeductionsPage() {
 
   useEffect(() => {
     localStorage.setItem('av_deductions', JSON.stringify(ded))
+    // Keep the optimizer-only overlay aligned with the lossless status so the two tabs never disagree.
+    try { localStorage.setItem('av_user_senior', ded.selfSeniorStatus || (ded.selfSenior ? 'senior' : 'normal')) } catch {}
   }, [ded])
 
   useEffect(() => {
@@ -95,14 +111,12 @@ export default function DeductionsPage() {
   }, [donationRows])
 
   useEffect(() => {
-    try {
-      const slipData = localStorage.getItem('av_salary_timeline')
-      if (!slipData) return
-      const slips = JSON.parse(slipData)
-      const arr = Array.isArray(slips) ? slips : []
-      const monthlyAvgGross = arr.length ? arr.reduce((s: number, x: any) => s + (x.gross || 0), 0) / arr.length : 0
-      setAnnualGrossForAGTI(Math.round(monthlyAvgGross * 12))
-    } catch { /* leave at 0 */ }
+    // Adjusted-GTI base for the 80G 10%-of-AGTI cap. Read the ONE shared annual-income figure
+    // (getSalaryFacts) so this matches the Tax page exactly — the Salary page's careful month-by-month
+    // summary when present, else avg(slip) × 12. A 0 base would make cap10pctAGTI 0, which silently
+    // wipes every "with-limit" 80G donation, so getting this from the same source as everyone else
+    // is what keeps the three pages in agreement.
+    setAnnualGrossForAGTI(getSalaryFacts().annualGross)
   }, [])
 
   const toggle = (key: string) => {
@@ -126,24 +140,17 @@ export default function DeductionsPage() {
   const sec24b = Math.min(ded.homeLoanInterest, 200000)
   const secNps = Math.min(ded.nps, 50000)
 
-  // Section 80G math — apply the 50%/100% rate, then a 10%-of-Adjusted-GTI ceiling
-  // across the two "with limit" buckets combined (per the Income Tax Act).
-  // Adjusted GTI is approximated here as: annual salary gross − other Chapter VI-A deductions
-  // (excluding 80G itself), which is a fair proxy for a salaried filer.
-  const sum80G = (cat: DonationCat) => donationRows.filter(r => r.category === cat).reduce((s, r) => s + Math.max(0, r.amount || 0), 0)
-  const g100NoLimit = sum80G('100NoLimit')
-  const g50NoLimit = sum80G('50NoLimit')
-  const g100WithLimit = sum80G('100WithLimit')
-  const g50WithLimit = sum80G('50WithLimit')
-
+  // Section 80G — apply the 50%/100% rate, then a 10%-of-Adjusted-GTI ceiling across the two
+  // "with limit" buckets combined (per the Income Tax Act). Adjusted GTI is approximated as annual
+  // salary gross − other Chapter VI-A deductions (excluding 80G itself) — a fair proxy for a salaried
+  // filer. The math lives in computeSec80G so this page and the Tax Optimizer can't diverge.
   const otherChapterVIA = sec80C + sec80D + sec24b + secNps + sec80TTA + sec80TTB + sec80E
   const adjustedGTI = Math.max(0, annualGrossForAGTI - otherChapterVIA)
-  const cap10pctAGTI = Math.round(adjustedGTI * 0.10)
-  // Apply the rate first, then cap the combined "with-limit" buckets at 10% of AGTI.
-  const eligibleNoLimit = g100NoLimit + 0.5 * g50NoLimit
-  const eligibleWithLimitUncapped = g100WithLimit + 0.5 * g50WithLimit
-  const eligibleWithLimit = Math.min(eligibleWithLimitUncapped, cap10pctAGTI)
-  const sec80G = Math.round(eligibleNoLimit + eligibleWithLimit)
+  const {
+    g100NoLimit, g50NoLimit, g100WithLimit, g50WithLimit,
+    eligibleWithLimitUncapped, cap10pctAGTI, eligibleWithLimit,
+    deduction: sec80G,
+  } = computeSec80G(donationRows, adjustedGTI)
   const totalDeductions = sec80C + sec80D + sec24b + secNps + sec80TTA + sec80TTB + sec80E + sec80G
   const taxSavingsOld = totalDeductions * 0.2 // rough estimate at 20% slab
 
@@ -226,8 +233,16 @@ export default function DeductionsPage() {
                 <input type="text" inputMode="numeric" value={ded.selfFamily > 0 ? ded.selfFamily : ''} onChange={(e) => setDed({ ...ded, selfFamily: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit' }} />
               </div>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 11 }}>
-                <input type="checkbox" checked={ded.selfSenior} onChange={(e) => setDed({ ...ded, selfSenior: e.target.checked })} /> <span>You/spouse is 60+? (₹50k limit instead of ₹25k)</span>
+                <input type="checkbox" checked={ded.selfSenior} onChange={(e) => {
+                  const checked = e.target.checked
+                  // Preserve an existing 80+ band while the box stays checked; unchecking means under 60.
+                  const status = checked ? (ded.selfSeniorStatus === 'super_senior' ? 'super_senior' : 'senior') : 'normal'
+                  setDed({ ...ded, selfSenior: checked, selfSeniorStatus: status })
+                }} /> <span>You/spouse is 60+? (₹50k limit instead of ₹25k)</span>
               </label>
+              {ded.selfSeniorStatus === 'super_senior' && (
+                <p style={{ fontSize: 10.5, color: C.muted, margin: '4px 0 0 22px' }}>Marked 80+ (super senior) on the Tax page — the same ₹50k limit applies here.</p>
+              )}
             </div>
             <div style={{ marginTop: 14 }}>
               <label style={{ display: 'block', fontSize: 11, color: C.text, marginBottom: 8, fontWeight: 600 }}>Parents</label>

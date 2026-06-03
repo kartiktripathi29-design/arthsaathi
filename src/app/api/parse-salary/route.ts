@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { parseSalaryFromBase64 } from '@/lib/claude'
+import { parseSalaryFromBase64, parseSalaryFromText } from '@/lib/claude'
 import { PDFDocument } from 'pdf-lib'
 import type { ParsedSalaryData } from '@/types'
 import { prisma } from "@/lib/db"
@@ -14,18 +14,62 @@ const MAX_PAGES = 6
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { base64Data, mediaType, fileName } = body
+    const { base64Data } = body
+    // Normalise: some browsers send an empty MIME for .xls/.xlsx, so we fall back to the filename
+    // extension below. mediaType defaults to '' so the .includes()/.startsWith() checks stay safe.
+    const mediaType: string = body.mediaType || ''
+    const fileName: string = body.fileName || ''
 
-    if (!base64Data || !mediaType) {
-      return NextResponse.json({ error: 'base64Data and mediaType are required' }, { status: 400 })
+    if (!base64Data) {
+      return NextResponse.json({ error: 'base64Data is required' }, { status: 400 })
     }
 
     // ─── PAGES TO PARSE ─────────────────────────────────────────────
     // For images → single page (no splitting possible)
     // For PDFs → check page count; split if multi-page
     let pagesToParse: Array<{ base64: string; mediaType: 'application/pdf' | 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' }> = []
+    const parsedSlips: ParsedSalaryData[] = []
+    const errors: string[] = []
 
-    if (mediaType === 'application/pdf') {
+    // ─── EXCEL / CSV ────────────────────────────────────────────────
+    // The vision model can't read spreadsheet bytes, so convert the workbook to CSV-like text
+    // and parse the text. Detect by MIME OR extension — browsers often send an empty type for .xls.
+    const isExcel =
+      mediaType.includes('spreadsheetml') ||
+      mediaType === 'application/vnd.ms-excel' ||
+      mediaType === 'text/csv' ||
+      /\.(xlsx|xls|csv)$/i.test(fileName || '')
+
+    if (isExcel) {
+      const buffer = Buffer.from(base64Data, 'base64')
+      let sheetText = ''
+      try {
+        if (mediaType === 'text/csv' || /\.csv$/i.test(fileName || '')) {
+          sheetText = buffer.toString('utf-8')
+        } else {
+          const XLSX = await import('xlsx')
+          const workbook = XLSX.read(buffer, { type: 'buffer' })
+          for (const name of workbook.SheetNames) {
+            const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[name])
+            if (csv.trim()) sheetText += `\n=== Sheet: ${name} ===\n${csv}\n`
+          }
+        }
+      } catch (e: any) {
+        console.error('[parse-salary] Excel read failed:', e?.message || e)
+        return NextResponse.json({ error: 'Could not read this spreadsheet. If it\'s password-protected, remove the password and re-upload.' }, { status: 422 })
+      }
+
+      if (!sheetText.trim()) {
+        return NextResponse.json({ error: 'This spreadsheet appears to be empty.' }, { status: 422 })
+      }
+
+      try {
+        parsedSlips.push(await parseSalaryFromText(sheetText))
+      } catch (e: any) {
+        console.error('[parse-salary] Excel parse failed:', e?.message || e)
+        errors.push(`Spreadsheet: ${e?.message || 'parse failed'}`)
+      }
+    } else if (mediaType === 'application/pdf') {
       // Decode PDF and check page count
       let doc: PDFDocument | null = null
       const pdfBytes = Buffer.from(base64Data, 'base64')
@@ -78,21 +122,21 @@ export async function POST(req: NextRequest) {
 
     // ─── PARSE EACH PAGE IN PARALLEL ─────────────────────────────────
     // Each Claude call uses the original (proven) single-slip prompt — no regression risk.
-    const settled = await Promise.allSettled(
-      pagesToParse.map(p => parseSalaryFromBase64(p.base64, p.mediaType))
-    )
-
-    const parsedSlips: ParsedSalaryData[] = []
-    const errors: string[] = []
-    settled.forEach((r, idx) => {
-      if (r.status === 'fulfilled') {
-        console.log(`[parse-salary] Page ${idx + 1} parsed: gross=${r.value?.grossSalary || 0}, net=${r.value?.netSalary || 0}, month=${r.value?.month || '?'}`)
-        parsedSlips.push(r.value)
-      } else {
-        console.error(`[parse-salary] Page ${idx + 1} REJECTED:`, r.reason?.message || r.reason)
-        errors.push(`Page ${idx + 1}: ${r.reason?.message || 'parse failed'}`)
-      }
-    })
+    // Skipped for Excel/CSV, which is already parsed (as text) above.
+    if (!isExcel) {
+      const settled = await Promise.allSettled(
+        pagesToParse.map(p => parseSalaryFromBase64(p.base64, p.mediaType))
+      )
+      settled.forEach((r, idx) => {
+        if (r.status === 'fulfilled') {
+          console.log(`[parse-salary] Page ${idx + 1} parsed: gross=${r.value?.grossSalary || 0}, net=${r.value?.netSalary || 0}, month=${r.value?.month || '?'}`)
+          parsedSlips.push(r.value)
+        } else {
+          console.error(`[parse-salary] Page ${idx + 1} REJECTED:`, r.reason?.message || r.reason)
+          errors.push(`Page ${idx + 1}: ${r.reason?.message || 'parse failed'}`)
+        }
+      })
+    }
 
     // ─── VALIDATE: keep only slips with usable totals ────────────────────
     let validSlips = parsedSlips.filter(p => p && (p.grossSalary || p.netSalary))

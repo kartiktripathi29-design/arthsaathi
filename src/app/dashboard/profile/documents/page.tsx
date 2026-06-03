@@ -1,7 +1,9 @@
 'use client'
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import toast from 'react-hot-toast'
 import { seedIfMissing, verifyIdentity, setStoredIdentity } from '@/lib/identity'
+import { confirmDialog, passwordDialog } from '@/components/Dialog'
 
 const C = { bg: '#FDFAF6', card: '#fff', border: '#E4DDD1', fg: '#1C2B22', muted: '#6B7770', primary: '#3A4B41' }
 
@@ -46,9 +48,12 @@ export default function DocumentsPage() {
     if (res.status === 422) {
       const j = await res.json().catch(() => ({} as any))
       if (j?.error === 'incorrect_password') {
-        const pwd = window.prompt(
-          `"${file.name}" is password-protected.\n\nThe AIS / 26AS password is usually your PAN in lowercase + date of birth as DDMMYYYY (e.g. abcde1234f01011990).\n\nEnter it to read the document, or Cancel to skip:`
-        )
+        const pwd = await passwordDialog({
+          title: 'Password-protected document',
+          message: `"${file.name}" is password-protected.\n\nThe AIS / 26AS password is usually your PAN in lowercase + date of birth as DDMMYYYY (e.g. abcde1234f01011990).\n\nEnter it to read the document, or cancel to skip.`,
+          confirmLabel: 'Unlock',
+          placeholder: 'Document password',
+        })
         if (!pwd) return null
         res = await call(pwd)
       }
@@ -88,7 +93,7 @@ export default function DocumentsPage() {
   const handleProceed = async () => {
     const hasSalary = salaryFiles.length > 0
     if (!hasSalary && !aisFile && !form26File) {
-      alert('Please upload a salary slip, AIS, or Form 26AS to continue.')
+      toast.error('Please upload a salary slip, AIS, or Form 26AS to continue.')
       return
     }
     // AIS / 26AS-only path: those documents are already parsed on attach, so there's nothing more to
@@ -120,7 +125,7 @@ export default function DocumentsPage() {
         const res = await fetch('/api/parse-salary', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ base64Data: base64, mediaType })
+          body: JSON.stringify({ base64Data: base64, mediaType, fileName: file.name })
         })
         const json = await res.json()
         if (!res.ok) throw new Error(json?.error || `Parse failed for ${file.name}`)
@@ -139,7 +144,7 @@ export default function DocumentsPage() {
       }
 
       if (allSlips.length === 0) {
-        alert(`Could not parse any slip.\n\n${failed.join('\n')}`)
+        toast.error(`Could not parse any slip.\n${failed.join('\n')}`)
         setUploading(false)
         setUploadProgress('')
         return
@@ -151,11 +156,14 @@ export default function DocumentsPage() {
         if (seeded) continue
         const check = verifyIdentity(slip)
         if (!check.ok) {
-          const proceed = window.confirm(
-            `One slip may belong to someone else:\n\n` +
-            check.mismatches.map((m: string) => `• ${m}`).join('\n') +
-            `\n\nUpload only your own salary slips. Continue anyway?`
-          )
+          const proceed = await confirmDialog({
+            title: 'Possible identity mismatch',
+            message:
+              `One slip may belong to someone else:\n\n` +
+              check.mismatches.map((m: string) => `• ${m}`).join('\n') +
+              `\n\nUpload only your own salary slips. Continue anyway?`,
+            confirmLabel: 'Continue', danger: true,
+          })
           if (!proceed) {
             setUploading(false)
             setUploadProgress('')
@@ -193,13 +201,13 @@ export default function DocumentsPage() {
       setUploading(false)
       setUploadProgress('')
       if (failed.length > 0) {
-        alert(`${allSlips.length} slip(s) parsed. ${failed.length} file(s) failed:\n\n${failed.join('\n')}`)
+        toast(`${allSlips.length} slip(s) parsed. ${failed.length} file(s) failed:\n${failed.join('\n')}`, { icon: '⚠️', duration: 6000 })
       }
       // AIS / 26AS are already parsed on attach (see processTaxDoc), so nothing to do here.
       router.push('/dashboard/profile/salary')
     } catch (e: any) {
       console.error('[Documents] Outer error:', e)
-      alert(e.message || 'Upload failed')
+      toast.error(e.message || 'Upload failed')
       setUploading(false)
       setUploadProgress('')
     }

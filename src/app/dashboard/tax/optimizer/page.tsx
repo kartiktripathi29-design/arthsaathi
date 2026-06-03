@@ -2,6 +2,8 @@
 import { useState, useEffect, Fragment } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { computeSec80G } from '@/lib/deductions'
+import { getSalaryFacts } from '@/lib/salary-facts'
 
 const C = { fg:'#3A4B41', wheat:'#E6CFA7', wl:'#F5ECD8', wm:'#D4B98A', bg:'#FDFAF6', card:'#fff', border:'#E4DDD1', text:'#1C2B22', muted:'#7A8A7E', danger:'#B94040' }
 const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`
@@ -169,25 +171,31 @@ export default function TaxOptimizerPage() {
   const [seniorStatus, setSeniorStatus] = useState<SeniorStatus>('normal')
   const [parentsSenior, setParentsSenior] = useState(false)
 
-  // Senior status sync — Deductions tab stores selfSenior/parentsSenior (binary 60+). The optimizer's
-  // own av_user_senior key can escalate self to 'super_senior' (80+). Read deductions first as the
-  // primary truth; only use the optimizer-only key if deductions says no.
+  // Senior status sync — the Deductions tab now stores the lossless three-way band in
+  // av_deductions.selfSeniorStatus, shared with this page. Read that first as the source of truth;
+  // fall back to the legacy overlay key + binary flag for records saved before it existed.
   useEffect(() => {
     try {
       const ded = JSON.parse(localStorage.getItem('av_deductions') || '{}')
       const overlaySenior = localStorage.getItem('av_user_senior') as SeniorStatus | null
-      if (overlaySenior === 'super_senior') setSeniorStatus('super_senior')
-      else if (ded?.selfSenior || overlaySenior === 'senior') setSeniorStatus('senior')
+      const stored = ded?.selfSeniorStatus as SeniorStatus | undefined
+      const status: SeniorStatus =
+        stored === 'super_senior' || stored === 'senior' || stored === 'normal' ? stored
+        : overlaySenior === 'super_senior' ? 'super_senior'
+        : (ded?.selfSenior || overlaySenior === 'senior') ? 'senior'
+        : 'normal'
+      setSeniorStatus(status)
       if (ded?.parentsSenior) setParentsSenior(true)
     } catch {}
   }, [])
-  // Writes propagate to BOTH the deductions data and the optimizer overlay so the two tabs stay aligned.
+  // Writes propagate the full status to the shared deductions record (plus the legacy overlay +
+  // binary mirror) so the 80+ band survives the round trip between the two tabs.
   const persistSenior = (s: SeniorStatus) => {
     setSeniorStatus(s)
     try {
       localStorage.setItem('av_user_senior', s)
       const ded = JSON.parse(localStorage.getItem('av_deductions') || '{}')
-      localStorage.setItem('av_deductions', JSON.stringify({ ...ded, selfSenior: s !== 'normal' }))
+      localStorage.setItem('av_deductions', JSON.stringify({ ...ded, selfSeniorStatus: s, selfSenior: s !== 'normal' }))
     } catch {}
   }
   const persistParentsSenior = (v: boolean) => {
@@ -214,24 +222,12 @@ export default function TaxOptimizerPage() {
       const deductionsData = deductions ? JSON.parse(deductions) : {}
 
       const slipsArr = Array.isArray(salaryData) ? salaryData : (salaryData.employments?.[0]?.slips || [])
-      const monthlyAvgGross = slipsArr.length > 0
-        ? slipsArr.reduce((s: number, slip: any) => s + (slip.grossSalary || 0), 0) / slipsArr.length
-        : 0
-      const monthlyAvgNet = slipsArr.length > 0
-        ? slipsArr.reduce((s: number, slip: any) => s + (slip.netSalary || slip.basicSalary || 0), 0) / slipsArr.length
-        : 0
-      // Annual income: prefer the Salary page's careful month-by-month summary (raises, bonuses,
-      // corrections) so the tax verdict is computed off the number the user actually reviewed.
-      // Fall back to avg(slip) × 12 only for users who haven't re-saved the salary wizard.
-      const salarySummary = (() => {
-        try { return JSON.parse(localStorage.getItem('av_salary_summary') || 'null') } catch { return null }
-      })()
-      const grossSalary = (salarySummary && (salarySummary.annualGross || 0) > 0)
-        ? Math.round(salarySummary.annualGross)
-        : Math.round(monthlyAvgGross * 12)
-      const netSalary = (salarySummary && (salarySummary.annualGross || 0) > 0)
-        ? Math.round(salarySummary.annualNet || 0)
-        : Math.round(monthlyAvgNet * 12)
+      // Annual income comes from the single shared reader (getSalaryFacts): the Salary page's
+      // careful month-by-month summary when available (raises, bonuses, corrections — the number
+      // the user reviewed), else avg(slip) × 12. Same figure the Deductions/Exemptions pages read.
+      const facts = getSalaryFacts()
+      const grossSalary = facts.annualGross
+      const netSalary = facts.annualNet
 
       // ─── Other income: split slab-taxed from special-rate (capital gains / crypto) ───────
       // Capital-gains tax depends on the ASSET behind each gain (chosen on the Other-Income form):
@@ -351,16 +347,11 @@ export default function TaxOptimizerPage() {
         const drData = localStorage.getItem('av_donations80G')
         const rows = drData ? JSON.parse(drData) : []
         if (Array.isArray(rows) && rows.length > 0) {
-          const sumCat = (cat: string) => rows
-            .filter((r: any) => r.category === cat)
-            .reduce((s: number, r: any) => s + Math.max(0, r.amount || 0), 0)
-          const eligibleNoLimit = sumCat('100NoLimit') + 0.5 * sumCat('50NoLimit')
-          const eligibleWithLimitUncapped = sumCat('100WithLimit') + 0.5 * sumCat('50WithLimit')
           // Adjusted GTI ≈ annual gross − other Chapter VI-A deductions (excluding 80G itself).
           const otherChapterVIA = sec80C + sec80D + sec24b + nps + sec80TTA + sec80TTB + sec80E
           const adjustedGTI = Math.max(0, grossSalary - otherChapterVIA)
-          const eligibleWithLimit = Math.min(eligibleWithLimitUncapped, Math.round(adjustedGTI * 0.10))
-          sec80G = Math.round(eligibleNoLimit + eligibleWithLimit)
+          // Shared with the Deductions page via computeSec80G so the two screens agree.
+          sec80G = computeSec80G(rows, adjustedGTI).deduction
         } else {
           // Back-compat: honour a legacy single-amount entry if rows were never created.
           sec80G = Math.max(0, deductionsData.donations80G || 0)
@@ -400,7 +391,9 @@ export default function TaxOptimizerPage() {
         const ais = JSON.parse(localStorage.getItem('as_ais') || 'null')
         if (ais && Number(ais.totalTaxCredit) > 0) aisCredit = Math.round(Number(ais.totalTaxCredit))
       } catch { /* ignore */ }
-      const salaryTDS = (salarySummary && (salarySummary.annualGross || 0) > 0) ? Math.round(salarySummary.annualTDS || 0) : 0
+      // Only trust the summary's annual TDS — the slip-average fallback doesn't carry a reliable
+      // TDS figure, so keep it at 0 there (unchanged from the prior behaviour).
+      const salaryTDS = facts.source === 'summary' ? facts.annualTDS : 0
       let otherIncomeTDS = 0
       let otherTDSEstimated = false
       for (const e of otherEntries) {
