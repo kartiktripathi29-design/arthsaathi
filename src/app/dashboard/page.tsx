@@ -39,17 +39,24 @@ export default function DocumentsPage() {
         localStorage.setItem('av_uploaded_docs', JSON.stringify(docs))
       }
 
-      // Parse salary slip
-      const formData = new FormData()
-      formData.append('file', salaryFile)
+      // Parse salary slip. The API expects JSON { base64Data, mediaType, fileName } — it can't read
+      // multipart FormData, so this upload previously failed for every file type. Send JSON to match
+      // the route contract (same shape the other upload screens use).
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(((reader.result as string) || '').split(',')[1])
+        reader.onerror = () => reject(new Error('Could not read file'))
+        reader.readAsDataURL(salaryFile)
+      })
 
       const res = await fetch('/api/parse-salary', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base64Data, mediaType: salaryFile.type, fileName: salaryFile.name }),
       })
 
       if (!res.ok) {
-        const err = await res.json()
+        const err = await res.json().catch(() => ({}))
         throw new Error(err.error || 'Parse failed')
       }
 
@@ -68,9 +75,10 @@ export default function DocumentsPage() {
     // Store selected FY
     localStorage.setItem('av_selected_fy', fy)
 
-    // Store parsed salary data
+    // Store parsed salary data. The API returns the slips under `data` (not `slips`), so the prior
+    // `parsedData.slips` was undefined and threw here. Append behaviour is unchanged.
     const existing = JSON.parse(localStorage.getItem('av_salary_timeline') || '[]')
-    localStorage.setItem('av_salary_timeline', JSON.stringify([...existing, ...parsedData.slips]))
+    localStorage.setItem('av_salary_timeline', JSON.stringify([...existing, ...(parsedData.data || [])]))
 
     // Navigate to Salary tab
     router.push('/dashboard/profile/salary')
