@@ -3,6 +3,7 @@ import './globals.css'
 import { Toaster } from 'react-hot-toast'
 import { Analytics } from '@vercel/analytics/react'
 import { AppProvider } from '@/store/AppStore'
+import { DialogHost } from '@/components/Dialog'
 
 export const metadata: Metadata = {
   title: 'ArthVo — Wealth Evolved',
@@ -24,6 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               error: { style: { background: '#DC2626' } },
             }}
           />
+          <DialogHost />
         </AppProvider>
         <Analytics />
       </body>

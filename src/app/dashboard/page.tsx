@@ -1,6 +1,7 @@
 'use client'
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import toast from 'react-hot-toast'
 import FYSelector from '@/components/FYSelector'
 
 const C = { bg: '#FDFAF6', card: '#fff', border: '#E4DDD1', fg: '#1C2B22', muted: '#6B7770', primary: '#3A4B41', accent: '#E6CFA7' }
@@ -20,7 +21,7 @@ export default function DocumentsPage() {
 
   const handleProceed = async () => {
     if (!salaryFile) {
-      alert('Please upload at least one salary slip to continue.')
+      toast.error('Please upload at least one salary slip to continue.')
       return
     }
 
@@ -58,7 +59,7 @@ export default function DocumentsPage() {
       // Show FY selector modal
       setShowFYSelector(true)
     } catch (e: any) {
-      alert(e.message || 'Upload failed')
+      toast.error(e.message || 'Upload failed')
       setUploading(false)
     }
   }

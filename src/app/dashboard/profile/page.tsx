@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'rea
 import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
+import { confirmDialog } from '@/components/Dialog'
 import DematHoldings from '@/components/DematHoldings'
 import { useAppStore } from '@/store/AppStore'
 import { MEGA_CATEGORIES, MegaCategory, tagTransactions, detectSalaryCandidates, detectSalary, SalaryCandidate, SalaryDetectionResult, generateExpenseSuggestions, ExpenseSuggestion, loadMerchantMemory, saveMerchantMemory, extractMerchantKey } from '@/lib/categories'
@@ -1702,16 +1703,25 @@ function ProfileContent() {
     setIncomeForm(prev => ({ ...prev, open: false }))
     toast.success(f.editingId ? 'Income source updated' : 'Income source added')
   }
-  const deleteOtherIncome = (id: string) => {
-    if (!confirm('Delete this income source?')) return
+  const deleteOtherIncome = async (id: string) => {
+    if (!(await confirmDialog('Delete this income source?'))) return
     setOtherIncomeStore(prev => prev ? { ...prev, entries: prev.entries.filter(e => e.id !== id) } : prev)
     toast.success('Removed')
   }
 
-  const addSlipToTimeline = (slip: SlipData, toastId?: string) => {
+  const addSlipToTimeline = async (slip: SlipData, toastId?: string) => {
     // Reset dismissed empty-months notice — uploading a new slip may have closed a gap
     setEmptyMonthsDismissed(false)
     try { localStorage.removeItem('av_empty_months_dismissed') } catch {}
+
+    // If a slip for this month already exists, confirm the replacement BEFORE touching state —
+    // state updaters must stay pure, so we can't await a dialog inside setSalaryTimeline.
+    const current = salaryTimeline
+    if (current?.employments.some(e => e.slips.some(s => s.monthKey === slip.monthKey))) {
+      const ok = await confirmDialog(`A slip for ${monthLabel(slip.monthKey)} already exists. Replace it?`)
+      if (!ok) { if (toastId) toast.dismiss(toastId); return }
+    }
+
     let afterUpdate: (() => void) | null = null
     setSalaryTimeline(prev => {
       // First slip ever — create timeline
@@ -1742,14 +1752,10 @@ function ProfileContent() {
       const newBasic = slip.parsed.basicSalary || 0
       const basicJumped = oldBasic > 0 && Math.abs(newBasic - oldBasic) / oldBasic > 0.05
 
-      // Same month already exists in any employment — ask to replace
+      // Same month already exists in any employment — replacement was confirmed above before
+      // this (pure) updater ran, so just perform the merge.
       const existingEmp = prev.employments.find(e => e.slips.some(s => s.monthKey === slip.monthKey))
       if (existingEmp) {
-        const ok = typeof window !== 'undefined' && window.confirm(`A slip for ${monthLabel(slip.monthKey)} already exists. Replace it?`)
-        if (!ok) {
-          afterUpdate = () => { if (toastId) toast.dismiss(toastId) }
-          return prev
-        }
         const updated = {
           ...prev,
           employments: prev.employments.map(e => {
@@ -1840,8 +1846,8 @@ function ProfileContent() {
     queueMicrotask(() => { if (toastMsg) toast.success(toastMsg) })
   }
 
-  const removeSlip = (slipId: string) => {
-    if (!confirm('Remove this slip?')) return
+  const removeSlip = async (slipId: string) => {
+    if (!(await confirmDialog('Remove this slip?'))) return
     setSalaryTimeline(prev => {
       if (!prev) return prev
       const updated = {
@@ -1878,8 +1884,8 @@ function ProfileContent() {
   const clearMonthOverride = (monthKey: string) => {
     setSalaryTimeline(prev => prev ? { ...prev, overrides: prev.overrides.filter(o => o.monthKey !== monthKey) } : prev)
   }
-  const resetSalaryTimeline = () => {
-    if (!confirm('Reset entire salary timeline? This will remove all uploaded slips and overrides.')) return
+  const resetSalaryTimeline = async () => {
+    if (!(await confirmDialog({ message: 'Reset entire salary timeline? This will remove all uploaded slips and overrides.', confirmLabel: 'Reset', danger: true }))) return
     setSalaryTimeline(null)
     toast.success('Salary timeline reset')
   }
@@ -1996,7 +2002,7 @@ function ProfileContent() {
     setLoadingDoc('slip'); const tid = toast.loading('Reading salary slip…')
     try {
       const b64 = await fileToBase64(file)
-      const res = await fetch('/api/parse-salary', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ base64Data:b64, mediaType:file.type }) })
+      const res = await fetch('/api/parse-salary', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ base64Data:b64, mediaType:file.type, fileName:file.name }) })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error)
       const slip = json.data
