@@ -1274,24 +1274,35 @@ export default function SalaryPageCompleteFinal() {
                             )}
                           </div>
                           <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                              <label style={{ fontSize: 11, color: C.muted }}>{isOneShot ? 'Amount' : 'How much?'}</label>
-                              <div style={{ display: 'flex', gap: 2 }}>
-                                <button type="button" onClick={() => updateChange(idx, { amountMode: 'pct', amountAbs: 0 })} style={{ padding: '2px 6px', background: fc.amountMode === 'abs' ? '#fff' : C.fg, color: fc.amountMode === 'abs' ? C.fg : '#fff', border: `1px solid ${C.fg}`, borderRadius: 3, fontSize: 9, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>%</button>
-                                <button type="button" onClick={() => updateChange(idx, { amountMode: 'abs', amountPct: 0 })} style={{ padding: '2px 6px', background: fc.amountMode === 'abs' ? C.fg : '#fff', color: fc.amountMode === 'abs' ? '#fff' : C.fg, border: `1px solid ${C.fg}`, borderRadius: 3, fontSize: 9, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>₹</button>
-                              </div>
-                            </div>
-                            {fc.amountMode === 'abs' ? (
-                              <input type="number" value={fc.amountAbs || ''} onChange={e => updateChange(idx, { amountAbs: parseFloat(e.target.value) || 0 })} placeholder={isOneShot ? '₹ amount' : 'New monthly ₹'} style={fieldStyle} />
+                            {fc.kind === 'job_switch' ? (
+                              // A job switch is an absolute new salary (from the offer, or typed) — no
+                              // %/₹ toggle. Upload an offer below to auto-fill this.
+                              <>
+                                <label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 4 }}>New monthly salary (gross)</label>
+                                <input type="number" value={fc.amountAbs || ''} onChange={e => updateChange(idx, { amountMode: 'abs', amountPct: 0, amountAbs: parseFloat(e.target.value) || 0 })} placeholder="₹ / upload offer" style={fieldStyle} />
+                              </>
                             ) : (
-                              <input type="number" value={fc.amountPct || ''} onChange={e => updateChange(idx, { amountPct: parseFloat(e.target.value) || 0 })} placeholder="e.g. 10" style={fieldStyle} />
+                              <>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                                  <label style={{ fontSize: 11, color: C.muted }}>{isOneShot ? 'Amount' : 'How much?'}</label>
+                                  <div style={{ display: 'flex', gap: 2 }}>
+                                    <button type="button" onClick={() => updateChange(idx, { amountMode: 'pct', amountAbs: 0 })} style={{ padding: '2px 6px', background: fc.amountMode === 'abs' ? '#fff' : C.fg, color: fc.amountMode === 'abs' ? C.fg : '#fff', border: `1px solid ${C.fg}`, borderRadius: 3, fontSize: 9, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>%</button>
+                                    <button type="button" onClick={() => updateChange(idx, { amountMode: 'abs', amountPct: 0 })} style={{ padding: '2px 6px', background: fc.amountMode === 'abs' ? C.fg : '#fff', color: fc.amountMode === 'abs' ? '#fff' : C.fg, border: `1px solid ${C.fg}`, borderRadius: 3, fontSize: 9, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>₹</button>
+                                  </div>
+                                </div>
+                                {fc.amountMode === 'abs' ? (
+                                  <input type="number" value={fc.amountAbs || ''} onChange={e => updateChange(idx, { amountAbs: parseFloat(e.target.value) || 0 })} placeholder={isOneShot ? '₹ amount' : 'New monthly ₹'} style={fieldStyle} />
+                                ) : (
+                                  <input type="number" value={fc.amountPct || ''} onChange={e => updateChange(idx, { amountPct: parseFloat(e.target.value) || 0 })} placeholder="e.g. 10" style={fieldStyle} />
+                                )}
+                              </>
                             )}
                           </div>
                         </div>
                       )
                     })()}
 
-                    {!isOneShot && (
+                    {!isOneShot && fc.kind !== 'job_switch' && (
                       <>
                         <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11, color: C.text, marginBottom: 6 }}>
                           <input type="checkbox" checked={fc.retroactive} onChange={e => updateChange(idx, { retroactive: e.target.checked })} />
