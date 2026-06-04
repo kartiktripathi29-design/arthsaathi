@@ -729,12 +729,12 @@ export default function TaxOptimizerPage() {
                 <p style={{ fontSize: 9, color: C.muted, margin: '4px 0 0' }}>Annual tax saved ~{fmt(yearlyTaxSaved)}</p>
                 {s.project && corpusFromContrib > 0 && (
                   <div style={{ marginTop: 6, padding: '6px 8px', background: '#F0F9F4', border: '1px solid #CFE6D8', borderRadius: 4 }}>
-                    <p style={{ fontSize: 9, color: C.muted, margin: '0 0 4px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{gap > 0 ? 'If you top up the headroom' : 'If you keep investing at this rate'} (8% · 15 yrs)</p>
+                    <p style={{ fontSize: 9, color: C.muted, margin: '0 0 4px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Illustration · assumes 8%/yr for 15 yrs (not a forecast)</p>
                     <p style={{ fontSize: 9.5, color: '#2A7A4A', margin: 0, lineHeight: 1.5 }}>
-                      💰 <strong>{fmt(yearlyContrib)}/yr</strong> contribution → <strong>{fmt(corpusFromContrib)}</strong> corpus.
+                      💰 <strong>{fmt(yearlyContrib)}/yr</strong> invested could grow to <strong>~{fmt(corpusFromContrib)}</strong>.
                     </p>
                     <p style={{ fontSize: 9.5, color: '#2A7A4A', margin: '2px 0 0', lineHeight: 1.5 }}>
-                      💸 <strong>{fmt(yearlyContrib * slabRate)}/yr</strong> tax saved (@ 30%) → <strong>{fmt(corpusFromTaxSaved)}</strong> corpus.
+                      💸 <strong>{fmt(yearlyContrib * slabRate)}/yr</strong> tax saved (@ 30%) could grow to <strong>~{fmt(corpusFromTaxSaved)}</strong>.
                     </p>
                   </div>
                 )}
@@ -744,7 +744,7 @@ export default function TaxOptimizerPage() {
           </div>
           )
         })()}
-        <p style={{ fontSize: 10, color: C.muted, margin: '12px 0 0', fontStyle: 'italic' }}>Only invest if it makes financial sense. Tax saving is a bonus, not the goal.</p>
+        <p style={{ fontSize: 10, color: C.muted, margin: '12px 0 0', fontStyle: 'italic' }}>Projections are illustrative only — they assume a constant 8% annual return; actual returns vary and are not guaranteed. Only invest if it makes financial sense; tax saving is a bonus, not the goal.</p>
       </div>
 
       <div style={{ display: 'flex', gap: 12 }}>

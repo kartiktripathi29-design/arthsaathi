@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { seedIfMissing, verifyIdentity, setStoredIdentity } from '@/lib/identity'
 import { confirmDialog, passwordDialog } from '@/components/Dialog'
+import BackupRestore from '@/components/BackupRestore'
 
 const C = { bg: '#FDFAF6', card: '#fff', border: '#E4DDD1', fg: '#1C2B22', muted: '#6B7770', primary: '#3A4B41' }
 
@@ -356,7 +357,11 @@ export default function DocumentsPage() {
           Skip to Other Income
         </button>
       </div>
-      
+
+      <div style={{ marginTop: 24 }}>
+        <BackupRestore />
+      </div>
+
     </div>
   )
 }
