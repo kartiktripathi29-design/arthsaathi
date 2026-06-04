@@ -1383,9 +1383,8 @@ export default function SalaryPageCompleteFinal() {
                         </div>
                         <p style={{ fontSize: 10, color: C.muted, margin: '6px 0 0', lineHeight: 1.5 }}>
                           {fc.offer
-                            ? `Modeled as a separate employment (${fc.offer.employerName}) from the joining date, on the offer's own basic / HRA. The joining month is prorated for days worked, and since the offer shows gross (no TDS), we estimate this employer's monthly TDS under the ${(fc.tdsRegime || 'new') === 'old' ? 'old' : 'new'} regime. HRA is computed per employer; standard deduction applies once across both jobs.`
-                            : `We read the offer's CTC and joining date, then model the new job as a separate employment from the joining date — prorating the first month and estimating its monthly TDS (under the selected regime; the offer shows gross, not net).`}
-                          {(fc.tdsRegime || 'new') === 'old' ? ' Old-regime TDS uses the standard deduction baseline; your 80C/HRA declarations further reduce the final liability in the Tax Optimizer.' : ''}
+                            ? `Set up as a separate job (${fc.offer.employerName}) from the joining date — first month prorated, monthly TDS estimated under the ${(fc.tdsRegime || 'new') === 'old' ? 'old' : 'new'} regime.`
+                            : `Modeled as a separate job from the joining date — first month prorated, monthly TDS estimated.`}
                         </p>
                       </div>
                     )}

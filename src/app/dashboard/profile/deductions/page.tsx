@@ -39,9 +39,9 @@ export default function DeductionsPage() {
   // (DonationCat lives in @/lib/deductions so the Deductions page and the Tax Optimizer share one type.)
   const [donationRows, setDonationRows] = useState<Array<{ id: string; category: DonationCat; amount: number }>>([])
   const [pfAutoApplied, setPfAutoApplied] = useState<{ annual: number } | null>(null)
-  // All sections expanded by default so users see every question on the page
-  // and can collapse the ones that don't apply to them.
-  const [expanded, setExpanded] = useState<string[]>(['80c', '80d', '24b', 'nps', '80tta', '80e', '80g'])
+  // Collapsed by default — the page reads as a short list of plain-language questions
+  // ("Did you invest in PPF…?") that the user taps to open only what applies to them.
+  const [expanded, setExpanded] = useState<string[]>([])
   // Annual gross from saved salary slips — used as the base for the 10%-of-Adjusted-GTI 80G cap.
   const [annualGrossForAGTI, setAnnualGrossForAGTI] = useState(0)
 

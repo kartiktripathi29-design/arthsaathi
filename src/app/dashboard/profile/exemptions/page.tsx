@@ -121,8 +121,8 @@ export default function ExemptionsPage() {
   const [s, setS] = useState<ExemptionsState>(DEFAULT)
   // All Section-10 accordions expanded by default — users see every question
   // immediately and can collapse the ones that don't apply.
-  // Only HRA open by default — the rest collapse to one-line headers to keep the page uncluttered.
-  const [expanded, setExpanded] = useState<string[]>(['hra'])
+  // All sections collapsed by default — the page is a tidy list of one-line headers you tap to open.
+  const [expanded, setExpanded] = useState<string[]>([])
   const [showHraCalc, setShowHraCalc] = useState(false)
 
   useEffect(() => {
@@ -200,15 +200,32 @@ export default function ExemptionsPage() {
   }
   const hraAnnualReceived = hraBasis.reduce((acc, m) => acc + (m.hra || 0), 0)
   const hraSegments = (() => {
-    const segs: { from: string; to: string; hra: number }[] = []
+    type HraSeg = { from: string; to: string; hra: number; months: number; proratedFrom?: string }
+    const raw: HraSeg[] = []
     for (const m of hraBasis) {
-      const last = segs[segs.length - 1]
-      if (last && last.hra === m.hra) last.to = m.monthKey
-      else segs.push({ from: m.monthKey, to: m.monthKey, hra: m.hra })
+      const last = raw[raw.length - 1]
+      if (last && last.hra === m.hra) { last.to = m.monthKey; last.months += 1 }
+      else raw.push({ from: m.monthKey, to: m.monthKey, hra: m.hra, months: 1 })
     }
-    return segs
+    // Fold a single prorated-looking month (one month whose HRA dips below the next run's — e.g. a
+    // mid-month joining) into that run, so we show the real monthly rate with a "prorated" note
+    // rather than a phantom middle rate (e.g. June at ₹72,000 between ₹34,815 and ₹80,000).
+    const merged: HraSeg[] = []
+    for (let i = 0; i < raw.length; i++) {
+      const seg = raw[i]
+      const next = raw[i + 1]
+      if (seg.months === 1 && next && seg.hra < next.hra) {
+        next.from = seg.from
+        next.months += 1
+        next.proratedFrom = seg.from
+        continue
+      }
+      merged.push(seg)
+    }
+    return merged
   })()
   const hraReceivedVaried = hraSegments.length > 1
+  const hraProratedMonths = hraSegments.filter(s => s.proratedFrom).map(s => fmtMonth(s.proratedFrom!))
 
   // Allowances detected on the uploaded slip → surfaced as confirm-able hints, never auto-applied
   // (eligibility depends on facts the slip can't show: actual travel for LTA, official car use, etc.).
@@ -263,19 +280,23 @@ export default function ExemptionsPage() {
       <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Exemptions</h1>
       <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>Section 10 — income that is completely tax-free (Old Regime only)</p>
 
-      {salary && salary.hra > 0 && (
+      {salary && (salary.hra > 0 || detectedConveyance > 0) && (
         <div style={{ background: C.wl, border: `1px solid ${C.wm}`, borderRadius: 8, padding: 16, marginBottom: 20 }}>
-          <p style={{ fontSize: 12, color: C.text, margin: 0, lineHeight: 1.6 }}>
-            Your salary slip shows HRA of <strong>{fmt(salary.hra)}/month</strong>. The other exemptions below are optional — fill what applies to you.
-          </p>
-        </div>
-      )}
-
-      {detectedConveyance > 0 && (
-        <div style={{ background: '#FFF8E6', border: '1px solid #E8D9A8', borderRadius: 8, padding: 12, marginBottom: 16 }}>
-          <p style={{ fontSize: 11.5, color: '#7A5C00', margin: 0, lineHeight: 1.5 }}>
-            🔎 <strong>Conveyance {fmt(detectedConveyance)}/mo</strong> on your slip is taxable now (covered by the standard deduction) — nothing to claim here.
-          </p>
+          <p style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>💡 What your tax consultant isn't telling you</p>
+          {salary.hra > 0 && (
+            <p style={{ fontSize: 11.5, color: C.text, margin: '0 0 6px', lineHeight: 1.55 }}>
+              Your HRA isn't automatically tax-free — only the <strong>least of three</strong> amounts is, and only if you <strong>actually pay rent</strong>.
+              {hraReceivedVaried
+                ? <> Since your pay changed mid-year, we worked it out <strong>month-by-month</strong> ({fmt(hraAnnualReceived)} total) — the honest way, not "one slip × 12".</>
+                : <> Enter your rent below to see exactly how much.</>}
+            </p>
+          )}
+          {detectedConveyance > 0 && (
+            <p style={{ fontSize: 11.5, color: C.text, margin: 0, lineHeight: 1.55 }}>
+              That <strong>Conveyance {fmt(detectedConveyance)}/mo</strong> on your slip? Taxable now — it's baked into the standard deduction, so there's nothing extra to claim.
+            </p>
+          )}
+          <p style={{ fontSize: 10.5, color: C.muted, margin: '8px 0 0' }}>Everything below is optional — fill only what applies to you.</p>
         </div>
       )}
 
@@ -309,7 +330,7 @@ export default function ExemptionsPage() {
                       ({fmtMonth(seg.from)}{seg.from !== seg.to ? `–${fmtMonth(seg.to)}` : ''})
                     </span>
                   ))}
-                  . The exemption below is computed per month and summed.
+                  . {hraProratedMonths.length > 0 && <>{hraProratedMonths.join(', ')} prorated for the joining date. </>}The exemption below is computed per month and summed.
                 </p>
               )}
             </div>
