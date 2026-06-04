@@ -224,6 +224,28 @@ export async function parseOfferLetterFromBase64(
   return parsed
 }
 
+// Offer letters that arrive as encrypted PDFs are decrypted and text-extracted by pdfjs upstream
+// (pdf-lib can't decrypt AES), then parsed here as text using the same schema/prompt as the PDF path.
+export async function parseOfferLetterFromText(text: string): Promise<any> {
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 1200,
+    system: OFFER_LETTER_PARSE_SYSTEM,
+    messages: [{
+      role: 'user',
+      content: [{
+        type: 'text',
+        text: `Parse this Indian offer letter, extracted as plain text from a PDF, and return the JSON as specified. Extract every compensation component accurately.\n\n${text}`,
+      }],
+    }],
+  })
+
+  const t = response.content[0].type === 'text' ? response.content[0].text : ''
+  const jsonMatch = t.match(/\{[\s\S]*\}/)
+  if (!jsonMatch) throw new Error('Could not extract JSON from Claude response')
+  return JSON.parse(jsonMatch[0])
+}
+
 export async function parseOfferLetterMultiPage(
   pages: { base64: string; mediaType: string }[]
 ): Promise<any> {

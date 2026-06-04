@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { seedIfMissing, verifyIdentity, setStoredIdentity } from '@/lib/identity'
-import { confirmDialog } from '@/components/Dialog'
+import { confirmDialog, passwordDialog } from '@/components/Dialog'
 import { estimateAnnualTax, type SeniorStatus } from '@/lib/tax-slabs'
 import {
   detectAnomalies,
@@ -285,14 +285,43 @@ export default function SalaryPageCompleteFinal() {
         reader.onerror = () => reject(new Error('Could not read file'))
         reader.readAsDataURL(file)
       })
-      const res = await fetch('/api/parse-offer-letter', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ base64Data: base64, mediaType: file.type || 'application/pdf' }),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json?.error || 'Parse failed')
-      const d = json.data || {}
+      // One call per (optional) password attempt; reads the body once and returns a plain result so
+      // we never double-consume the response stream across retries.
+      const call = async (password?: string) => {
+        const r = await fetch('/api/parse-offer-letter', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ base64Data: base64, mediaType: file.type || 'application/pdf', fileName: file.name, password }),
+        })
+        return { ok: r.ok, status: r.status, json: await r.json().catch(() => ({} as any)) }
+      }
+
+      let res = await call()
+      // Password-protected offer letters: prompt and retry until it unlocks or the user cancels.
+      if (res.status === 422 && (res.json?.error === 'requires_password' || res.json?.error === 'incorrect_password')) {
+        let pwd = await passwordDialog({
+          title: 'Password-protected offer letter',
+          message: `"${file.name}" is password-protected. Enter the password to read it, or cancel to skip.`,
+          confirmLabel: 'Unlock', placeholder: 'PDF password',
+        })
+        while (pwd) {
+          setOfferStatus({ idx, state: 'loading', msg: 'Unlocking…' })
+          res = await call(pwd)
+          if (!(res.status === 422 && res.json?.error === 'incorrect_password')) break
+          pwd = await passwordDialog({
+            title: 'Incorrect password',
+            message: `That password didn't work for "${file.name}". Try again, or cancel to skip.`,
+            confirmLabel: 'Unlock', placeholder: 'PDF password',
+          })
+        }
+        if (!pwd && res.status === 422) {
+          setOfferStatus({ idx, state: 'error', msg: 'Skipped — password needed to read this offer letter.' })
+          return
+        }
+      }
+
+      if (!res.ok) throw new Error(res.json?.error || 'Parse failed')
+      const d = res.json.data || {}
       const fixed = d.fixedCTC || d.totalCTC || 0
       // No PF assumption: subtract employer PF only if the offer actually states it (offers show
       // gross, not net). The prompt no longer imputes PF/PT, so unstated values are 0.
@@ -463,8 +492,11 @@ export default function SalaryPageCompleteFinal() {
   }
 
   // v7 build: turn the confirmed period mapping into a 12-month timeline. Single employment.
-  const buildEmploymentsFromMapping = () => {
+  const buildEmploymentsFromMapping = (changesOverride?: ForecastChange[]) => {
     if (!wizard.intent || slipsWithMeta.length === 0) return
+    // Callers can override which changes to apply (the "Skip — no change" button builds with none,
+    // before React has flushed its cleared wizard.forecastChanges state).
+    const forecastChanges = changesOverride ?? wizard.forecastChanges
     const dates = slipsWithMeta.map(m => ({ year: m.year, monthNum: m.monthNum }))
     const fyStart = inferFyStartYear(dates, wizard.intent)
     setFyStartYear(fyStart)
@@ -495,8 +527,8 @@ export default function SalaryPageCompleteFinal() {
     // different semantics:
     //   • increment / job_switch  → scale gross from monthApplies onwards (or retroFromMonth)
     //   • bonus_timing / other    → one-shot top-up to the specific monthApplies only
-    if (wizard.intent === 'forecast' && wizard.forecastChanges.length > 0) {
-      const sorted = [...wizard.forecastChanges].sort((a, b) => {
+    if (wizard.intent === 'forecast' && forecastChanges.length > 0) {
+      const sorted = [...forecastChanges].sort((a, b) => {
         const aFrom = a.retroactive && a.retroFromMonth ? a.retroFromMonth : a.monthApplies
         const bFrom = b.retroactive && b.retroFromMonth ? b.retroFromMonth : b.monthApplies
         return aFrom.localeCompare(bFrom)
@@ -558,7 +590,7 @@ export default function SalaryPageCompleteFinal() {
     // already sum across employments, and the optimizer applies the standard deduction once on the
     // combined total, so the two-employer split is tax-correct.
     const offerSwitch = (wizard.intent === 'forecast')
-      ? wizard.forecastChanges.find(fc => fc.kind === 'job_switch' && fc.offer && fc.monthApplies)
+      ? forecastChanges.find(fc => fc.kind === 'job_switch' && fc.offer && fc.monthApplies)
       : undefined
 
     if (offerSwitch && offerSwitch.offer) {
@@ -1182,7 +1214,7 @@ export default function SalaryPageCompleteFinal() {
           const removeChange = (idx: number) => setWizard(prev => ({ ...prev, forecastChanges: prev.forecastChanges.filter((_, i) => i !== idx) }))
           const updateChange = (idx: number, patch: Partial<ForecastChange>) =>
             setWizard(prev => ({ ...prev, forecastChanges: prev.forecastChanges.map((c, i) => i === idx ? { ...c, ...patch } : c) }))
-          const skip = () => { setWizard(prev => ({ ...prev, forecastChanges: [] })); setWizardStep('confirm-pattern') }
+          const skip = () => { setWizard(prev => ({ ...prev, forecastChanges: [] })); buildEmploymentsFromMapping([]); setWizardStep('review') }
           const kindLabel = (k: ForecastChange['kind']) =>
             k === 'increment' ? 'Increment' : k === 'job_switch' ? 'Job switch' : k === 'bonus_timing' ? 'Bonus' : 'One time payment'
 
@@ -1334,7 +1366,7 @@ export default function SalaryPageCompleteFinal() {
                       <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${C.border}` }}>
                         <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: C.wl, border: `1px solid ${C.border}`, borderRadius: 6, cursor: 'pointer', fontSize: 11.5, fontWeight: 600, color: C.fg, fontFamily: 'inherit' }}>
                           📄 Upload offer letter to prefill
-                          <input type="file" accept=".pdf,image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) applyOfferLetter(idx, f); e.target.value = '' }} />
+                          <input type="file" accept=".pdf,.doc,.docx,image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) applyOfferLetter(idx, f); e.target.value = '' }} />
                         </label>
                         {offerStatus?.idx === idx && (
                           <p style={{ fontSize: 10.5, margin: '6px 0 0', color: offerStatus.state === 'error' ? C.danger : offerStatus.state === 'done' ? '#2A7A4A' : C.muted }}>
@@ -1367,7 +1399,7 @@ export default function SalaryPageCompleteFinal() {
               <div style={{ display: 'flex', gap: 12 }}>
                 <button onClick={() => setWizardStep('confirm-periods')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
                 <button onClick={skip} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Skip — no change</button>
-                <button onClick={() => setWizardStep('confirm-pattern')} style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Next →</button>
+                <button onClick={() => { buildEmploymentsFromMapping(); setWizardStep('review') }} style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Build timeline →</button>
               </div>
             </div>
           )

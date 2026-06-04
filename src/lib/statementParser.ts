@@ -233,13 +233,16 @@ export async function parseStatement(
     const { encrypted, algo } = detectPdfEncryption(buffer)
 
     if (!encrypted) {
-      // Send PDF directly to Claude
+      // Re-save through pdf-lib to strip any residual encryption flag Anthropic rejects, then
+      // send the clean PDF to Claude.
+      const { normalizePdfBuffer } = await import('@/lib/pdfNormalize')
+      const clean = await normalizePdfBuffer(buffer)
       return {
         ok: true,
         kind: 'pdf',
         encrypted: false,
         claudeContent: [
-          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buffer.toString('base64') } },
+          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: clean.toString('base64') } },
           { type: 'text', text: 'Parse this Indian bank statement and return the complete JSON.' }
         ]
       }

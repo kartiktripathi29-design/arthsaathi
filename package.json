@@ -18,6 +18,7 @@
     "@vercel/analytics": "^2.0.1",
     "@vercel/blob": "^2.3.3",
     "lucide-react": "^1.8.0",
+    "mammoth": "^1.12.0",
     "next": "^16.2.6",
     "officecrypto-tool": "^0.0.19",
     "pdf-lib": "^1.17.1",

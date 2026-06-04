@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { parseSalaryFromBase64, parseSalaryFromText } from '@/lib/claude'
 import { PDFDocument } from 'pdf-lib'
+import { normalizePdfBase64 } from '@/lib/pdfNormalize'
 import type { ParsedSalaryData } from '@/types'
 import { prisma } from "@/lib/db"
 import { logActivity } from "@/lib/activity"
@@ -93,8 +94,10 @@ export async function POST(req: NextRequest) {
       }
 
       if (pageCount === 1) {
-        // Single page — parse as-is
-        pagesToParse.push({ base64: base64Data, mediaType: 'application/pdf' })
+        // Single page — re-save through pdf-lib to strip any encryption flag Anthropic rejects
+        // (Zoho/Razorpay/Keka payroll PDFs set it even with no real password). This is the same
+        // normalisation the multi-page split path below already applies per page.
+        pagesToParse.push({ base64: await normalizePdfBase64(base64Data), mediaType: 'application/pdf' })
       } else {
         // Multi-page — split into N single-page PDFs.
         // If splitting fails (rare; happens with some non-standard PDFs), fall back to
@@ -148,7 +151,7 @@ export async function POST(req: NextRequest) {
     if (validSlips.length === 0 && mediaType === 'application/pdf' && pagesToParse.length > 1) {
       console.log('[parse-salary] All per-page parses empty. Falling back to whole-PDF parse.')
       try {
-        const wholeParsed = await parseSalaryFromBase64(base64Data, 'application/pdf')
+        const wholeParsed = await parseSalaryFromBase64(await normalizePdfBase64(base64Data), 'application/pdf')
         console.log(`[parse-salary] Fallback whole-PDF parse: gross=${wholeParsed?.grossSalary || 0}, net=${wholeParsed?.netSalary || 0}`)
         if (wholeParsed && (wholeParsed.grossSalary || wholeParsed.netSalary)) {
           validSlips = [wholeParsed]
