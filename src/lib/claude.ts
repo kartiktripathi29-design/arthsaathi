@@ -184,8 +184,8 @@ Rules:
 - joiningBonus and retentionBonus are one-time, mark frequency as "one-time"
 - ESOPs: use vesting value if mentioned, else 0
 - Include ALL components in the components array with correct frequency
-- professionalTax: estimate based on state if not mentioned (₹2,400/year for most states)
-- employeePF: 12% of basic (max ₹21,600/year) if not mentioned
+- Do NOT estimate or impute any amount. Only return figures actually stated in the document.
+- employeePF, employerPF, professionalTax: use the stated value, else 0 — never assume a default
 - If a field is not present, use 0
 - notes: any important conditions (bond period, variable payout conditions, ESOP vesting schedule)`
 

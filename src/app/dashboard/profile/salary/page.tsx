@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { seedIfMissing, verifyIdentity, setStoredIdentity } from '@/lib/identity'
 import { confirmDialog } from '@/components/Dialog'
+import { newRegimeAnnualTax } from '@/lib/tax-slabs'
 import {
   detectAnomalies,
   extractAnnualGross,
@@ -39,6 +40,27 @@ const joiningMonthKey = (s: string): string => {
   const dmy = s.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/)   // DD/MM/YYYY
   if (dmy) return `${dmy[3]}-${String(+dmy[2]).padStart(2, '0')}`
   return ''
+}
+
+// Day-aware version: returns a full YYYY-MM-DD when the joining day is present, else ''. Used to set
+// the calendar value and to prorate the first month of the new employment.
+const joiningDateISO = (s: string): string => {
+  if (!s || typeof s !== 'string') return ''
+  const iso = s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/)         // 2026-06-04
+  if (iso) return `${iso[1]}-${String(+iso[2]).padStart(2, '0')}-${String(+iso[3]).padStart(2, '0')}`
+  const mon = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+  const named = s.toLowerCase().match(/(\d{1,2})\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*,?\s*(\d{4})/) // 4 June 2026
+  if (named) return `${named[3]}-${String(mon.indexOf(named[2]) + 1).padStart(2, '0')}-${String(+named[1]).padStart(2, '0')}`
+  const dmy = s.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/)   // DD/MM/YYYY
+  if (dmy) return `${dmy[3]}-${String(+dmy[2]).padStart(2, '0')}-${String(+dmy[1]).padStart(2, '0')}`
+  const mk = joiningMonthKey(s)                              // month known but not the day
+  return mk ? `${mk}-01` : ''
+}
+
+// Days in a calendar month for a YYYY-MM key.
+const daysInMonthOf = (mk: string): number => {
+  const [y, m] = mk.split('-').map(Number)
+  return new Date(y, m, 0).getDate()
 }
 
 type Frequency = 'monthly' | 'quarterly' | 'half_yearly' | 'yearly' | 'one_time'
@@ -154,6 +176,7 @@ interface ForecastChange {
   amountMode: 'pct' | 'abs' // which input the user is using
   amountPct: number         // e.g. 10 for 10%
   amountAbs: number         // absolute new monthly salary in ₹
+  joiningDate?: string      // YYYY-MM-DD — job switches pick a full date (calendar); drives proration
   offer?: OfferBreakdown    // set when a job switch is prefilled from an offer letter (2-employer split)
 }
 
@@ -270,13 +293,15 @@ export default function SalaryPageCompleteFinal() {
       if (!res.ok) throw new Error(json?.error || 'Parse failed')
       const d = json.data || {}
       const fixed = d.fixedCTC || d.totalCTC || 0
+      // No PF assumption: subtract employer PF only if the offer actually states it (offers show
+      // gross, not net). The prompt no longer imputes PF/PT, so unstated values are 0.
       const monthlyGross = Math.max(0, Math.round((fixed - (d.employerPF || 0)) / 12))
       if (monthlyGross <= 0) throw new Error('No salary figure found in the offer')
       // Per-month component breakdown for the new employer (annual offer fields ÷ 12). This drives a
       // real second employment so HRA is computed on the new employer's basic, not a scaled estimate.
       const mo = (n: number) => Math.max(0, Math.round((n || 0) / 12))
-      const employeePfMonthly = mo(d.employeePF || (d.basicSalary ? Math.min(d.basicSalary * 0.12, 21600) : 0))
-      const ptMonthly = mo(d.professionalTax)
+      const employeePfMonthly = mo(d.employeePF)   // only if stated — no 12%-of-basic default
+      const ptMonthly = mo(d.professionalTax)      // only if stated
       const offer: OfferBreakdown = {
         employerName: d.employerName || 'New employer',
         grossMonthly: monthlyGross,
@@ -285,9 +310,11 @@ export default function SalaryPageCompleteFinal() {
         specialMonthly: mo((d.specialAllowance || 0) + (d.da || 0) + (d.ta || 0) + (d.lta || 0) + (d.medicalAllowance || 0) + (d.otherAllowances || 0)),
         employeePfMonthly,
         ptMonthly,
+        // TDS is computed by the timeline builder (Section 192) since offers don't list it.
         netMonthly: Math.max(0, monthlyGross - employeePfMonthly - ptMonthly),
       }
-      const mk = joiningMonthKey(d.joiningDate)
+      const iso = joiningDateISO(d.joiningDate)
+      const mk = iso ? iso.slice(0, 7) : ''
       // Same FY window the change dropdown offers: this FY, at-or-after the latest uploaded slip.
       const fullFY = fyMonths(fyStartYear)
       const latest = slipsWithMeta.length > 0 ? [...slipsWithMeta].sort((a, b) => b.monthKey.localeCompare(a.monthKey))[0] : null
@@ -296,10 +323,10 @@ export default function SalaryPageCompleteFinal() {
       setWizard(prev => ({
         ...prev,
         forecastChanges: prev.forecastChanges.map((c, i) => i === idx
-          ? { ...c, kind: 'job_switch', amountMode: 'abs', amountAbs: monthlyGross, amountPct: 0, offer, ...(inFy ? { monthApplies: mk } : {}) }
+          ? { ...c, kind: 'job_switch', amountMode: 'abs', amountAbs: monthlyGross, amountPct: 0, offer, ...(inFy ? { monthApplies: mk, joiningDate: iso } : {}) }
           : c),
       }))
-      setOfferStatus({ idx, state: 'done', msg: `${offer.employerName} · ${fmt(monthlyGross)}/mo${inFy ? ` · from ${monthLabel(mk)}` : (mk ? ` · joins ${monthLabel(mk)} (outside this FY — pick a month)` : ' · pick the switch month')}` })
+      setOfferStatus({ idx, state: 'done', msg: `${offer.employerName} · ${fmt(monthlyGross)}/mo${inFy ? ` · joins ${iso.split('-').reverse().join('-')}` : (mk ? ` · joins ${monthLabel(mk)} (outside this FY — pick a date)` : ' · pick the joining date')}` })
     } catch (e: any) {
       setOfferStatus({ idx, state: 'error', msg: e?.message || 'Could not read the offer letter' })
     }
@@ -540,29 +567,54 @@ export default function SalaryPageCompleteFinal() {
         const [y, m] = mk.split('-').map(Number)
         return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`
       }
-      const bMonth = (mk: string): MonthData => ({
-        monthKey: mk,
-        gross: o.grossMonthly,
-        net: o.netMonthly,
-        deductions: o.grossMonthly - o.netMonthly,
-        source: 'projected',
-        earnings: [
-          { label: 'Basic', amount: o.basicMonthly, frequency: 'monthly' as const },
-          { label: 'HRA', amount: o.hraMonthly, frequency: 'monthly' as const },
-          { label: 'Special Allowance', amount: o.specialMonthly, frequency: 'monthly' as const },
-        ].filter(e => e.amount > 0),
-        deductionsList: [
-          { label: 'EPF', amount: o.employeePfMonthly, frequency: 'monthly' as const },
-          { label: 'Professional Tax', amount: o.ptMonthly, frequency: 'monthly' as const },
-        ].filter(d => d.amount > 0),
-      })
+      const bKeys = allFY.filter(mk => mk >= joinKey)
+      // First (joining) month is prorated for days actually worked, inclusive of the joining day:
+      // paidDays = daysInMonth − joiningDay + 1.  Later months are full.
+      const joinDay = offerSwitch.joiningDate ? (parseInt(offerSwitch.joiningDate.split('-')[2]) || 1) : 1
+      const prorationFor = (mk: string) => {
+        if (mk !== joinKey || joinDay <= 1) return 1
+        const dim = daysInMonthOf(mk)
+        return Math.max(0, Math.min(1, (dim - joinDay + 1) / dim))
+      }
+      const grossOf = (mk: string) => Math.round(o.grossMonthly * prorationFor(mk))
+      // Section 192 TDS: the offer shows gross (no TDS line), so estimate the new employer's
+      // withholding = new-regime annual tax on the salary IT pays, spread across its months in
+      // proportion to each month's gross (the prorated first month therefore carries less).
+      const annualGrossB = bKeys.reduce((s, mk) => s + grossOf(mk), 0)
+      const annualTaxB = newRegimeAnnualTax(annualGrossB)
+      const tdsOf = (mk: string) => annualGrossB > 0 ? Math.round(annualTaxB * grossOf(mk) / annualGrossB) : 0
+      const bMonth = (mk: string): MonthData => {
+        const f = prorationFor(mk)
+        const gross = grossOf(mk)
+        const pf = Math.round(o.employeePfMonthly * f)
+        const pt = Math.round(o.ptMonthly * f)
+        const tds = tdsOf(mk)
+        const net = Math.max(0, gross - pf - pt - tds)
+        return {
+          monthKey: mk,
+          gross,
+          net,
+          deductions: gross - net,
+          source: 'projected',
+          earnings: [
+            { label: 'Basic', amount: Math.round(o.basicMonthly * f), frequency: 'monthly' as const },
+            { label: 'HRA', amount: Math.round(o.hraMonthly * f), frequency: 'monthly' as const },
+            { label: 'Special Allowance', amount: Math.round(o.specialMonthly * f), frequency: 'monthly' as const },
+          ].filter(e => e.amount > 0),
+          deductionsList: [
+            { label: 'EPF', amount: pf, frequency: 'monthly' as const },
+            { label: 'Professional Tax', amount: pt, frequency: 'monthly' as const },
+            { label: 'TDS', amount: tds, frequency: 'monthly' as const },
+          ].filter(d => d.amount > 0),
+        }
+      }
       const aMonths = months.filter(m => m.monthKey < joinKey)
-      const bMonths = allFY.filter(mk => mk >= joinKey).map(bMonth)
+      const bMonths = bKeys.map(bMonth)
       const result: Employment[] = []
       if (aMonths.length > 0) {
         result.push({ id: 'emp-a', name: empName, fromMonth: `${fyStart}-04`, toMonth: monthBefore(joinKey), months: aMonths, baseGross: aMonths[0]?.gross || 0, baseNet: aMonths[0]?.net || 0 })
       }
-      result.push({ id: 'emp-b', name: o.employerName, fromMonth: joinKey, toMonth: `${fyStart + 1}-03`, months: bMonths, baseGross: o.grossMonthly, baseNet: o.netMonthly })
+      result.push({ id: 'emp-b', name: o.employerName, fromMonth: joinKey, toMonth: `${fyStart + 1}-03`, months: bMonths, baseGross: bMonths[0]?.gross || 0, baseNet: bMonths[0]?.net || 0 })
       setEmployments(result)
       return
     }
@@ -1193,11 +1245,24 @@ export default function SalaryPageCompleteFinal() {
                       return (
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
                           <div>
-                            <label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 4 }}>{isOneShot ? 'Which month?' : 'When does it take effect?'}</label>
-                            <select value={fc.monthApplies} onChange={e => updateChange(idx, { monthApplies: e.target.value })} style={selectStyle}>
-                              <option value="">Month…</option>
-                              {allFY.map(mk => <option key={mk} value={mk}>{monthLabel(mk)}</option>)}
-                            </select>
+                            <label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 4 }}>{fc.kind === 'job_switch' ? 'Joining date' : isOneShot ? 'Which month?' : 'When does it take effect?'}</label>
+                            {fc.kind === 'job_switch' ? (
+                              // Calendar: a job switch has an exact joining date — it drives the first
+                              // month's proration. monthApplies is kept in sync (YYYY-MM) for the build.
+                              <input
+                                type="date"
+                                value={fc.joiningDate || (fc.monthApplies ? `${fc.monthApplies}-01` : '')}
+                                min={`${inferred}-04-01`}
+                                max={`${inferred + 1}-03-31`}
+                                onChange={e => updateChange(idx, { joiningDate: e.target.value, monthApplies: e.target.value ? e.target.value.slice(0, 7) : '' })}
+                                style={fieldStyle}
+                              />
+                            ) : (
+                              <select value={fc.monthApplies} onChange={e => updateChange(idx, { monthApplies: e.target.value })} style={selectStyle}>
+                                <option value="">Month…</option>
+                                {allFY.map(mk => <option key={mk} value={mk}>{monthLabel(mk)}</option>)}
+                              </select>
+                            )}
                           </div>
                           <div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
@@ -1258,8 +1323,8 @@ export default function SalaryPageCompleteFinal() {
                         )}
                         <p style={{ fontSize: 10, color: C.muted, margin: '6px 0 0', lineHeight: 1.5 }}>
                           {fc.offer
-                            ? `Modeled as a separate employment (${fc.offer.employerName}) from the switch month, using the offer's own basic / HRA / PF — so HRA is computed correctly per employer. Standard deduction still applies once across both jobs.`
-                            : `We read the offer's CTC and joining date, then model the new job as a separate employment from the switch month (with its own basic/HRA) for accurate per-employer HRA.`}
+                            ? `Modeled as a separate employment (${fc.offer.employerName}) from the joining date, on the offer's own basic / HRA. The joining month is prorated for days worked, and since the offer shows gross (no TDS), we estimate this employer's monthly TDS (new regime). HRA is computed per employer; standard deduction applies once across both jobs.`
+                            : `We read the offer's CTC and joining date, then model the new job as a separate employment from the joining date — prorating the first month and estimating its monthly TDS (the offer shows gross, not net).`}
                         </p>
                       </div>
                     )}
