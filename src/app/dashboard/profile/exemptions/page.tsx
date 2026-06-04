@@ -63,12 +63,35 @@ function SimpleSection({
               style={{ flex: 1, border: 'none', outline: 'none', padding: '8px 10px', fontSize: 13, fontFamily: 'inherit', color: C.text }}
             />
           </div>
-          <div style={{ padding: '10px 12px', background: C.wl, borderRadius: 4, display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 11, color: C.muted }}>Claimed</span>
-            <span style={{ fontSize: 13, fontWeight: 700, color: C.fg }}>{fmt(claimed)}{capLabel ? ` / ${capLabel}` : ''}</span>
-          </div>
+          {claimed > 0 && (
+            <div style={{ padding: '10px 12px', background: C.wl, borderRadius: 4, display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 11, color: C.muted }}>Claimed</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.fg }}>{fmt(claimed)}{capLabel ? ` / ${capLabel}` : ''}</span>
+            </div>
+          )}
           {belowField}
         </div>
+      )}
+    </div>
+  )
+}
+
+// A slip-detected allowance shown as a CONFIRM-able hint (never auto-applied — eligibility for these
+// depends on facts the slip can't show: actual travel, official car use, etc.). `monthly` is the
+// amount seen on the slip; the optional "Use" button fills the annual field (monthly × 12).
+function DetectedHint({ monthly, rule, onUse }: { monthly: number; rule: string; onUse?: () => void }) {
+  if (!monthly || monthly <= 0) return null
+  const annual = monthly * 12
+  return (
+    <div style={{ marginTop: 10, padding: '10px 12px', background: '#EEF4FF', border: '1px solid #C9D9F2', borderRadius: 4 }}>
+      <p style={{ fontSize: 11, color: C.text, margin: '0 0 4px' }}>
+        🔎 Detected in your slip: <strong>{fmt(monthly)}/month</strong> <span style={{ color: C.muted }}>(~{fmt(annual)}/year)</span>
+      </p>
+      <p style={{ fontSize: 10.5, color: C.muted, margin: 0, lineHeight: 1.45 }}>{rule}</p>
+      {onUse && (
+        <button onClick={onUse} style={{ marginTop: 6, padding: '4px 10px', background: C.fg, color: '#fff', border: 'none', borderRadius: 4, fontSize: 10.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+          Use {fmt(annual)}/year
+        </button>
       )}
     </div>
   )
@@ -98,7 +121,8 @@ export default function ExemptionsPage() {
   const [s, setS] = useState<ExemptionsState>(DEFAULT)
   // All Section-10 accordions expanded by default — users see every question
   // immediately and can collapse the ones that don't apply.
-  const [expanded, setExpanded] = useState<string[]>(['hra', 'lta', 'driver', 'car', 'da', 'superann', 'pf', 'gratuity'])
+  // Only HRA open by default — the rest collapse to one-line headers to keep the page uncluttered.
+  const [expanded, setExpanded] = useState<string[]>(['hra'])
   const [showHraCalc, setShowHraCalc] = useState(false)
 
   useEffect(() => {
@@ -186,6 +210,16 @@ export default function ExemptionsPage() {
   })()
   const hraReceivedVaried = hraSegments.length > 1
 
+  // Allowances detected on the uploaded slip → surfaced as confirm-able hints, never auto-applied
+  // (eligibility depends on facts the slip can't show: actual travel for LTA, official car use, etc.).
+  // Amounts are monthly (slip values); the per-section "Use" button annualises them (× 12).
+  const slipComponents: { label: string; amount: number }[] = (salary?.components || []).map((c: any) => ({ label: String(c?.label || ''), amount: Number(c?.amount) || 0 }))
+  const sumComp = (re: RegExp) => slipComponents.filter(c => re.test(c.label)).reduce((acc, c) => acc + c.amount, 0)
+  const detectedConveyance = Math.round(salary?.ta || sumComp(/convey|transport/i) || 0)
+  const detectedLta = Math.round(salary?.lta || sumComp(/\blta\b|leave\s*travel/i) || 0)
+  const detectedDriver = Math.round(sumComp(/driver/i))
+  const detectedFuel = Math.round(sumComp(/fuel|petrol|diesel|car\b|vehicle/i))
+
   // Gratuity is capped at ₹10L for non-government employees.
   const gratuityCapped = Math.min(s.gratuity, 1000000)
   // Superannuation: theoretical cap = 15% of (basic+DA)*12. We don't have DA reliably,
@@ -233,6 +267,14 @@ export default function ExemptionsPage() {
         <div style={{ background: C.wl, border: `1px solid ${C.wm}`, borderRadius: 8, padding: 16, marginBottom: 20 }}>
           <p style={{ fontSize: 12, color: C.text, margin: 0, lineHeight: 1.6 }}>
             Your salary slip shows HRA of <strong>{fmt(salary.hra)}/month</strong>. The other exemptions below are optional — fill what applies to you.
+          </p>
+        </div>
+      )}
+
+      {detectedConveyance > 0 && (
+        <div style={{ background: '#FFF8E6', border: '1px solid #E8D9A8', borderRadius: 8, padding: 12, marginBottom: 16 }}>
+          <p style={{ fontSize: 11.5, color: '#7A5C00', margin: 0, lineHeight: 1.5 }}>
+            🔎 <strong>Conveyance {fmt(detectedConveyance)}/mo</strong> on your slip is taxable now (covered by the standard deduction) — nothing to claim here.
           </p>
         </div>
       )}
@@ -288,7 +330,7 @@ export default function ExemptionsPage() {
               <div>
                 <div style={{ fontSize: 12, fontWeight: 500, color: C.text }}>I live in a metro city (50% rate)</div>
                 <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.45 }}>
-                  Per <strong>Rule 2A, Income Tax Rules, 1962</strong> (FY 2025-26 / Budget 2025 — unchanged), only <strong>Delhi, Mumbai, Kolkata, Chennai</strong> qualify as metros for HRA. All other cities — including Bengaluru, Hyderabad, Pune, Ahmedabad, Gurugram, Noida — use the 40% rate.
+                  Metros (50%): <strong>Delhi, Mumbai, Kolkata, Chennai</strong>. Everywhere else (Bengaluru, Hyderabad, Pune, Gurugram…) is 40%.
                 </div>
               </div>
             </label>
@@ -367,25 +409,20 @@ export default function ExemptionsPage() {
             open={expanded.includes('lta')}
             onToggle={() => toggle('lta')}
             q="Leave Travel Allowance (LTA) u/s 10(5)"
-            sub="Travel within India for self+family. 2 journeys per 4-yr block (calendar years) · only actual economy fare exempt (not lodging/food). Enter amount claimed this FY."
+            sub="Actual economy fare only · 2 journeys per 4-yr block · old regime"
             value={s.lta}
             onChange={(v) => update('lta', v)}
             claimed={s.lta}
             belowField={
+              <>
+              <DetectedHint monthly={detectedLta} rule="LTA is exempt only for actual travel (economy fare · 2 journeys per 4-yr block). Enter the fare you'll actually claim — not the full allowance shown on the slip." />
               <div style={{ marginTop: 10, padding: '10px 12px', background: '#F0F9F4', border: '1px solid #CFE6D8', borderRadius: 4 }}>
-                <p style={{ fontSize: 11, color: C.text, margin: '0 0 4px', fontWeight: 600 }}>
-                  Current LTA block · <span style={{ color: '#2A7A4A' }}>CY {blk.start}–{blk.end}</span> <span style={{ color: C.muted, fontWeight: 400 }}>(today is CY {cy})</span>
+                <p style={{ fontSize: 10.5, color: C.muted, margin: 0, lineHeight: 1.5 }}>
+                  Current block <strong style={{ color: '#2A7A4A' }}>CY {blk.start}–{blk.end}</strong> · 2 journeys allowed.
+                  {inCarryWindow && <> Carry-forward: one unused journey from CY {blk.prevStart}–{blk.prevEnd} can be your first journey this year.</>}
                 </p>
-                <ul style={{ fontSize: 10.5, color: C.muted, margin: 0, paddingLeft: 16, lineHeight: 1.55 }}>
-                  <li>You may claim exemption for <strong>2 journeys</strong> within this 4-year block.</li>
-                  <li>Each journey: only the <strong>actual fare</strong> (rail / air / bus) for self + family within India. No lodging, food, or sightseeing.</li>
-                  <li>Prior block: <strong>CY {blk.prevStart}–{blk.prevEnd}</strong>. {inCarryWindow
-                      ? <>You are within the carry-forward window — <strong>one unutilized journey</strong> from the prior block can still be claimed, but only as your <strong>first journey of CY {blk.carryWindowYear}</strong>.</>
-                      : <>The carry-forward window from the prior block was CY {blk.carryWindowYear} — that opportunity has closed.</>}
-                  </li>
-                  <li>LTA is unavailable under the <strong>new tax regime</strong>.</li>
-                </ul>
               </div>
+              </>
             }
           />
         )
@@ -396,10 +433,11 @@ export default function ExemptionsPage() {
         open={expanded.includes('driver')}
         onToggle={() => toggle('driver')}
         q="Driver salary u/s 10(14)(i)"
-        sub="Reimbursement of driver's salary by employer (when you use a company-provided car). No statutory cap. Must be paid to the driver, not retained by you."
+        sub="Reimbursed driver of an official-use car · old regime"
         value={s.driverSalary}
         onChange={(v) => update('driverSalary', v)}
         claimed={s.driverSalary}
+        belowField={<DetectedHint monthly={detectedDriver} rule="Exempt only when reimbursed for a driver of an official-use car and actually paid to the driver. Confirm the eligible amount." onUse={() => update('driverSalary', detectedDriver * 12)} />}
       />
 
       {/* Section 10 — Car maintenance */}
@@ -407,10 +445,11 @@ export default function ExemptionsPage() {
         open={expanded.includes('car')}
         onToggle={() => toggle('car')}
         q="Car maintenance u/s 10(14)(i)"
-        sub="Reimbursement when employer provides a car for business use. Includes fuel, repairs, insurance. No statutory cap — actual expense incurred."
+        sub="Official-use car running costs — fuel, repairs · old regime"
         value={s.carMaintenance}
         onChange={(v) => update('carMaintenance', v)}
         claimed={s.carMaintenance}
+        belowField={<DetectedHint monthly={detectedFuel} rule="Exempt only for official-use car running/maintenance (fuel, repairs, insurance). Confirm the eligible amount." onUse={() => update('carMaintenance', detectedFuel * 12)} />}
       />
 
       {/* Section 10 — Daily allowance on tour */}
@@ -418,7 +457,7 @@ export default function ExemptionsPage() {
         open={expanded.includes('da')}
         onToggle={() => toggle('da')}
         q="Daily allowance on tour/transfer u/s 10(14)(ii)"
-        sub="Per-day allowance during official travel. CBDT rates: ₹100–500/day depending on city. Enter total claimed this FY."
+        sub="Per-day allowance on official tour · old regime"
         value={s.dailyAllowance}
         onChange={(v) => update('dailyAllowance', v)}
         claimed={s.dailyAllowance}
@@ -429,7 +468,7 @@ export default function ExemptionsPage() {
         open={expanded.includes('superann')}
         onToggle={() => toggle('superann')}
         q="Superannuation fund contribution"
-        sub="Employer's contribution to an approved superannuation fund. Exempt up to 15% of (basic + DA). Anything above is taxable as salary."
+        sub="Employer contribution · exempt up to 15% of (basic + DA)"
         value={s.superannuation}
         onChange={(v) => update('superannuation', v)}
         claimed={s.superannuation}
@@ -440,7 +479,7 @@ export default function ExemptionsPage() {
         open={expanded.includes('pf')}
         onToggle={() => toggle('pf')}
         q="PF withdrawal on retirement / separation"
-        sub="Recognized PF withdrawal after 5 years of service (or on retirement) is 100% tax-free. Lump sum amount received."
+        sub="Tax-free after 5 yrs' service or on retirement"
         value={s.pfWithdrawal}
         onChange={(v) => update('pfWithdrawal', v)}
         claimed={s.pfWithdrawal}
@@ -451,7 +490,7 @@ export default function ExemptionsPage() {
         open={expanded.includes('gratuity')}
         onToggle={() => toggle('gratuity')}
         q="Gratuity u/s 10(10)"
-        sub="Received on retirement / separation. Half-month basic × years of service. Cap ₹10L for non-govt; ₹20L for govt employees."
+        sub="On retirement · ½-month basic × years · cap ₹10L (non-govt)"
         value={s.gratuity}
         onChange={(v) => update('gratuity', v)}
         claimed={gratuityCapped}
