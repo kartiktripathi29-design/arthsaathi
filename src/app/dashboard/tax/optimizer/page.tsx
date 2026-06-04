@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { computeSec80G } from '@/lib/deductions'
 import { getSalaryFacts } from '@/lib/salary-facts'
+import { slabBreakdown, type SeniorStatus } from '@/lib/tax-slabs'
 
 const C = { fg:'#3A4B41', wheat:'#E6CFA7', wl:'#F5ECD8', wm:'#D4B98A', bg:'#FDFAF6', card:'#fff', border:'#E4DDD1', text:'#1C2B22', muted:'#7A8A7E', danger:'#B94040' }
 const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`
@@ -75,93 +76,7 @@ function recommendITR(otherEntries: any[], totalIncome: number): { form: 'ITR-1'
 }
 
 // Slab-wise calculator that returns a breakdown for display.
-// Honors regime + senior-citizen status (old regime only — new regime slabs are flat).
-type SeniorStatus = 'normal' | 'senior' | 'super_senior'
-interface SlabRow { label: string; rate: number; inSlab: number; tax: number }
-interface SlabResult { rows: SlabRow[]; basicTax: number; rebate: number; surcharge: number; cess: number; total: number }
-
-function oldRegimeSlabs(seniorStatus: SeniorStatus): [number, number, number, string][] {
-  if (seniorStatus === 'super_senior') {
-    return [
-      [0, 500000, 0, '₹0 – ₹5L'],
-      [500000, 1000000, 0.20, '₹5L – ₹10L'],
-      [1000000, Number.POSITIVE_INFINITY, 0.30, '₹10L+'],
-    ]
-  }
-  if (seniorStatus === 'senior') {
-    return [
-      [0, 300000, 0, '₹0 – ₹3L'],
-      [300000, 500000, 0.05, '₹3L – ₹5L'],
-      [500000, 1000000, 0.20, '₹5L – ₹10L'],
-      [1000000, Number.POSITIVE_INFINITY, 0.30, '₹10L+'],
-    ]
-  }
-  return [
-    [0, 250000, 0, '₹0 – ₹2.5L'],
-    [250000, 500000, 0.05, '₹2.5L – ₹5L'],
-    [500000, 1000000, 0.20, '₹5L – ₹10L'],
-    [1000000, Number.POSITIVE_INFINITY, 0.30, '₹10L+'],
-  ]
-}
-
-// Surcharge ladder. Old regime: 10/15/25/37%. New regime: capped at 25%.
-function calcSurcharge(taxableIncome: number, taxAfterRebate: number, regime: 'new' | 'old'): number {
-  if (taxableIncome <= 5000000) return 0
-  let rate = 0
-  if (taxableIncome <= 10000000) rate = 0.10
-  else if (taxableIncome <= 20000000) rate = 0.15
-  else if (taxableIncome <= 50000000) rate = 0.25
-  else rate = regime === 'new' ? 0.25 : 0.37
-  return taxAfterRebate * rate
-}
-
-function slabBreakdown(taxable: number, regime: 'new' | 'old', seniorStatus: SeniorStatus = 'normal'): SlabResult {
-  const slabs: [number, number, number, string][] = regime === 'new'
-    ? [
-        [0, 400000, 0,     '₹0 – ₹4L'],
-        [400000, 800000, 0.05, '₹4L – ₹8L'],
-        [800000, 1200000, 0.10, '₹8L – ₹12L'],
-        [1200000, 1600000, 0.15, '₹12L – ₹16L'],
-        [1600000, 2000000, 0.20, '₹16L – ₹20L'],
-        [2000000, 2400000, 0.25, '₹20L – ₹24L'],
-        [2400000, Number.POSITIVE_INFINITY, 0.30, '₹24L+'],
-      ]
-    : oldRegimeSlabs(seniorStatus)
-  const rows: SlabRow[] = []
-  let basicTax = 0
-  for (const [min, max, rate, label] of slabs) {
-    const inSlab = Math.max(0, Math.min(taxable, max) - min)
-    const tax = inSlab * rate
-    rows.push({ label, rate, inSlab, tax })
-    basicTax += tax
-  }
-  // 87A rebate (FY 2025-26):
-  //   New regime: taxable ≤ ₹12L → rebate up to ₹60k + marginal relief above ₹12L
-  //   Old regime: taxable ≤ ₹5L → rebate up to ₹12,500
-  let rebate = 0
-  if (regime === 'new') {
-    if (taxable <= 1200000) {
-      rebate = Math.min(basicTax, 60000)
-    } else {
-      const exceeds12L = taxable - 1200000
-      if (basicTax > exceeds12L) rebate = basicTax - exceeds12L
-    }
-  } else {
-    if (taxable <= 500000) rebate = Math.min(basicTax, 12500)
-  }
-  const taxAfterRebate = Math.max(0, basicTax - rebate)
-  const surcharge = calcSurcharge(taxable, taxAfterRebate, regime)
-  const cess = (taxAfterRebate + surcharge) * 0.04
-  const total = Math.round(taxAfterRebate + surcharge + cess)
-  return {
-    rows,
-    basicTax: Math.round(basicTax),
-    rebate: Math.round(rebate),
-    surcharge: Math.round(surcharge),
-    cess: Math.round(cess),
-    total,
-  }
-}
+// Slab math now lives in @/lib/tax-slabs (shared with the Salary forecast's TDS estimate).
 
 export default function TaxOptimizerPage() {
   const router = useRouter()
