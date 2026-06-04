@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { seedIfMissing, verifyIdentity, setStoredIdentity } from '@/lib/identity'
 import { confirmDialog } from '@/components/Dialog'
-import { newRegimeAnnualTax } from '@/lib/tax-slabs'
+import { estimateAnnualTax, type SeniorStatus } from '@/lib/tax-slabs'
 import {
   detectAnomalies,
   extractAnnualGross,
@@ -177,6 +177,7 @@ interface ForecastChange {
   amountPct: number         // e.g. 10 for 10%
   amountAbs: number         // absolute new monthly salary in ₹
   joiningDate?: string      // YYYY-MM-DD — job switches pick a full date (calendar); drives proration
+  tdsRegime?: 'new' | 'old' // regime the new employer should withhold TDS under (default 'new')
   offer?: OfferBreakdown    // set when a job switch is prefilled from an offer letter (2-employer split)
 }
 
@@ -578,10 +579,18 @@ export default function SalaryPageCompleteFinal() {
       }
       const grossOf = (mk: string) => Math.round(o.grossMonthly * prorationFor(mk))
       // Section 192 TDS: the offer shows gross (no TDS line), so estimate the new employer's
-      // withholding = new-regime annual tax on the salary IT pays, spread across its months in
-      // proportion to each month's gross (the prorated first month therefore carries less).
+      // withholding = annual tax (under the chosen regime) on the salary IT pays, spread across its
+      // months in proportion to each month's gross (the prorated first month therefore carries less).
+      // Regime follows the user's choice on the change; old regime honours the shared senior status.
+      const tdsRegime: 'new' | 'old' = offerSwitch.tdsRegime === 'old' ? 'old' : 'new'
+      let tdsSenior: SeniorStatus = 'normal'
+      try {
+        const ded = JSON.parse(localStorage.getItem('av_deductions') || '{}')
+        const ss = ded?.selfSeniorStatus
+        if (ss === 'senior' || ss === 'super_senior') tdsSenior = ss
+      } catch { /* default normal */ }
       const annualGrossB = bKeys.reduce((s, mk) => s + grossOf(mk), 0)
-      const annualTaxB = newRegimeAnnualTax(annualGrossB)
+      const annualTaxB = estimateAnnualTax(annualGrossB, tdsRegime, tdsSenior)
       const tdsOf = (mk: string) => annualGrossB > 0 ? Math.round(annualTaxB * grossOf(mk) / annualGrossB) : 0
       const bMonth = (mk: string): MonthData => {
         const f = prorationFor(mk)
@@ -1168,7 +1177,7 @@ export default function SalaryPageCompleteFinal() {
             ? fullFY.filter(mk => mk >= latestSlip.monthKey)
             : fullFY
           const changes = wizard.forecastChanges
-          const blank = (): ForecastChange => ({ kind: 'increment', monthApplies: '', retroactive: false, retroFromMonth: '', amountMode: 'pct', amountPct: 0, amountAbs: 0 })
+          const blank = (): ForecastChange => ({ kind: 'increment', monthApplies: '', retroactive: false, retroFromMonth: '', amountMode: 'pct', amountPct: 0, amountAbs: 0, tdsRegime: 'new' })
           const addChange = () => setWizard(prev => ({ ...prev, forecastChanges: [...prev.forecastChanges, blank()] }))
           const removeChange = (idx: number) => setWizard(prev => ({ ...prev, forecastChanges: prev.forecastChanges.filter((_, i) => i !== idx) }))
           const updateChange = (idx: number, patch: Partial<ForecastChange>) =>
@@ -1321,10 +1330,20 @@ export default function SalaryPageCompleteFinal() {
                             {offerStatus.state === 'loading' ? '⏳ ' : offerStatus.state === 'done' ? '✓ ' : '⚠ '}{offerStatus.msg}
                           </p>
                         )}
+                        {/* Regime the new employer should withhold TDS under (the employee declares this). */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+                          <span style={{ fontSize: 11, color: C.muted }}>Withhold TDS under:</span>
+                          {(['new', 'old'] as const).map(r => (
+                            <button key={r} type="button" onClick={() => updateChange(idx, { tdsRegime: r })} style={{ padding: '3px 10px', background: (fc.tdsRegime || 'new') === r ? C.fg : '#fff', color: (fc.tdsRegime || 'new') === r ? '#fff' : C.fg, border: `1px solid ${C.fg}`, borderRadius: 4, fontSize: 10.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                              {r === 'new' ? 'New regime' : 'Old regime'}
+                            </button>
+                          ))}
+                        </div>
                         <p style={{ fontSize: 10, color: C.muted, margin: '6px 0 0', lineHeight: 1.5 }}>
                           {fc.offer
-                            ? `Modeled as a separate employment (${fc.offer.employerName}) from the joining date, on the offer's own basic / HRA. The joining month is prorated for days worked, and since the offer shows gross (no TDS), we estimate this employer's monthly TDS (new regime). HRA is computed per employer; standard deduction applies once across both jobs.`
-                            : `We read the offer's CTC and joining date, then model the new job as a separate employment from the joining date — prorating the first month and estimating its monthly TDS (the offer shows gross, not net).`}
+                            ? `Modeled as a separate employment (${fc.offer.employerName}) from the joining date, on the offer's own basic / HRA. The joining month is prorated for days worked, and since the offer shows gross (no TDS), we estimate this employer's monthly TDS under the ${(fc.tdsRegime || 'new') === 'old' ? 'old' : 'new'} regime. HRA is computed per employer; standard deduction applies once across both jobs.`
+                            : `We read the offer's CTC and joining date, then model the new job as a separate employment from the joining date — prorating the first month and estimating its monthly TDS (under the selected regime; the offer shows gross, not net).`}
+                          {(fc.tdsRegime || 'new') === 'old' ? ' Old-regime TDS uses the standard deduction baseline; your 80C/HRA declarations further reduce the final liability in the Tax Optimizer.' : ''}
                         </p>
                       </div>
                     )}

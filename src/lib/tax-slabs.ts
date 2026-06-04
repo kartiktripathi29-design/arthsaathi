@@ -94,3 +94,12 @@ export function slabBreakdown(taxable: number, regime: 'new' | 'old', seniorStat
 export function newRegimeAnnualTax(annualSalary: number, standardDeduction = 75000): number {
   return slabBreakdown(Math.max(0, annualSalary - standardDeduction), 'new').total
 }
+
+// Section-192 TDS estimate under the employee's chosen regime. Applies the regime's standard
+// deduction (₹75k new / ₹50k old) and, for old regime, the senior-citizen slabs. Old regime here
+// uses the standard-deduction baseline only — the employee's 80C/HRA declarations reduce the FINAL
+// liability (shown in the optimizer), as they would once investment proofs are submitted.
+export function estimateAnnualTax(annualSalary: number, regime: 'new' | 'old', seniorStatus: SeniorStatus = 'normal'): number {
+  const standardDeduction = regime === 'old' ? 50000 : 75000
+  return slabBreakdown(Math.max(0, annualSalary - standardDeduction), regime, seniorStatus).total
+}
