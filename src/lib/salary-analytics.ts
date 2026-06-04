@@ -181,11 +181,27 @@ export function extractHraBasis(employments: EmploymentLike[]): HraMonth[] {
   return out.sort((a, b) => a.monthKey.localeCompare(b.monthKey))
 }
 
+// One contiguous run of months sharing the same monthly Basic + HRA — the unit we show the user
+// when explaining the exemption. The three Rule 2A candidates are monthly; periodExempt is the
+// chosen (least) monthly figure × the number of months in the run.
+export interface HraSegment {
+  fromMonth: string
+  toMonth: string
+  months: number
+  basic: number          // monthly basic (₹)
+  hra: number            // monthly HRA received (₹) — the "actual HRA" candidate
+  rentMinus10: number    // monthly rent − 10% of basic (₹) — may be negative before clamping
+  cityPctBasic: number   // 50%/40% of monthly basic (₹)
+  monthlyExempt: number  // least of the three, clamped at 0 (₹/month)
+  periodExempt: number   // monthlyExempt × months (₹)
+}
+
 export interface HraComputation {
   annualExemption: number   // sum of the per-month exemptions (₹/year)
   monthsCounted: number     // months that fed the calculation
   annualHraReceived: number // total HRA received across the year (₹)
   basicVaried: boolean      // true if monthly basic changed during the year
+  breakdown: HraSegment[]   // per-segment working shown to the user
 }
 
 // Compute the annual HRA exemption the statutory way: for each month take
@@ -202,16 +218,40 @@ export function computeAnnualHraExemption(
   let annualExemption = 0
   let annualHraReceived = 0
   const distinctBasics = new Set<number>()
+  const breakdown: HraSegment[] = []
   for (const m of basis) {
-    const exempt = Math.max(0, Math.min(m.hra, monthlyRent - m.basic * 0.1, m.basic * cityPct))
+    const rentMinus10 = monthlyRent - m.basic * 0.1
+    const cityPctBasic = m.basic * cityPct
+    const exempt = Math.max(0, Math.min(m.hra, rentMinus10, cityPctBasic))
     annualExemption += exempt
     annualHraReceived += m.hra
     distinctBasics.add(Math.round(m.basic))
+
+    // Group contiguous months that share the same monthly Basic + HRA into one segment.
+    const last = breakdown[breakdown.length - 1]
+    if (last && last.basic === m.basic && last.hra === m.hra) {
+      last.toMonth = m.monthKey
+      last.months += 1
+      last.periodExempt = Math.round(last.monthlyExempt * last.months)
+    } else {
+      breakdown.push({
+        fromMonth: m.monthKey,
+        toMonth: m.monthKey,
+        months: 1,
+        basic: Math.round(m.basic),
+        hra: Math.round(m.hra),
+        rentMinus10: Math.round(rentMinus10),
+        cityPctBasic: Math.round(cityPctBasic),
+        monthlyExempt: Math.round(exempt),
+        periodExempt: Math.round(exempt),
+      })
+    }
   }
   return {
     annualExemption: Math.round(annualExemption),
     monthsCounted: basis.length,
     annualHraReceived: Math.round(annualHraReceived),
     basicVaried: distinctBasics.size > 1,
+    breakdown,
   }
 }

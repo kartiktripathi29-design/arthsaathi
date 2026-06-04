@@ -1214,7 +1214,6 @@ export default function SalaryPageCompleteFinal() {
           const removeChange = (idx: number) => setWizard(prev => ({ ...prev, forecastChanges: prev.forecastChanges.filter((_, i) => i !== idx) }))
           const updateChange = (idx: number, patch: Partial<ForecastChange>) =>
             setWizard(prev => ({ ...prev, forecastChanges: prev.forecastChanges.map((c, i) => i === idx ? { ...c, ...patch } : c) }))
-          const skip = () => { setWizard(prev => ({ ...prev, forecastChanges: [] })); buildEmploymentsFromMapping([]); setWizardStep('review') }
           const kindLabel = (k: ForecastChange['kind']) =>
             k === 'increment' ? 'Increment' : k === 'job_switch' ? 'Job switch' : k === 'bonus_timing' ? 'Bonus' : 'One time payment'
 
@@ -1398,7 +1397,6 @@ export default function SalaryPageCompleteFinal() {
 
               <div style={{ display: 'flex', gap: 12 }}>
                 <button onClick={() => setWizardStep('confirm-periods')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
-                <button onClick={skip} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Skip — no change</button>
                 <button onClick={() => { buildEmploymentsFromMapping(); setWizardStep('review') }} style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Build timeline →</button>
               </div>
             </div>
@@ -1712,346 +1710,272 @@ export default function SalaryPageCompleteFinal() {
 
       {/* Employment Periods */}
       <div style={{ marginBottom: 24 }}>
-        {employments.map((emp, idx) => (
-          <div key={emp.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 12, overflow: 'hidden' }}>
-            <button
-              onClick={() => setExpandedEmployment(expandedEmployment === emp.id ? null : emp.id)}
-              style={{ width: '100%', padding: '16px', background: expandedEmployment === emp.id ? C.wl : '#fff', border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-            >
-              <div style={{ textAlign: 'left' }}>
-                <h3 style={{ fontSize: 13, fontWeight: 600, color: C.text, margin: '0 0 4px' }}>Employment #{idx + 1}: {emp.name}</h3>
-                <p style={{ fontSize: 11, color: C.muted, margin: 0 }}>{monthLabel(emp.fromMonth)} → {monthLabel(emp.toMonth)}</p>
-              </div>
-              <span style={{ fontSize: 14, color: C.fg }}>{expandedEmployment === emp.id ? '−' : '+'}</span>
-            </button>
-
-            {expandedEmployment === emp.id && (
-              <div style={{ padding: '16px', borderTop: `1px solid ${C.border}` }}>
-                {/* Per-month slip upload */}
-                <div style={{ marginBottom: 16, padding: 12, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6 }}>
-                  <p style={{ fontSize: 11, fontWeight: 600, color: C.muted, margin: '0 0 8px', textTransform: 'uppercase' }}>Upload monthly slip</p>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <select
-                      value={monthUploadEmpId === emp.id ? monthUploadKey : ''}
-                      onChange={(e) => { setMonthUploadEmpId(emp.id); setMonthUploadKey(e.target.value); setMonthUploadError(null) }}
-                      disabled={monthUploadBusy}
-                      style={{ padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontFamily: 'inherit', background: '#fff', color: C.text, minWidth: 140 }}
-                    >
-                      <option value="">Select month…</option>
-                      {emp.months
-                        .filter(m => m.monthKey >= emp.fromMonth && m.monthKey <= emp.toMonth)
-                        .map(m => (
-                          <option key={m.monthKey} value={m.monthKey}>
-                            {monthLabel(m.monthKey)}{m.source === 'actual' ? ' (uploaded)' : m.source === 'edited' ? ' (edited)' : ''}
-                          </option>
-                        ))}
-                    </select>
-                    <input
-                      type="file"
-                      accept="application/pdf,image/*"
-                      disabled={monthUploadBusy || (monthUploadEmpId === emp.id ? !monthUploadKey : true)}
-                      onChange={(e) => {
-                        const f = e.target.files?.[0] || null
-                        setMonthUploadFile(f)
-                        if (f && monthUploadEmpId === emp.id && monthUploadKey) {
-                          uploadMonthlySlip(emp.id, monthUploadKey, f)
-                          e.target.value = ''
-                        }
-                      }}
-                      style={{ fontSize: 12, fontFamily: 'inherit', color: C.text }}
-                    />
-                    {monthUploadBusy && monthUploadEmpId === emp.id && (
-                      <span style={{ fontSize: 11, color: C.muted }}>Parsing…</span>
-                    )}
-                  </div>
-                  {monthUploadError && monthUploadEmpId === emp.id && (
-                    <p style={{ fontSize: 11, color: C.danger, margin: '8px 0 0' }}>{monthUploadError}</p>
-                  )}
-
-                  {/* Manual entry — no slip needed */}
-                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${C.border}` }}>
-                    <button
-                      onClick={() => {
-                        setManualOpenEmpId(manualOpenEmpId === emp.id ? null : emp.id)
-                        setManualError(null)
-                      }}
-                      style={{ background: 'transparent', border: 'none', color: C.fg, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}
-                    >
-                      {manualOpenEmpId === emp.id ? '− Hide manual entry' : '+ Add manually (no slip)'}
-                    </button>
-                    {manualOpenEmpId === emp.id && (() => {
-                      // Live totals from current row state
-                      const liveGross = manualEarnings.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0)
-                      const liveDed = manualDeductions.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0)
-                      const liveNet = liveGross - liveDed
-                      return (
-                        <div style={{ marginTop: 10 }}>
-                          <div style={{ marginBottom: 10 }}>
-                            <label style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Month</label>
-                            <select
-                              value={manualMonthKey}
-                              onChange={(e) => { setManualMonthKey(e.target.value); setManualError(null) }}
-                              style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontFamily: 'inherit', background: '#fff', color: C.text }}
-                            >
-                              <option value="">Select month…</option>
-                              {emp.months
-                                .filter(m => m.monthKey >= emp.fromMonth && m.monthKey <= emp.toMonth)
-                                .map(m => (
-                                  <option key={m.monthKey} value={m.monthKey}>
-                                    {monthLabel(m.monthKey)}{m.source === 'actual' ? ' (uploaded)' : m.source === 'edited' ? ' (edited)' : ''}
-                                  </option>
-                                ))}
-                            </select>
-                          </div>
-
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                            {/* Earnings editor */}
-                            <div>
-                              <p style={{ fontSize: 10, fontWeight: 600, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase' }}>Earnings</p>
-                              {manualEarnings.map((row, i) => (
-                                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 90px auto', gap: 4, marginBottom: 4 }}>
-                                  <input
-                                    type="text"
-                                    placeholder="Label (e.g. HRA)"
-                                    value={row.label}
-                                    onChange={(e) => setManualEarnings(prev => prev.map((r, j) => j === i ? { ...r, label: e.target.value } : r))}
-                                    style={{ padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, fontFamily: 'inherit', color: C.text }}
-                                  />
-                                  <input
-                                    type="number"
-                                    placeholder="Amount"
-                                    value={row.amount}
-                                    onChange={(e) => setManualEarnings(prev => prev.map((r, j) => j === i ? { ...r, amount: e.target.value } : r))}
-                                    style={{ padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, fontFamily: 'inherit', color: C.text }}
-                                  />
-                                  <button
-                                    onClick={() => setManualEarnings(prev => prev.filter((_, j) => j !== i))}
-                                    title="Remove"
-                                    style={{ padding: '0 8px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 14, color: C.muted, cursor: 'pointer', fontFamily: 'inherit' }}
-                                  >×</button>
-                                </div>
-                              ))}
-                              <button
-                                onClick={() => setManualEarnings(prev => [...prev, { label: '', amount: '' }])}
-                                style={{ marginTop: 4, padding: '4px 8px', background: 'transparent', border: `1px dashed ${C.border}`, borderRadius: 4, fontSize: 10.5, color: C.fg, cursor: 'pointer', fontFamily: 'inherit', width: '100%' }}
-                              >+ Add earning</button>
-                            </div>
-
-                            {/* Deductions editor */}
-                            <div>
-                              <p style={{ fontSize: 10, fontWeight: 600, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase' }}>Deductions</p>
-                              {manualDeductions.map((row, i) => (
-                                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 90px auto', gap: 4, marginBottom: 4 }}>
-                                  <input
-                                    type="text"
-                                    placeholder="Label (e.g. PF)"
-                                    value={row.label}
-                                    onChange={(e) => setManualDeductions(prev => prev.map((r, j) => j === i ? { ...r, label: e.target.value } : r))}
-                                    style={{ padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, fontFamily: 'inherit', color: C.text }}
-                                  />
-                                  <input
-                                    type="number"
-                                    placeholder="Amount"
-                                    value={row.amount}
-                                    onChange={(e) => setManualDeductions(prev => prev.map((r, j) => j === i ? { ...r, amount: e.target.value } : r))}
-                                    style={{ padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, fontFamily: 'inherit', color: C.text }}
-                                  />
-                                  <button
-                                    onClick={() => setManualDeductions(prev => prev.filter((_, j) => j !== i))}
-                                    title="Remove"
-                                    style={{ padding: '0 8px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 14, color: C.muted, cursor: 'pointer', fontFamily: 'inherit' }}
-                                  >×</button>
-                                </div>
-                              ))}
-                              <button
-                                onClick={() => setManualDeductions(prev => [...prev, { label: '', amount: '' }])}
-                                style={{ marginTop: 4, padding: '4px 8px', background: 'transparent', border: `1px dashed ${C.border}`, borderRadius: 4, fontSize: 10.5, color: C.fg, cursor: 'pointer', fontFamily: 'inherit', width: '100%' }}
-                              >+ Add deduction</button>
-                            </div>
-                          </div>
-
-                          {/* Live preview totals */}
-                          <div style={{ marginTop: 10, padding: 10, background: C.wl, borderRadius: 6, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-                            <div>
-                              <p style={{ fontSize: 10, color: C.muted, margin: '0 0 2px', textTransform: 'uppercase' }}>Gross</p>
-                              <p style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: 0 }}>{fmt(liveGross)}</p>
-                            </div>
-                            <div>
-                              <p style={{ fontSize: 10, color: C.muted, margin: '0 0 2px', textTransform: 'uppercase' }}>Deductions</p>
-                              <p style={{ fontSize: 13, fontWeight: 700, color: C.danger, margin: 0 }}>−{fmt(liveDed)}</p>
-                            </div>
-                            <div>
-                              <p style={{ fontSize: 10, color: C.muted, margin: '0 0 2px', textTransform: 'uppercase' }}>Net</p>
-                              <p style={{ fontSize: 13, fontWeight: 700, color: '#2A7A4A', margin: 0 }}>{fmt(liveNet)}</p>
-                            </div>
-                          </div>
-
-                          <button
-                            onClick={() => submitManualEntry(emp.id)}
-                            style={{ marginTop: 10, width: '100%', padding: '10px 14px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
-                          >
-                            Save breakdown
-                          </button>
-                        </div>
-                      )
-                    })()}
-                    {manualError && manualOpenEmpId === emp.id && (
-                      <p style={{ fontSize: 11, color: C.danger, margin: '8px 0 0' }}>{manualError}</p>
-                    )}
-                  </div>
-                </div>
-                <div style={{ marginBottom: 16 }}>
-                  <p style={{ fontSize: 11, fontWeight: 600, color: C.muted, margin: '0 0 12px', textTransform: 'uppercase' }}>Timeline · click to view/edit</p>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 8, marginBottom: 12 }}>
-                    {emp.months.map(m => {
-                      const isForecastCell = wizard.intent === 'forecast' && m.source === 'projected' && m.gross > 0
-                      // Stronger visual distinction per v8 §B6:
-                      //   actual    → solid dark green, white ● dot
-                      //   edited    → solid amber, white ✎ pencil
-                      //   inferred  → cool blue tint with dark-green ◆ diamond + thin solid border
-                      //   forecast  → pale yellow background + dashed dark border + 🔮
-                      //   no-data   → flat light grey (the projected fallback)
-                      const bg = m.source === 'actual' ? C.fg
-                        : m.source === 'edited' ? C.wm
-                        : m.source === 'inferred' ? '#CFE0F0'        // cool blue tint — clearly different from forecast
-                        : isForecastCell ? '#FFF6D6'                  // pale yellow for forecast
-                        : C.border
-                      const fg = m.source === 'actual' || m.source === 'edited' ? '#fff'
-                        : m.source === 'inferred' ? '#1F4E7A'         // dark blue text on the blue-tinted bg
-                        : isForecastCell ? '#7A5C00'                  // dark amber text on the pale-yellow bg
-                        : C.muted
-                      const icon = isForecastCell
-                        ? '🔮'
-                        : m.source === 'actual' ? '●'
-                        : m.source === 'edited' ? '✎'
-                        : m.source === 'inferred' ? '◆'
-                        : '○'
-                      const anomaly = anomalyByMonth.get(m.monthKey)
-                      const cellBorder = anomaly
-                        ? `2px solid #E07B3A`
-                        : isForecastCell ? `2px dashed #7A5C00`
-                        : m.source === 'inferred' ? `1px solid #7AA8D1`
-                        : 'none'
-
-                      return (
-                        <button
-                          key={m.monthKey}
-                          onClick={() => {
-                            setPreviewMonth(m.monthKey)
-                            setPreviewEmploymentId(emp.id)
-                          }}
-                          title={anomaly?.message
-                            || (isForecastCell ? 'Forecast — projected from your scenario'
-                                : m.source === 'inferred' ? `Inferred from another slip's values for the same employer`
-                                : undefined)}
-                          style={{ position: 'relative', background: bg, color: fg, border: cellBorder, borderRadius: 4, padding: '12px 4px', fontSize: 10, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}
-                        >
-                          {anomaly && (
-                            <span style={{ position: 'absolute', top: -6, right: -4, background: '#E07B3A', color: '#fff', borderRadius: '50%', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700 }}>!</span>
-                          )}
-                          <div style={{ fontSize: 9 }}>{monthLabel(m.monthKey).split(' ')[0]}</div>
-                          <div style={{ fontSize: 11 }}>{icon}</div>
-                          <div style={{ fontSize: 8, opacity: 0.8 }}>{fmt(m.gross)}</div>
-                        </button>
-                      )
-                    })}
-                  </div>
-
-                  <div style={{ display: 'flex', gap: 12, fontSize: 10.5, color: C.muted, marginBottom: 12, flexWrap: 'wrap' }}>
-                    <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: C.fg, marginRight: 4, verticalAlign: 'middle' }} /><strong style={{ color: C.fg }}>●</strong> Actual (from slip)</span>
-                    <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: C.wm, marginRight: 4, verticalAlign: 'middle' }} /><strong style={{ color: C.fg }}>✎</strong> Edited (you changed it)</span>
-                    <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#CFE0F0', border: '1px solid #7AA8D1', marginRight: 4, verticalAlign: 'middle' }} /><strong style={{ color: '#1F4E7A' }}>◆</strong> Inferred (from another slip)</span>
-                    {wizard.intent === 'forecast' && (
-                      <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#FFF6D6', border: '2px dashed #7A5C00', marginRight: 4, verticalAlign: 'middle' }} />🔮 Forecast</span>
-                    )}
-                    <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: '#E07B3A', marginRight: 4, verticalAlign: 'middle' }} />! Anomaly</span>
-                  </div>
-
-                </div>
-
-                {/* Inline preview panel — collapsible, mirrors the click-modal but in-page */}
-                <div style={{ marginBottom: 16, border: `1px solid ${C.border}`, borderRadius: 6, overflow: 'hidden' }}>
-                  <button
-                    onClick={() => setPreviewOpenEmpId(previewOpenEmpId === emp.id ? null : emp.id)}
-                    style={{ width: '100%', padding: '10px 12px', background: previewOpenEmpId === emp.id ? C.wl : '#fff', border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+        {(() => {
+          // One unified timeline: flatten every month across employers (chronological), tagged with
+          // its employer, so the whole FY renders as a single grid with a grouped employer band below.
+          const flatMonths = employments
+            .flatMap(e => e.months.map(m => ({ ...m, empId: e.id, empName: e.name })))
+            .sort((a, b) => a.monthKey.localeCompare(b.monthKey))
+          const empIdForMonth = (mk: string) => employments.find(e => e.months.some(m => m.monthKey === mk))?.id || ''
+          const cols = flatMonths.length || 12
+          if (flatMonths.length === 0) return null
+          return (
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
+              {/* Upload monthly slip — single control for the whole timeline (month picks the employer) */}
+              <div style={{ marginBottom: 16, padding: 12, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6 }}>
+                <p style={{ fontSize: 11, fontWeight: 600, color: C.muted, margin: '0 0 8px', textTransform: 'uppercase' }}>Upload monthly slip</p>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <select
+                    value={monthUploadKey}
+                    onChange={(e) => { setMonthUploadKey(e.target.value); setMonthUploadEmpId(empIdForMonth(e.target.value)); setMonthUploadError(null) }}
+                    disabled={monthUploadBusy}
+                    style={{ padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontFamily: 'inherit', background: '#fff', color: C.text, minWidth: 200 }}
                   >
-                    <span style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'uppercase' }}>Preview · all months</span>
-                    <span style={{ fontSize: 13, color: C.fg }}>{previewOpenEmpId === emp.id ? '−' : '+'}</span>
-                  </button>
-                  {previewOpenEmpId === emp.id && (
-                    <div style={{ padding: 12, borderTop: `1px solid ${C.border}`, background: C.bg }}>
-                      {emp.months.filter(m => m.gross > 0 || m.net > 0).length === 0 ? (
-                        <p style={{ fontSize: 12, color: C.muted, margin: 0, textAlign: 'center' }}>No salary data yet — upload a slip or add manually.</p>
-                      ) : (
-                        emp.months.filter(m => m.gross > 0 || m.net > 0).map(m => {
-                          const isOpen = previewMonth === m.monthKey && previewEmploymentId === emp.id
-                          return (
-                            <div key={m.monthKey} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, marginBottom: 8, overflow: 'hidden' }}>
-                              <button
-                                onClick={() => {
-                                  if (isOpen) { setPreviewMonth(null); setPreviewEmploymentId(null) }
-                                  else { setPreviewMonth(m.monthKey); setPreviewEmploymentId(emp.id) }
-                                }}
-                                style={{ width: '100%', padding: '10px 12px', background: isOpen ? C.wl : '#fff', border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                              >
-                                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                                  <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{monthLabel(m.monthKey)}</span>
-                                  <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 3, background: m.source === 'actual' ? C.fg : m.source === 'edited' ? C.wm : C.border, color: m.source === 'projected' ? C.muted : '#fff' }}>{m.source}</span>
-                                </div>
-                                <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                                  <span style={{ fontSize: 11, color: C.muted }}>Gross <strong style={{ color: C.fg }}>{fmt(m.gross)}</strong></span>
-                                  <span style={{ fontSize: 11, color: C.muted }}>Net <strong style={{ color: '#2A7A4A' }}>{fmt(m.net)}</strong></span>
-                                  <span style={{ fontSize: 13, color: C.fg }}>{isOpen ? '−' : '+'}</span>
-                                </div>
-                              </button>
-                              {isOpen && (
-                                <div style={{ padding: 12, borderTop: `1px solid ${C.border}`, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                                  <div>
-                                    <p style={{ fontSize: 10, fontWeight: 600, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase' }}>Earnings</p>
-                                    <div style={{ background: C.wl, borderRadius: 4 }}>
-                                      {(m.earnings && m.earnings.length > 0 ? m.earnings : [{ label: 'Gross', amount: m.gross }]).map((e, i, arr) => (
-                                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : 'none', fontSize: 11 }}>
-                                          <span style={{ color: C.text }}>{e.label}</span>
-                                          <span style={{ fontWeight: 600, color: C.fg }}>{fmt(e.amount)}</span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <p style={{ fontSize: 10, fontWeight: 600, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase' }}>Deductions</p>
-                                    <div style={{ background: '#FBF0F0', borderRadius: 4 }}>
-                                      {(m.deductionsList && m.deductionsList.length > 0 ? m.deductionsList : [{ label: 'Deductions', amount: m.deductions }]).map((d, i, arr) => (
-                                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : 'none', fontSize: 11 }}>
-                                          <span style={{ color: C.text }}>{d.label}</span>
-                                          <span style={{ fontWeight: 600, color: C.danger }}>−{fmt(d.amount)}</span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          )
-                        })
-                      )}
-                    </div>
-                  )}
+                    <option value="">Select month…</option>
+                    {flatMonths.map(m => (
+                      <option key={m.monthKey} value={m.monthKey}>
+                        {monthLabel(m.monthKey)} · {m.empName}{m.source === 'actual' ? ' (uploaded)' : m.source === 'edited' ? ' (edited)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="file"
+                    accept="application/pdf,image/*"
+                    disabled={monthUploadBusy || !monthUploadKey}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] || null
+                      setMonthUploadFile(f)
+                      if (f && monthUploadKey) {
+                        uploadMonthlySlip(empIdForMonth(monthUploadKey), monthUploadKey, f)
+                        e.target.value = ''
+                      }
+                    }}
+                    style={{ fontSize: 12, fontFamily: 'inherit', color: C.text }}
+                  />
+                  {monthUploadBusy && <span style={{ fontSize: 11, color: C.muted }}>Parsing…</span>}
                 </div>
+                {monthUploadError && <p style={{ fontSize: 11, color: C.danger, margin: '8px 0 0' }}>{monthUploadError}</p>}
 
-                <div style={{ padding: '12px', background: C.wl, borderRadius: 6 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <span style={{ fontSize: 11, color: C.muted }}>Period Gross:</span>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: C.fg }}>{fmt(emp.months.reduce((s, m) => s + m.gross, 0))}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 11, color: C.muted }}>Period Net:</span>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: '#2A7A4A' }}>{fmt(emp.months.reduce((s, m) => s + m.net, 0))}</span>
-                  </div>
+                {/* Manual entry — no slip needed */}
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${C.border}` }}>
+                  <button
+                    onClick={() => { setManualOpenEmpId(manualOpenEmpId === 'unified' ? null : 'unified'); setManualError(null) }}
+                    style={{ background: 'transparent', border: 'none', color: C.fg, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}
+                  >
+                    {manualOpenEmpId === 'unified' ? '− Hide manual entry' : '+ Add manually (no slip)'}
+                  </button>
+                  {manualOpenEmpId === 'unified' && (() => {
+                    const liveGross = manualEarnings.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0)
+                    const liveDed = manualDeductions.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0)
+                    const liveNet = liveGross - liveDed
+                    return (
+                      <div style={{ marginTop: 10 }}>
+                        <div style={{ marginBottom: 10 }}>
+                          <label style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Month</label>
+                          <select
+                            value={manualMonthKey}
+                            onChange={(e) => { setManualMonthKey(e.target.value); setManualError(null) }}
+                            style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontFamily: 'inherit', background: '#fff', color: C.text }}
+                          >
+                            <option value="">Select month…</option>
+                            {flatMonths.map(m => (
+                              <option key={m.monthKey} value={m.monthKey}>
+                                {monthLabel(m.monthKey)} · {m.empName}{m.source === 'actual' ? ' (uploaded)' : m.source === 'edited' ? ' (edited)' : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                          {/* Earnings editor */}
+                          <div>
+                            <p style={{ fontSize: 10, fontWeight: 600, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase' }}>Earnings</p>
+                            {manualEarnings.map((row, i) => (
+                              <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 90px auto', gap: 4, marginBottom: 4 }}>
+                                <input type="text" placeholder="Label (e.g. HRA)" value={row.label} onChange={(e) => setManualEarnings(prev => prev.map((r, j) => j === i ? { ...r, label: e.target.value } : r))} style={{ padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, fontFamily: 'inherit', color: C.text }} />
+                                <input type="number" placeholder="Amount" value={row.amount} onChange={(e) => setManualEarnings(prev => prev.map((r, j) => j === i ? { ...r, amount: e.target.value } : r))} style={{ padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, fontFamily: 'inherit', color: C.text }} />
+                                <button onClick={() => setManualEarnings(prev => prev.filter((_, j) => j !== i))} title="Remove" style={{ padding: '0 8px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 14, color: C.muted, cursor: 'pointer', fontFamily: 'inherit' }}>×</button>
+                              </div>
+                            ))}
+                            <button onClick={() => setManualEarnings(prev => [...prev, { label: '', amount: '' }])} style={{ marginTop: 4, padding: '4px 8px', background: 'transparent', border: `1px dashed ${C.border}`, borderRadius: 4, fontSize: 10.5, color: C.fg, cursor: 'pointer', fontFamily: 'inherit', width: '100%' }}>+ Add earning</button>
+                          </div>
+                          {/* Deductions editor */}
+                          <div>
+                            <p style={{ fontSize: 10, fontWeight: 600, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase' }}>Deductions</p>
+                            {manualDeductions.map((row, i) => (
+                              <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 90px auto', gap: 4, marginBottom: 4 }}>
+                                <input type="text" placeholder="Label (e.g. PF)" value={row.label} onChange={(e) => setManualDeductions(prev => prev.map((r, j) => j === i ? { ...r, label: e.target.value } : r))} style={{ padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, fontFamily: 'inherit', color: C.text }} />
+                                <input type="number" placeholder="Amount" value={row.amount} onChange={(e) => setManualDeductions(prev => prev.map((r, j) => j === i ? { ...r, amount: e.target.value } : r))} style={{ padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, fontFamily: 'inherit', color: C.text }} />
+                                <button onClick={() => setManualDeductions(prev => prev.filter((_, j) => j !== i))} title="Remove" style={{ padding: '0 8px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 14, color: C.muted, cursor: 'pointer', fontFamily: 'inherit' }}>×</button>
+                              </div>
+                            ))}
+                            <button onClick={() => setManualDeductions(prev => [...prev, { label: '', amount: '' }])} style={{ marginTop: 4, padding: '4px 8px', background: 'transparent', border: `1px dashed ${C.border}`, borderRadius: 4, fontSize: 10.5, color: C.fg, cursor: 'pointer', fontFamily: 'inherit', width: '100%' }}>+ Add deduction</button>
+                          </div>
+                        </div>
+
+                        <div style={{ marginTop: 10, padding: 10, background: C.wl, borderRadius: 6, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                          <div><p style={{ fontSize: 10, color: C.muted, margin: '0 0 2px', textTransform: 'uppercase' }}>Gross</p><p style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: 0 }}>{fmt(liveGross)}</p></div>
+                          <div><p style={{ fontSize: 10, color: C.muted, margin: '0 0 2px', textTransform: 'uppercase' }}>Deductions</p><p style={{ fontSize: 13, fontWeight: 700, color: C.danger, margin: 0 }}>−{fmt(liveDed)}</p></div>
+                          <div><p style={{ fontSize: 10, color: C.muted, margin: '0 0 2px', textTransform: 'uppercase' }}>Net</p><p style={{ fontSize: 13, fontWeight: 700, color: '#2A7A4A', margin: 0 }}>{fmt(liveNet)}</p></div>
+                        </div>
+
+                        <button onClick={() => submitManualEntry(empIdForMonth(manualMonthKey))} style={{ marginTop: 10, width: '100%', padding: '10px 14px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Save breakdown</button>
+                      </div>
+                    )
+                  })()}
+                  {manualError && manualOpenEmpId === 'unified' && <p style={{ fontSize: 11, color: C.danger, margin: '8px 0 0' }}>{manualError}</p>}
                 </div>
               </div>
-            )}
-          </div>
-        ))}
+
+              {/* Unified timeline grid — all months across employers */}
+              <p style={{ fontSize: 11, fontWeight: 600, color: C.muted, margin: '0 0 12px', textTransform: 'uppercase' }}>Timeline · click to view/edit</p>
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8, marginBottom: 6 }}>
+                {flatMonths.map(m => {
+                  const isForecastCell = wizard.intent === 'forecast' && m.source === 'projected' && m.gross > 0
+                  const bg = m.source === 'actual' ? C.fg
+                    : m.source === 'edited' ? C.wm
+                    : m.source === 'inferred' ? '#CFE0F0'
+                    : isForecastCell ? '#FFF6D6'
+                    : C.border
+                  const fg = m.source === 'actual' || m.source === 'edited' ? '#fff'
+                    : m.source === 'inferred' ? '#1F4E7A'
+                    : isForecastCell ? '#7A5C00'
+                    : C.muted
+                  const icon = isForecastCell ? '🔮'
+                    : m.source === 'actual' ? '●'
+                    : m.source === 'edited' ? '✎'
+                    : m.source === 'inferred' ? '◆'
+                    : '○'
+                  const anomaly = anomalyByMonth.get(m.monthKey)
+                  const cellBorder = anomaly ? `2px solid #E07B3A`
+                    : isForecastCell ? `2px dashed #7A5C00`
+                    : m.source === 'inferred' ? `1px solid #7AA8D1`
+                    : 'none'
+                  return (
+                    <button
+                      key={m.monthKey}
+                      onClick={() => { setPreviewMonth(m.monthKey); setPreviewEmploymentId(m.empId) }}
+                      title={anomaly?.message
+                        || (isForecastCell ? 'Forecast — projected from your scenario'
+                            : m.source === 'inferred' ? `Inferred from another slip's values for the same employer`
+                            : undefined)}
+                      style={{ position: 'relative', background: bg, color: fg, border: cellBorder, borderRadius: 4, padding: '12px 4px', fontSize: 10, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}
+                    >
+                      {anomaly && (
+                        <span style={{ position: 'absolute', top: -6, right: -4, background: '#E07B3A', color: '#fff', borderRadius: '50%', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700 }}>!</span>
+                      )}
+                      <div style={{ fontSize: 9 }}>{monthLabel(m.monthKey).split(' ')[0]}</div>
+                      <div style={{ fontSize: 11 }}>{icon}</div>
+                      <div style={{ fontSize: 8, opacity: 0.8 }}>{fmt(m.gross)}</div>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Employer band — one label per employer, spanning its months */}
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8, marginBottom: 14 }}>
+                {employments.map(e => (
+                  <div key={e.id} title={`${e.name} · ${monthLabel(e.fromMonth)} → ${monthLabel(e.toMonth)}`} style={{ gridColumn: `span ${e.months.length}`, textAlign: 'center', fontSize: 10, fontWeight: 700, color: C.fg, background: C.wl, border: `1px solid ${C.border}`, borderRadius: 4, padding: '5px 4px', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{e.name}</div>
+                ))}
+              </div>
+
+              {/* Legend */}
+              <div style={{ display: 'flex', gap: 12, fontSize: 10.5, color: C.muted, marginBottom: 14, flexWrap: 'wrap' }}>
+                <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: C.fg, marginRight: 4, verticalAlign: 'middle' }} /><strong style={{ color: C.fg }}>●</strong> Actual (from slip)</span>
+                <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: C.wm, marginRight: 4, verticalAlign: 'middle' }} /><strong style={{ color: C.fg }}>✎</strong> Edited (you changed it)</span>
+                <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#CFE0F0', border: '1px solid #7AA8D1', marginRight: 4, verticalAlign: 'middle' }} /><strong style={{ color: '#1F4E7A' }}>◆</strong> Inferred (from another slip)</span>
+                {wizard.intent === 'forecast' && (
+                  <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#FFF6D6', border: '2px dashed #7A5C00', marginRight: 4, verticalAlign: 'middle' }} />🔮 Forecast</span>
+                )}
+                <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: '#E07B3A', marginRight: 4, verticalAlign: 'middle' }} />! Anomaly</span>
+              </div>
+
+              {/* Employer subtotals */}
+              <div style={{ marginBottom: 16 }}>
+                {employments.map(e => {
+                  const g = e.months.reduce((s, m) => s + m.gross, 0)
+                  const n = e.months.reduce((s, m) => s + m.net, 0)
+                  return (
+                    <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 11.5, padding: '7px 10px', background: C.wl, borderRadius: 6, marginBottom: 6 }}>
+                      <span style={{ color: C.text, fontWeight: 600 }}>{e.name} <span style={{ color: C.muted, fontWeight: 400 }}>({monthLabel(e.fromMonth)} – {monthLabel(e.toMonth)})</span></span>
+                      <span style={{ color: C.fg, fontWeight: 700 }}>{fmt(g)} <span style={{ color: C.muted, fontWeight: 400 }}>gross</span> · <span style={{ color: '#2A7A4A' }}>{fmt(n)}</span> <span style={{ color: C.muted, fontWeight: 400 }}>net</span></span>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Preview · all months (across employers) */}
+              <div style={{ border: `1px solid ${C.border}`, borderRadius: 6, overflow: 'hidden' }}>
+                <button
+                  onClick={() => setPreviewOpenEmpId(previewOpenEmpId === 'unified' ? null : 'unified')}
+                  style={{ width: '100%', padding: '10px 12px', background: previewOpenEmpId === 'unified' ? C.wl : '#fff', border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                >
+                  <span style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'uppercase' }}>Preview · all months</span>
+                  <span style={{ fontSize: 13, color: C.fg }}>{previewOpenEmpId === 'unified' ? '−' : '+'}</span>
+                </button>
+                {previewOpenEmpId === 'unified' && (
+                  <div style={{ padding: 12, borderTop: `1px solid ${C.border}`, background: C.bg }}>
+                    {flatMonths.filter(m => m.gross > 0 || m.net > 0).length === 0 ? (
+                      <p style={{ fontSize: 12, color: C.muted, margin: 0, textAlign: 'center' }}>No salary data yet — upload a slip or add manually.</p>
+                    ) : (
+                      flatMonths.filter(m => m.gross > 0 || m.net > 0).map(m => {
+                        const isOpen = previewMonth === m.monthKey && previewEmploymentId === m.empId
+                        return (
+                          <div key={m.monthKey} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, marginBottom: 8, overflow: 'hidden' }}>
+                            <button
+                              onClick={() => {
+                                if (isOpen) { setPreviewMonth(null); setPreviewEmploymentId(null) }
+                                else { setPreviewMonth(m.monthKey); setPreviewEmploymentId(m.empId) }
+                              }}
+                              style={{ width: '100%', padding: '10px 12px', background: isOpen ? C.wl : '#fff', border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                            >
+                              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                                <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{monthLabel(m.monthKey)}</span>
+                                <span style={{ fontSize: 10, color: C.muted }}>{m.empName}</span>
+                                <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 3, background: m.source === 'actual' ? C.fg : m.source === 'edited' ? C.wm : C.border, color: m.source === 'projected' ? C.muted : '#fff' }}>{m.source}</span>
+                              </div>
+                              <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+                                <span style={{ fontSize: 11, color: C.muted }}>Gross <strong style={{ color: C.fg }}>{fmt(m.gross)}</strong></span>
+                                <span style={{ fontSize: 11, color: C.muted }}>Net <strong style={{ color: '#2A7A4A' }}>{fmt(m.net)}</strong></span>
+                                <span style={{ fontSize: 13, color: C.fg }}>{isOpen ? '−' : '+'}</span>
+                              </div>
+                            </button>
+                            {isOpen && (
+                              <div style={{ padding: 12, borderTop: `1px solid ${C.border}`, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                <div>
+                                  <p style={{ fontSize: 10, fontWeight: 600, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase' }}>Earnings</p>
+                                  <div style={{ background: C.wl, borderRadius: 4 }}>
+                                    {(m.earnings && m.earnings.length > 0 ? m.earnings : [{ label: 'Gross', amount: m.gross }]).map((e, i, arr) => (
+                                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : 'none', fontSize: 11 }}>
+                                        <span style={{ color: C.text }}>{e.label}</span>
+                                        <span style={{ fontWeight: 600, color: C.fg }}>{fmt(e.amount)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div>
+                                  <p style={{ fontSize: 10, fontWeight: 600, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase' }}>Deductions</p>
+                                  <div style={{ background: '#FBF0F0', borderRadius: 4 }}>
+                                    {(m.deductionsList && m.deductionsList.length > 0 ? m.deductionsList : [{ label: 'Deductions', amount: m.deductions }]).map((d, i, arr) => (
+                                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : 'none', fontSize: 11 }}>
+                                        <span style={{ color: C.text }}>{d.label}</span>
+                                        <span style={{ fontWeight: 600, color: C.danger }}>−{fmt(d.amount)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })()}
       </div>
 
       {/* ── Forecast scenarios — Baseline + each configured change applied in order ── */}

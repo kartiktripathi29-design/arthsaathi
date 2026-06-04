@@ -99,6 +99,7 @@ export default function ExemptionsPage() {
   // All Section-10 accordions expanded by default — users see every question
   // immediately and can collapse the ones that don't apply.
   const [expanded, setExpanded] = useState<string[]>(['hra', 'lta', 'driver', 'car', 'da', 'superann', 'pf', 'gratuity'])
+  const [showHraCalc, setShowHraCalc] = useState(false)
 
   useEffect(() => {
     const data = localStorage.getItem('av_salary_timeline')
@@ -165,6 +166,26 @@ export default function ExemptionsPage() {
   const hraMonthlyDisplay = Math.round(hraAnnualExemption / 12)
   const hraBasicVaried = !!hraComp?.basicVaried
 
+  // HRA actually RECEIVED across the year (sum of each month's HRA from the timeline). When it
+  // changes mid-year — e.g. a job switch — a single monthly figure is misleading, so we show the
+  // annual total plus a per-period breakdown. hraSegments groups contiguous months of equal HRA.
+  const fmtMonth = (mk: string) => {
+    const [y, m] = mk.split('-')
+    const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    return `${names[(parseInt(m) || 1) - 1]} ${y}`
+  }
+  const hraAnnualReceived = hraBasis.reduce((acc, m) => acc + (m.hra || 0), 0)
+  const hraSegments = (() => {
+    const segs: { from: string; to: string; hra: number }[] = []
+    for (const m of hraBasis) {
+      const last = segs[segs.length - 1]
+      if (last && last.hra === m.hra) last.to = m.monthKey
+      else segs.push({ from: m.monthKey, to: m.monthKey, hra: m.hra })
+    }
+    return segs
+  })()
+  const hraReceivedVaried = hraSegments.length > 1
+
   // Gratuity is capped at ₹10L for non-government employees.
   const gratuityCapped = Math.min(s.gratuity, 1000000)
   // Superannuation: theoretical cap = 15% of (basic+DA)*12. We don't have DA reliably,
@@ -228,10 +249,27 @@ export default function ExemptionsPage() {
         {expanded.includes('hra') && (
           <div style={{ padding: '14px 16px', background: '#fff' }}>
             <div style={{ marginBottom: 14 }}>
-              <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 5, fontWeight: 500, textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>HRA received (monthly)</label>
+              <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 5, fontWeight: 500, textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>
+                HRA received {hraAnnualReceived > 0 ? '(annual)' : '(monthly)'}
+              </label>
               <div style={{ padding: '8px 10px', background: '#FAFAF8', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 12, color: C.text, fontWeight: 600 }}>
-                {fmt(s.hraReceived)}/month <span style={{ fontSize: 10.5, color: C.muted, fontWeight: 400, marginLeft: 6 }}>(auto-filled from slip)</span>
+                {hraAnnualReceived > 0
+                  ? <>{fmt(hraAnnualReceived)}/year <span style={{ fontSize: 10.5, color: C.muted, fontWeight: 400, marginLeft: 6 }}>(from your timeline)</span></>
+                  : <>{fmt(s.hraReceived)}/month <span style={{ fontSize: 10.5, color: C.muted, fontWeight: 400, marginLeft: 6 }}>(auto-filled from slip)</span></>}
               </div>
+              {hraReceivedVaried && (
+                <p style={{ fontSize: 10.5, color: C.muted, margin: '6px 0 0', lineHeight: 1.5 }}>
+                  Varies during the year:{' '}
+                  {hraSegments.map((seg, i) => (
+                    <span key={i}>
+                      {i > 0 ? ' → ' : ''}
+                      <strong style={{ color: C.text }}>{fmt(seg.hra)}/mo</strong>{' '}
+                      ({fmtMonth(seg.from)}{seg.from !== seg.to ? `–${fmtMonth(seg.to)}` : ''})
+                    </span>
+                  ))}
+                  . The exemption below is computed per month and summed.
+                </p>
+              )}
             </div>
             <div style={{ marginBottom: 14 }}>
               <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 5, fontWeight: 500 }}>Monthly rent paid</label>
@@ -269,6 +307,42 @@ export default function ExemptionsPage() {
                       ? <>Computed month-by-month across {hraComp.monthsCounted} months — your basic pay changed during the year, so each month's exemption is the min of (HRA · rent − 10% basic · {s.isMetro ? '50%' : '40%'} basic) and they're summed.</>
                       : <>Computed across {hraComp.monthsCounted} months of salary data.</>}
                   </p>
+                )}
+                {hraComp && hraComp.breakdown.length > 0 && (
+                  <div style={{ marginTop: 10 }}>
+                    <button onClick={() => setShowHraCalc(v => !v)} style={{ background: 'transparent', border: 'none', color: C.fg, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>
+                      {showHraCalc ? '− Hide the working' : '+ Show how this is calculated'}
+                    </button>
+                    {showHraCalc && (
+                      <div style={{ marginTop: 8 }}>
+                        {hraComp.breakdown.map((seg, i) => {
+                          const least = Math.min(seg.hra, seg.rentMinus10, seg.cityPctBasic)
+                          return (
+                            <div key={i} style={{ border: `1px solid ${C.border}`, borderRadius: 6, padding: 8, marginBottom: 8, background: '#fff' }}>
+                              <p style={{ fontSize: 11, fontWeight: 700, color: C.text, margin: '0 0 6px' }}>
+                                {fmtMonth(seg.fromMonth)}{seg.fromMonth !== seg.toMonth ? ` – ${fmtMonth(seg.toMonth)}` : ''} <span style={{ color: C.muted, fontWeight: 400 }}>· {seg.months} mo · basic {fmt(seg.basic)}/mo</span>
+                              </p>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', fontSize: 11, borderRadius: 4, background: seg.hra === least ? '#E3F2EC' : 'transparent', fontWeight: seg.hra === least ? 700 : 400, color: seg.hra === least ? C.fg : C.text }}>
+                                <span>Actual HRA received</span><span>{fmt(seg.hra)}/mo</span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', fontSize: 11, borderRadius: 4, background: seg.rentMinus10 === least ? '#E3F2EC' : 'transparent', fontWeight: seg.rentMinus10 === least ? 700 : 400, color: seg.rentMinus10 === least ? C.fg : C.text }}>
+                                <span>Rent − 10% of basic <span style={{ color: C.muted, fontWeight: 400 }}>({fmt(s.rentPaid)} − {fmt(Math.round(seg.basic * 0.1))})</span></span><span>{fmt(seg.rentMinus10)}/mo</span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', fontSize: 11, borderRadius: 4, background: seg.cityPctBasic === least ? '#E3F2EC' : 'transparent', fontWeight: seg.cityPctBasic === least ? 700 : 400, color: seg.cityPctBasic === least ? C.fg : C.text }}>
+                                <span>{s.isMetro ? '50%' : '40%'} of basic</span><span>{fmt(seg.cityPctBasic)}/mo</span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 8px', marginTop: 4, borderTop: `1px dashed ${C.border}`, fontSize: 11, fontWeight: 700, color: '#2A7A4A' }}>
+                                <span>→ Exempt (least) × {seg.months}</span><span>{fmt(seg.monthlyExempt)} × {seg.months} = {fmt(seg.periodExempt)}</span>
+                              </div>
+                            </div>
+                          )
+                        })}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 10px', background: C.wl, borderRadius: 6, fontSize: 12, fontWeight: 700, color: C.fg }}>
+                          <span>Total tax-free HRA</span><span>{fmt(hraAnnualExemption)}/year</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             ) : (
