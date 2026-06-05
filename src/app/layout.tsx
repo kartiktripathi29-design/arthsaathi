@@ -4,6 +4,7 @@ import { Toaster } from 'react-hot-toast'
 import { Analytics } from '@vercel/analytics/react'
 import { AppProvider } from '@/store/AppStore'
 import { DialogHost } from '@/components/Dialog'
+import SyncProvider from '@/components/SyncProvider'
 
 export const metadata: Metadata = {
   title: 'ArthVo — Wealth Evolved',
@@ -26,6 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             }}
           />
           <DialogHost />
+          <SyncProvider />
         </AppProvider>
         <Analytics />
       </body>

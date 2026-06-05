@@ -80,12 +80,12 @@ export type PrismaVersion = {
 }
 
 /**
- * Prisma Client JS version: 7.7.0
- * Query Engine version: 75cbdc1eb7150937890ad5465d861175c6624711
+ * Prisma Client JS version: 7.8.0
+ * Query Engine version: 3c6e192761c0362d496ed980de936e2f3cebcd3a
  */
 export const prismaVersion: PrismaVersion = {
-  client: "7.7.0",
-  engine: "75cbdc1eb7150937890ad5465d861175c6624711"
+  client: "7.8.0",
+  engine: "3c6e192761c0362d496ed980de936e2f3cebcd3a"
 }
 
 /**
@@ -394,7 +394,8 @@ export const ModelName = {
   Entity: 'Entity',
   ActivityEvent: 'ActivityEvent',
   SalarySlip: 'SalarySlip',
-  UserProfile: 'UserProfile'
+  UserProfile: 'UserProfile',
+  UserData: 'UserData'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -410,7 +411,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "user" | "account" | "statement" | "transaction" | "transactionTag" | "classification" | "personTag" | "entity" | "activityEvent" | "salarySlip" | "userProfile"
+    modelProps: "user" | "account" | "statement" | "transaction" | "transactionTag" | "classification" | "personTag" | "entity" | "activityEvent" | "salarySlip" | "userProfile" | "userData"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -1228,6 +1229,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    UserData: {
+      payload: Prisma.$UserDataPayload<ExtArgs>
+      fields: Prisma.UserDataFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.UserDataFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$UserDataPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.UserDataFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$UserDataPayload>
+        }
+        findFirst: {
+          args: Prisma.UserDataFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$UserDataPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.UserDataFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$UserDataPayload>
+        }
+        findMany: {
+          args: Prisma.UserDataFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$UserDataPayload>[]
+        }
+        create: {
+          args: Prisma.UserDataCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$UserDataPayload>
+        }
+        createMany: {
+          args: Prisma.UserDataCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.UserDataCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$UserDataPayload>[]
+        }
+        delete: {
+          args: Prisma.UserDataDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$UserDataPayload>
+        }
+        update: {
+          args: Prisma.UserDataUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$UserDataPayload>
+        }
+        deleteMany: {
+          args: Prisma.UserDataDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.UserDataUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.UserDataUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$UserDataPayload>[]
+        }
+        upsert: {
+          args: Prisma.UserDataUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$UserDataPayload>
+        }
+        aggregate: {
+          args: Prisma.UserDataAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateUserData>
+        }
+        groupBy: {
+          args: Prisma.UserDataGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.UserDataGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.UserDataCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.UserDataCountAggregateOutputType> | number
+        }
+      }
+    }
   }
 } & {
   other: {
@@ -1426,6 +1501,16 @@ export const UserProfileScalarFieldEnum = {
 } as const
 
 export type UserProfileScalarFieldEnum = (typeof UserProfileScalarFieldEnum)[keyof typeof UserProfileScalarFieldEnum]
+
+
+export const UserDataScalarFieldEnum = {
+  userId: 'userId',
+  blob: 'blob',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type UserDataScalarFieldEnum = (typeof UserDataScalarFieldEnum)[keyof typeof UserDataScalarFieldEnum]
 
 
 export const SortOrder = {
@@ -1741,6 +1826,21 @@ export type PrismaClientOptions = ({
    * ```
    */
   comments?: runtime.SqlCommenterPlugin[]
+  /**
+   * Optional maximum size for the query plan cache. If not provided, a default size will be used.
+   * A value of `0` can be used to disable the cache entirely. A higher cache size can improve
+   * performance for applications that execute a large number of unique queries, while a smaller
+   * cache size can reduce memory usage.
+   * 
+   * @example
+   * ```
+   * const prisma = new PrismaClient({
+   *   adapter,
+   *   queryPlanCacheMaxSize: 100,
+   * })
+   * ```
+   */
+  queryPlanCacheMaxSize?: number
 }
 export type GlobalOmitConfig = {
   user?: Prisma.UserOmit
@@ -1754,6 +1854,7 @@ export type GlobalOmitConfig = {
   activityEvent?: Prisma.ActivityEventOmit
   salarySlip?: Prisma.SalarySlipOmit
   userProfile?: Prisma.UserProfileOmit
+  userData?: Prisma.UserDataOmit
 }
 
 /* Types for Logging */

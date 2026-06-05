@@ -61,7 +61,8 @@ export const ModelName = {
   Entity: 'Entity',
   ActivityEvent: 'ActivityEvent',
   SalarySlip: 'SalarySlip',
-  UserProfile: 'UserProfile'
+  UserProfile: 'UserProfile',
+  UserData: 'UserData'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -239,6 +240,16 @@ export const UserProfileScalarFieldEnum = {
 } as const
 
 export type UserProfileScalarFieldEnum = (typeof UserProfileScalarFieldEnum)[keyof typeof UserProfileScalarFieldEnum]
+
+
+export const UserDataScalarFieldEnum = {
+  userId: 'userId',
+  blob: 'blob',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type UserDataScalarFieldEnum = (typeof UserDataScalarFieldEnum)[keyof typeof UserDataScalarFieldEnum]
 
 
 export const SortOrder = {

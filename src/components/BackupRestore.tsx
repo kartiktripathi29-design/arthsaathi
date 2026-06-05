@@ -9,23 +9,15 @@
 import { useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { confirmDialog } from '@/components/Dialog'
+import { collectAppData, applyAppData, makeBackupEnvelope, readBackupEnvelope } from '@/lib/backupSync'
 
 const C = { fg: '#3A4B41', border: '#E4DDD1', muted: '#7A8A7E' }
 
-const isAppKey = (k: string) => k.startsWith('av_') || k.startsWith('as_')
-
 function collectBackup(): { keys: number; json: string } {
-  const data: Record<string, string> = {}
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i)
-    if (k && isAppKey(k)) {
-      const v = localStorage.getItem(k)
-      if (v != null) data[k] = v
-    }
-  }
+  const data = collectAppData()
   return {
     keys: Object.keys(data).length,
-    json: JSON.stringify({ _arthvo_backup: 1, version: 1, exportedAt: new Date().toISOString(), data }, null, 2),
+    json: JSON.stringify(makeBackupEnvelope(data), null, 2),
   }
 }
 
@@ -52,23 +44,22 @@ export default function BackupRestore() {
     setBusy(true)
     try {
       const text = await file.text()
-      let parsed: any
+      let parsed: unknown
       try { parsed = JSON.parse(text) } catch { toast.error('That file isn’t valid JSON.'); return }
-      const data = parsed?.data
-      if (!parsed?._arthvo_backup || !data || typeof data !== 'object') {
+      const data = readBackupEnvelope(parsed)
+      if (!data) {
         toast.error('That doesn’t look like an ArthVo backup file.')
         return
       }
-      const entries = (Object.entries(data) as [string, unknown][])
-        .filter(([k, v]) => isAppKey(k) && typeof v === 'string') as [string, string][]
-      if (entries.length === 0) { toast.error('The backup is empty.'); return }
+      const count = Object.keys(data).length
+      if (count === 0) { toast.error('The backup is empty.'); return }
       const ok = await confirmDialog({
         title: 'Restore from backup?',
-        message: `This replaces your current data with ${entries.length} item${entries.length > 1 ? 's' : ''} from the file. This can’t be undone — download a backup of your current data first if unsure.`,
+        message: `This replaces your current data with ${count} item${count > 1 ? 's' : ''} from the file. This can’t be undone — download a backup of your current data first if unsure.`,
         confirmLabel: 'Restore', danger: true,
       })
       if (!ok) return
-      for (const [k, v] of entries) localStorage.setItem(k, v)
+      applyAppData(data)
       toast.success('Restored. Reloading…')
       setTimeout(() => window.location.reload(), 700)
     } finally {

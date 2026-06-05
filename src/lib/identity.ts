@@ -90,6 +90,20 @@ export interface IdentityCheckResult {
   enriched?: OwnerIdentity
 }
 
+// ─── Masking (BUG-8 privacy model B+: never show PAN/Aadhaar in full) ──────────────
+// PAN is 10 chars (ABCDE1234F); show only the last 4. Aadhaar we only ever keep the last 4 of.
+
+export function maskPan(pan: string | null | undefined): string {
+  const p = normPan(pan)
+  if (!p) return ''
+  return p.length <= 4 ? p : '•'.repeat(p.length - 4) + p.slice(-4)
+}
+
+export function maskAadhaarLast4(value: string | null | undefined): string {
+  const d = normAadhaarLast4(value)
+  return d ? `•••• •••• ${d}` : ''
+}
+
 export function verifyIdentity(parsed: ParsedIdentity): IdentityCheckResult {
   const stored = getStoredIdentity()
   if (!stored) return { ok: true, mismatches: [] } // no baseline yet

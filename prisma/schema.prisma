@@ -1,48 +1,322 @@
+// Reconstructed 2026-06-05 to match the deployed database.
+//
+// The previous contents of this file were the abandoned v1 schema (sqlite, models
+// User/SalarySlip/ChatMessage/Goal) and did NOT match the live Postgres database. The real
+// schema lives in prisma/migrations/20260520160713_init and the generated client under
+// generated/prisma. This file was rebuilt verbatim from that migration so that `prisma generate`
+// and `prisma migrate dev` operate on the truth instead of dropping the real tables.
+//
+// If you change models here, create a migration (`prisma migrate dev`) — do not hand-edit the DB.
+
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../generated/prisma"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider = "postgresql"
+}
+
+enum TagKind {
+  PERSON
+  CHANNEL
+  BUSINESS
+  RAIL
+  RAW
+}
+
+enum ClassificationSource {
+  ENGINE
+  USER
+  RULE
+}
+
+enum OnboardingStep {
+  NAME_PENDING
+  STATEMENT_PENDING
+  REVIEW_PENDING
+  COMPLETE
+}
+
+enum TaxRegime {
+  OLD
+  NEW
+}
+
+enum EventType {
+  LOGIN
+  LOGOUT
+  SIGNUP
+  PASSWORD_RESET
+  ONBOARDING_NAME_SET
+  ONBOARDING_ACCOUNT_ADDED
+  STATEMENT_UPLOAD
+  STATEMENT_PARSE_START
+  STATEMENT_PARSE_SUCCESS
+  STATEMENT_PARSE_FAIL
+  STATEMENT_DELETE
+  TXN_CLASSIFY
+  TXN_BULK_CLASSIFY
+  PERSON_TAG_SET
+  ENTITY_RESOLVED
+  SALARY_UPLOAD
+  SALARY_PARSE_SUCCESS
+  SALARY_PARSE_FAIL
+  TAX_CALC_RUN
+  TAX_REGIME_SELECTED
+  INVEST_PLAN_GENERATED
+  CHAT_SESSION_START
+  CHAT_MESSAGE_SENT
+  CHAT_MESSAGE_RECEIVED
+  ACCOUNT_DELETE
+  DATA_EXPORT_REQUESTED
+}
+
+enum Category {
+  UNCLASSIFIED
+  TRANSFER_TO_PERSONS
+  TRANSFER_TO_BANK_ACCOUNT
+  SELF_TRANSFER
+  REFUND
+  SALARY
+  FREELANCE
+  BUSINESS_INCOME
+  INVESTMENT_RETURN
+  INTEREST_INCOME
+  OTHER_INCOME
+  GROCERIES
+  FOOD_RESTAURANT
+  TRANSPORT_FUEL
+  TRANSPORT_METRO
+  TRANSPORT_RIDESHARE
+  UTILITIES_TELECOM
+  UTILITIES_ELECTRICITY
+  UTILITIES_OTHER
+  RENT
+  HEALTH_PHARMACY
+  HEALTH_MEDICAL
+  SHOPPING_FASHION
+  SHOPPING_ECOMMERCE
+  SHOPPING_OTHER
+  ENTERTAINMENT
+  HOME_SERVICES
+  PROFESSIONAL_LEGAL
+  EDUCATION
+  TRAVEL
+  CREDIT_CARD_PAYMENT
+  EMI_LOAN
+  INSURANCE
+  INVESTMENT_SIP
+  INVESTMENT_RD
+  INVESTMENT_OTHER
+  OTHER_EXPENSE
 }
 
 model User {
-  id          String   @id @default(cuid())
-  name        String
+  id          String   @id
   email       String   @unique
+  legalName   String?
+  nameAliases String[] @default([])
   createdAt   DateTime @default(now())
-  salarySlips SalarySlip[]
-  chatMessages ChatMessage[]
-  goals       Goal[]
+  updatedAt   DateTime @updatedAt
+
+  accounts        Account[]
+  statements      Statement[]
+  transactions    Transaction[]
+  classifications Classification[]
+  personTags      PersonTag[]
+  activities      ActivityEvent[]
+  salarySlips     SalarySlip[]
+  profile         UserProfile?
+  userData        UserData?
+}
+
+model Account {
+  id           String   @id @default(cuid())
+  userId       String
+  bankName     String
+  maskedNumber String
+  holderName   String
+  createdAt    DateTime @default(now())
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  statements   Statement[]
+  transactions Transaction[]
+
+  @@unique([userId, maskedNumber])
+  @@index([userId])
+}
+
+model Statement {
+  id           String    @id @default(cuid())
+  userId       String
+  accountId    String?
+  originalName String
+  contentHash  String
+  storagePath  String
+  fileSize     Int
+  periodStart  DateTime?
+  periodEnd    DateTime?
+  txnCount     Int       @default(0)
+  parsedAt     DateTime?
+  parseError   String?
+  createdAt    DateTime  @default(now())
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account      Account?      @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  transactions Transaction[]
+
+  @@unique([userId, contentHash])
+  @@index([userId])
+  @@index([userId, periodEnd])
+}
+
+model Transaction {
+  id           String               @id @default(cuid())
+  userId       String
+  statementId  String
+  accountId    String?
+  txnDate      DateTime
+  amount       Decimal              @db.Decimal(14, 2)
+  rawNarration String
+  referenceNo  String?
+  balanceAfter Decimal?             @db.Decimal(14, 2)
+  what         String?
+  why          String?
+  whoName      String?
+  entityId     String?
+  category     Category             @default(UNCLASSIFIED)
+  source       ClassificationSource @default(ENGINE)
+  confidence   Float?
+  reviewed     Boolean              @default(false)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  statement      Statement        @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  account        Account?         @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  entity         Entity?          @relation(fields: [entityId], references: [id], onDelete: SetNull)
+  tags           TransactionTag[]
+  classification Classification?
+
+  @@index([userId, txnDate])
+  @@index([userId, category])
+  @@index([userId, reviewed])
+  @@index([statementId])
+  @@index([entityId])
+}
+
+model TransactionTag {
+  id            String  @id @default(cuid())
+  transactionId String
+  kind          TagKind
+  value         String
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@unique([transactionId, kind, value])
+  @@index([kind, value])
+}
+
+model Classification {
+  id            String   @id @default(cuid())
+  userId        String
+  transactionId String   @unique
+  category      Category
+  note          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PersonTag {
+  id              String    @id @default(cuid())
+  userId          String
+  personName      String
+  relationship    String?
+  defaultCategory Category?
+  note            String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, personName])
+  @@index([userId])
+}
+
+model Entity {
+  id               String    @id @default(cuid())
+  canonicalName    String    @unique
+  displayName      String
+  category         Category?
+  resolutionSource String?
+  notes            String?
+  aliases          String[]  @default([])
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  transactions Transaction[]
+
+  @@index([canonicalName])
+}
+
+model ActivityEvent {
+  id        String    @id @default(cuid())
+  userId    String
+  eventType EventType
+  targetId  String?
+  metadata  Json      @default("{}")
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, eventType])
+  @@index([eventType, createdAt])
 }
 
 model SalarySlip {
   id          String   @id @default(cuid())
   userId      String
-  user        User     @relation(fields: [userId], references: [id])
-  fileName    String
-  parsedData  String
-  uploadedAt  DateTime @default(now())
-}
-
-model ChatMessage {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  role      String
-  content   String
-  createdAt DateTime @default(now())
-}
-
-model Goal {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id])
-  name        String
-  targetAmount Float
-  currentAmount Float  @default(0)
-  targetDate  String
-  category    String
+  periodMonth DateTime
+  employer    String?
+  components  Json
+  netPay      Decimal  @db.Decimal(14, 2)
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, periodMonth])
+  @@index([userId, periodMonth])
+}
+
+model UserProfile {
+  id             String         @id
+  userId         String         @unique
+  onboardingStep OnboardingStep @default(NAME_PENDING)
+  monthlyIncome  Decimal?       @db.Decimal(14, 2)
+  taxRegime      TaxRegime?
+  city           String?
+  age            Int?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// BUG-8 cloud persistence (privacy model B+). One row per user: an encrypted JSON blob of all
+// `av_*`/`as_*` localStorage keys. Server is a sync store only — no tax logic lives here.
+model UserData {
+  userId    String   @id
+  blob      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
