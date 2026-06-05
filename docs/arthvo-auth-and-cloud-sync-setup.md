@@ -4,6 +4,8 @@ This branch (`feat/bug8-cloud-sync-groundwork`) adds **real email-OTP authentica
 **BUG-8 cloud-persistence** foundation. Everything is built to be **inert until you configure it** —
 the app keeps running in its current mock mode until the Supabase env vars are present.
 
+**Tracking PR:** https://github.com/kartiktripathi29-design/arthsaathi/pull/3
+
 ---
 
 ## A. One-time setup (you must do this — it needs your accounts)
