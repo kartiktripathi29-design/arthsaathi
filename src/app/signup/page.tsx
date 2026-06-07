@@ -125,10 +125,17 @@ export default function SignupPage() {
     setLoading(true)
     try {
       const supabase = createSupabaseBrowserClient()
-      const { data, error } = kind === 'email'
-        ? await supabase.auth.verifyOtp({ email, token: otp, type: 'email' })
-        : await supabase.auth.verifyOtp({ phone: e164(), token: otp, type: 'sms' })
-      if (error || !data.user) { toast.error(error?.message || 'That code didn’t work.'); return }
+      // New-user codes can verify under either 'email' (Magic Link / Confirm-email-off) or 'signup'
+      // (Confirm signup template). Try 'email' first, fall back to 'signup' so it works regardless
+      // of the project's "Confirm email" setting.
+      let res
+      if (kind === 'email') {
+        res = await supabase.auth.verifyOtp({ email, token: otp, type: 'email' })
+        if (res.error) res = await supabase.auth.verifyOtp({ email, token: otp, type: 'signup' })
+      } else {
+        res = await supabase.auth.verifyOtp({ phone: e164(), token: otp, type: 'sms' })
+      }
+      if (res.error || !res.data.user) { toast.error(res.error?.message || 'That code didn’t work.'); return }
       setStep('password')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Verification failed.')
