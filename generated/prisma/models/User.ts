@@ -194,6 +194,7 @@ export type UserWhereInput = {
   activities?: Prisma.ActivityEventListRelationFilter
   salarySlips?: Prisma.SalarySlipListRelationFilter
   profile?: Prisma.XOR<Prisma.UserProfileNullableScalarRelationFilter, Prisma.UserProfileWhereInput> | null
+  userData?: Prisma.XOR<Prisma.UserDataNullableScalarRelationFilter, Prisma.UserDataWhereInput> | null
 }
 
 export type UserOrderByWithRelationInput = {
@@ -211,6 +212,7 @@ export type UserOrderByWithRelationInput = {
   activities?: Prisma.ActivityEventOrderByRelationAggregateInput
   salarySlips?: Prisma.SalarySlipOrderByRelationAggregateInput
   profile?: Prisma.UserProfileOrderByWithRelationInput
+  userData?: Prisma.UserDataOrderByWithRelationInput
 }
 
 export type UserWhereUniqueInput = Prisma.AtLeast<{
@@ -231,6 +233,7 @@ export type UserWhereUniqueInput = Prisma.AtLeast<{
   activities?: Prisma.ActivityEventListRelationFilter
   salarySlips?: Prisma.SalarySlipListRelationFilter
   profile?: Prisma.XOR<Prisma.UserProfileNullableScalarRelationFilter, Prisma.UserProfileWhereInput> | null
+  userData?: Prisma.XOR<Prisma.UserDataNullableScalarRelationFilter, Prisma.UserDataWhereInput> | null
 }, "id" | "email">
 
 export type UserOrderByWithAggregationInput = {
@@ -272,6 +275,7 @@ export type UserCreateInput = {
   activities?: Prisma.ActivityEventCreateNestedManyWithoutUserInput
   salarySlips?: Prisma.SalarySlipCreateNestedManyWithoutUserInput
   profile?: Prisma.UserProfileCreateNestedOneWithoutUserInput
+  userData?: Prisma.UserDataCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateInput = {
@@ -289,6 +293,7 @@ export type UserUncheckedCreateInput = {
   activities?: Prisma.ActivityEventUncheckedCreateNestedManyWithoutUserInput
   salarySlips?: Prisma.SalarySlipUncheckedCreateNestedManyWithoutUserInput
   profile?: Prisma.UserProfileUncheckedCreateNestedOneWithoutUserInput
+  userData?: Prisma.UserDataUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserUpdateInput = {
@@ -306,6 +311,7 @@ export type UserUpdateInput = {
   activities?: Prisma.ActivityEventUpdateManyWithoutUserNestedInput
   salarySlips?: Prisma.SalarySlipUpdateManyWithoutUserNestedInput
   profile?: Prisma.UserProfileUpdateOneWithoutUserNestedInput
+  userData?: Prisma.UserDataUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateInput = {
@@ -323,6 +329,7 @@ export type UserUncheckedUpdateInput = {
   activities?: Prisma.ActivityEventUncheckedUpdateManyWithoutUserNestedInput
   salarySlips?: Prisma.SalarySlipUncheckedUpdateManyWithoutUserNestedInput
   profile?: Prisma.UserProfileUncheckedUpdateOneWithoutUserNestedInput
+  userData?: Prisma.UserDataUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateManyInput = {
@@ -523,6 +530,20 @@ export type UserUpdateOneRequiredWithoutProfileNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutProfileInput, Prisma.UserUpdateWithoutProfileInput>, Prisma.UserUncheckedUpdateWithoutProfileInput>
 }
 
+export type UserCreateNestedOneWithoutUserDataInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutUserDataInput, Prisma.UserUncheckedCreateWithoutUserDataInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutUserDataInput
+  connect?: Prisma.UserWhereUniqueInput
+}
+
+export type UserUpdateOneRequiredWithoutUserDataNestedInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutUserDataInput, Prisma.UserUncheckedCreateWithoutUserDataInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutUserDataInput
+  upsert?: Prisma.UserUpsertWithoutUserDataInput
+  connect?: Prisma.UserWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutUserDataInput, Prisma.UserUpdateWithoutUserDataInput>, Prisma.UserUncheckedUpdateWithoutUserDataInput>
+}
+
 export type UserCreateWithoutAccountsInput = {
   id: string
   email: string
@@ -537,6 +558,7 @@ export type UserCreateWithoutAccountsInput = {
   activities?: Prisma.ActivityEventCreateNestedManyWithoutUserInput
   salarySlips?: Prisma.SalarySlipCreateNestedManyWithoutUserInput
   profile?: Prisma.UserProfileCreateNestedOneWithoutUserInput
+  userData?: Prisma.UserDataCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutAccountsInput = {
@@ -553,6 +575,7 @@ export type UserUncheckedCreateWithoutAccountsInput = {
   activities?: Prisma.ActivityEventUncheckedCreateNestedManyWithoutUserInput
   salarySlips?: Prisma.SalarySlipUncheckedCreateNestedManyWithoutUserInput
   profile?: Prisma.UserProfileUncheckedCreateNestedOneWithoutUserInput
+  userData?: Prisma.UserDataUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutAccountsInput = {
@@ -585,6 +608,7 @@ export type UserUpdateWithoutAccountsInput = {
   activities?: Prisma.ActivityEventUpdateManyWithoutUserNestedInput
   salarySlips?: Prisma.SalarySlipUpdateManyWithoutUserNestedInput
   profile?: Prisma.UserProfileUpdateOneWithoutUserNestedInput
+  userData?: Prisma.UserDataUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutAccountsInput = {
@@ -601,6 +625,7 @@ export type UserUncheckedUpdateWithoutAccountsInput = {
   activities?: Prisma.ActivityEventUncheckedUpdateManyWithoutUserNestedInput
   salarySlips?: Prisma.SalarySlipUncheckedUpdateManyWithoutUserNestedInput
   profile?: Prisma.UserProfileUncheckedUpdateOneWithoutUserNestedInput
+  userData?: Prisma.UserDataUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateWithoutStatementsInput = {
@@ -617,6 +642,7 @@ export type UserCreateWithoutStatementsInput = {
   activities?: Prisma.ActivityEventCreateNestedManyWithoutUserInput
   salarySlips?: Prisma.SalarySlipCreateNestedManyWithoutUserInput
   profile?: Prisma.UserProfileCreateNestedOneWithoutUserInput
+  userData?: Prisma.UserDataCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutStatementsInput = {
@@ -633,6 +659,7 @@ export type UserUncheckedCreateWithoutStatementsInput = {
   activities?: Prisma.ActivityEventUncheckedCreateNestedManyWithoutUserInput
   salarySlips?: Prisma.SalarySlipUncheckedCreateNestedManyWithoutUserInput
   profile?: Prisma.UserProfileUncheckedCreateNestedOneWithoutUserInput
+  userData?: Prisma.UserDataUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutStatementsInput = {
@@ -665,6 +692,7 @@ export type UserUpdateWithoutStatementsInput = {
   activities?: Prisma.ActivityEventUpdateManyWithoutUserNestedInput
   salarySlips?: Prisma.SalarySlipUpdateManyWithoutUserNestedInput
   profile?: Prisma.UserProfileUpdateOneWithoutUserNestedInput
+  userData?: Prisma.UserDataUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutStatementsInput = {
@@ -681,6 +709,7 @@ export type UserUncheckedUpdateWithoutStatementsInput = {
   activities?: Prisma.ActivityEventUncheckedUpdateManyWithoutUserNestedInput
   salarySlips?: Prisma.SalarySlipUncheckedUpdateManyWithoutUserNestedInput
   profile?: Prisma.UserProfileUncheckedUpdateOneWithoutUserNestedInput
+  userData?: Prisma.UserDataUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateWithoutTransactionsInput = {
@@ -697,6 +726,7 @@ export type UserCreateWithoutTransactionsInput = {
   activities?: Prisma.ActivityEventCreateNestedManyWithoutUserInput
   salarySlips?: Prisma.SalarySlipCreateNestedManyWithoutUserInput
   profile?: Prisma.UserProfileCreateNestedOneWithoutUserInput
+  userData?: Prisma.UserDataCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutTransactionsInput = {
@@ -713,6 +743,7 @@ export type UserUncheckedCreateWithoutTransactionsInput = {
   activities?: Prisma.ActivityEventUncheckedCreateNestedManyWithoutUserInput
   salarySlips?: Prisma.SalarySlipUncheckedCreateNestedManyWithoutUserInput
   profile?: Prisma.UserProfileUncheckedCreateNestedOneWithoutUserInput
+  userData?: Prisma.UserDataUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutTransactionsInput = {
@@ -745,6 +776,7 @@ export type UserUpdateWithoutTransactionsInput = {
   activities?: Prisma.ActivityEventUpdateManyWithoutUserNestedInput
   salarySlips?: Prisma.SalarySlipUpdateManyWithoutUserNestedInput
   profile?: Prisma.UserProfileUpdateOneWithoutUserNestedInput
+  userData?: Prisma.UserDataUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutTransactionsInput = {
@@ -761,6 +793,7 @@ export type UserUncheckedUpdateWithoutTransactionsInput = {
   activities?: Prisma.ActivityEventUncheckedUpdateManyWithoutUserNestedInput
   salarySlips?: Prisma.SalarySlipUncheckedUpdateManyWithoutUserNestedInput
   profile?: Prisma.UserProfileUncheckedUpdateOneWithoutUserNestedInput
+  userData?: Prisma.UserDataUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateWithoutClassificationsInput = {
@@ -777,6 +810,7 @@ export type UserCreateWithoutClassificationsInput = {
   activities?: Prisma.ActivityEventCreateNestedManyWithoutUserInput
   salarySlips?: Prisma.SalarySlipCreateNestedManyWithoutUserInput
   profile?: Prisma.UserProfileCreateNestedOneWithoutUserInput
+  userData?: Prisma.UserDataCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutClassificationsInput = {
@@ -793,6 +827,7 @@ export type UserUncheckedCreateWithoutClassificationsInput = {
   activities?: Prisma.ActivityEventUncheckedCreateNestedManyWithoutUserInput
   salarySlips?: Prisma.SalarySlipUncheckedCreateNestedManyWithoutUserInput
   profile?: Prisma.UserProfileUncheckedCreateNestedOneWithoutUserInput
+  userData?: Prisma.UserDataUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutClassificationsInput = {
@@ -825,6 +860,7 @@ export type UserUpdateWithoutClassificationsInput = {
   activities?: Prisma.ActivityEventUpdateManyWithoutUserNestedInput
   salarySlips?: Prisma.SalarySlipUpdateManyWithoutUserNestedInput
   profile?: Prisma.UserProfileUpdateOneWithoutUserNestedInput
+  userData?: Prisma.UserDataUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutClassificationsInput = {
@@ -841,6 +877,7 @@ export type UserUncheckedUpdateWithoutClassificationsInput = {
   activities?: Prisma.ActivityEventUncheckedUpdateManyWithoutUserNestedInput
   salarySlips?: Prisma.SalarySlipUncheckedUpdateManyWithoutUserNestedInput
   profile?: Prisma.UserProfileUncheckedUpdateOneWithoutUserNestedInput
+  userData?: Prisma.UserDataUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateWithoutPersonTagsInput = {
@@ -857,6 +894,7 @@ export type UserCreateWithoutPersonTagsInput = {
   activities?: Prisma.ActivityEventCreateNestedManyWithoutUserInput
   salarySlips?: Prisma.SalarySlipCreateNestedManyWithoutUserInput
   profile?: Prisma.UserProfileCreateNestedOneWithoutUserInput
+  userData?: Prisma.UserDataCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutPersonTagsInput = {
@@ -873,6 +911,7 @@ export type UserUncheckedCreateWithoutPersonTagsInput = {
   activities?: Prisma.ActivityEventUncheckedCreateNestedManyWithoutUserInput
   salarySlips?: Prisma.SalarySlipUncheckedCreateNestedManyWithoutUserInput
   profile?: Prisma.UserProfileUncheckedCreateNestedOneWithoutUserInput
+  userData?: Prisma.UserDataUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutPersonTagsInput = {
@@ -905,6 +944,7 @@ export type UserUpdateWithoutPersonTagsInput = {
   activities?: Prisma.ActivityEventUpdateManyWithoutUserNestedInput
   salarySlips?: Prisma.SalarySlipUpdateManyWithoutUserNestedInput
   profile?: Prisma.UserProfileUpdateOneWithoutUserNestedInput
+  userData?: Prisma.UserDataUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutPersonTagsInput = {
@@ -921,6 +961,7 @@ export type UserUncheckedUpdateWithoutPersonTagsInput = {
   activities?: Prisma.ActivityEventUncheckedUpdateManyWithoutUserNestedInput
   salarySlips?: Prisma.SalarySlipUncheckedUpdateManyWithoutUserNestedInput
   profile?: Prisma.UserProfileUncheckedUpdateOneWithoutUserNestedInput
+  userData?: Prisma.UserDataUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateWithoutActivitiesInput = {
@@ -937,6 +978,7 @@ export type UserCreateWithoutActivitiesInput = {
   personTags?: Prisma.PersonTagCreateNestedManyWithoutUserInput
   salarySlips?: Prisma.SalarySlipCreateNestedManyWithoutUserInput
   profile?: Prisma.UserProfileCreateNestedOneWithoutUserInput
+  userData?: Prisma.UserDataCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutActivitiesInput = {
@@ -953,6 +995,7 @@ export type UserUncheckedCreateWithoutActivitiesInput = {
   personTags?: Prisma.PersonTagUncheckedCreateNestedManyWithoutUserInput
   salarySlips?: Prisma.SalarySlipUncheckedCreateNestedManyWithoutUserInput
   profile?: Prisma.UserProfileUncheckedCreateNestedOneWithoutUserInput
+  userData?: Prisma.UserDataUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutActivitiesInput = {
@@ -985,6 +1028,7 @@ export type UserUpdateWithoutActivitiesInput = {
   personTags?: Prisma.PersonTagUpdateManyWithoutUserNestedInput
   salarySlips?: Prisma.SalarySlipUpdateManyWithoutUserNestedInput
   profile?: Prisma.UserProfileUpdateOneWithoutUserNestedInput
+  userData?: Prisma.UserDataUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutActivitiesInput = {
@@ -1001,6 +1045,7 @@ export type UserUncheckedUpdateWithoutActivitiesInput = {
   personTags?: Prisma.PersonTagUncheckedUpdateManyWithoutUserNestedInput
   salarySlips?: Prisma.SalarySlipUncheckedUpdateManyWithoutUserNestedInput
   profile?: Prisma.UserProfileUncheckedUpdateOneWithoutUserNestedInput
+  userData?: Prisma.UserDataUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateWithoutSalarySlipsInput = {
@@ -1017,6 +1062,7 @@ export type UserCreateWithoutSalarySlipsInput = {
   personTags?: Prisma.PersonTagCreateNestedManyWithoutUserInput
   activities?: Prisma.ActivityEventCreateNestedManyWithoutUserInput
   profile?: Prisma.UserProfileCreateNestedOneWithoutUserInput
+  userData?: Prisma.UserDataCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutSalarySlipsInput = {
@@ -1033,6 +1079,7 @@ export type UserUncheckedCreateWithoutSalarySlipsInput = {
   personTags?: Prisma.PersonTagUncheckedCreateNestedManyWithoutUserInput
   activities?: Prisma.ActivityEventUncheckedCreateNestedManyWithoutUserInput
   profile?: Prisma.UserProfileUncheckedCreateNestedOneWithoutUserInput
+  userData?: Prisma.UserDataUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutSalarySlipsInput = {
@@ -1065,6 +1112,7 @@ export type UserUpdateWithoutSalarySlipsInput = {
   personTags?: Prisma.PersonTagUpdateManyWithoutUserNestedInput
   activities?: Prisma.ActivityEventUpdateManyWithoutUserNestedInput
   profile?: Prisma.UserProfileUpdateOneWithoutUserNestedInput
+  userData?: Prisma.UserDataUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutSalarySlipsInput = {
@@ -1081,6 +1129,7 @@ export type UserUncheckedUpdateWithoutSalarySlipsInput = {
   personTags?: Prisma.PersonTagUncheckedUpdateManyWithoutUserNestedInput
   activities?: Prisma.ActivityEventUncheckedUpdateManyWithoutUserNestedInput
   profile?: Prisma.UserProfileUncheckedUpdateOneWithoutUserNestedInput
+  userData?: Prisma.UserDataUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateWithoutProfileInput = {
@@ -1097,6 +1146,7 @@ export type UserCreateWithoutProfileInput = {
   personTags?: Prisma.PersonTagCreateNestedManyWithoutUserInput
   activities?: Prisma.ActivityEventCreateNestedManyWithoutUserInput
   salarySlips?: Prisma.SalarySlipCreateNestedManyWithoutUserInput
+  userData?: Prisma.UserDataCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutProfileInput = {
@@ -1113,6 +1163,7 @@ export type UserUncheckedCreateWithoutProfileInput = {
   personTags?: Prisma.PersonTagUncheckedCreateNestedManyWithoutUserInput
   activities?: Prisma.ActivityEventUncheckedCreateNestedManyWithoutUserInput
   salarySlips?: Prisma.SalarySlipUncheckedCreateNestedManyWithoutUserInput
+  userData?: Prisma.UserDataUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutProfileInput = {
@@ -1145,6 +1196,7 @@ export type UserUpdateWithoutProfileInput = {
   personTags?: Prisma.PersonTagUpdateManyWithoutUserNestedInput
   activities?: Prisma.ActivityEventUpdateManyWithoutUserNestedInput
   salarySlips?: Prisma.SalarySlipUpdateManyWithoutUserNestedInput
+  userData?: Prisma.UserDataUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutProfileInput = {
@@ -1161,6 +1213,91 @@ export type UserUncheckedUpdateWithoutProfileInput = {
   personTags?: Prisma.PersonTagUncheckedUpdateManyWithoutUserNestedInput
   activities?: Prisma.ActivityEventUncheckedUpdateManyWithoutUserNestedInput
   salarySlips?: Prisma.SalarySlipUncheckedUpdateManyWithoutUserNestedInput
+  userData?: Prisma.UserDataUncheckedUpdateOneWithoutUserNestedInput
+}
+
+export type UserCreateWithoutUserDataInput = {
+  id: string
+  email: string
+  legalName?: string | null
+  nameAliases?: Prisma.UserCreatenameAliasesInput | string[]
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  accounts?: Prisma.AccountCreateNestedManyWithoutUserInput
+  statements?: Prisma.StatementCreateNestedManyWithoutUserInput
+  transactions?: Prisma.TransactionCreateNestedManyWithoutUserInput
+  classifications?: Prisma.ClassificationCreateNestedManyWithoutUserInput
+  personTags?: Prisma.PersonTagCreateNestedManyWithoutUserInput
+  activities?: Prisma.ActivityEventCreateNestedManyWithoutUserInput
+  salarySlips?: Prisma.SalarySlipCreateNestedManyWithoutUserInput
+  profile?: Prisma.UserProfileCreateNestedOneWithoutUserInput
+}
+
+export type UserUncheckedCreateWithoutUserDataInput = {
+  id: string
+  email: string
+  legalName?: string | null
+  nameAliases?: Prisma.UserCreatenameAliasesInput | string[]
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutUserInput
+  statements?: Prisma.StatementUncheckedCreateNestedManyWithoutUserInput
+  transactions?: Prisma.TransactionUncheckedCreateNestedManyWithoutUserInput
+  classifications?: Prisma.ClassificationUncheckedCreateNestedManyWithoutUserInput
+  personTags?: Prisma.PersonTagUncheckedCreateNestedManyWithoutUserInput
+  activities?: Prisma.ActivityEventUncheckedCreateNestedManyWithoutUserInput
+  salarySlips?: Prisma.SalarySlipUncheckedCreateNestedManyWithoutUserInput
+  profile?: Prisma.UserProfileUncheckedCreateNestedOneWithoutUserInput
+}
+
+export type UserCreateOrConnectWithoutUserDataInput = {
+  where: Prisma.UserWhereUniqueInput
+  create: Prisma.XOR<Prisma.UserCreateWithoutUserDataInput, Prisma.UserUncheckedCreateWithoutUserDataInput>
+}
+
+export type UserUpsertWithoutUserDataInput = {
+  update: Prisma.XOR<Prisma.UserUpdateWithoutUserDataInput, Prisma.UserUncheckedUpdateWithoutUserDataInput>
+  create: Prisma.XOR<Prisma.UserCreateWithoutUserDataInput, Prisma.UserUncheckedCreateWithoutUserDataInput>
+  where?: Prisma.UserWhereInput
+}
+
+export type UserUpdateToOneWithWhereWithoutUserDataInput = {
+  where?: Prisma.UserWhereInput
+  data: Prisma.XOR<Prisma.UserUpdateWithoutUserDataInput, Prisma.UserUncheckedUpdateWithoutUserDataInput>
+}
+
+export type UserUpdateWithoutUserDataInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  legalName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  nameAliases?: Prisma.UserUpdatenameAliasesInput | string[]
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  accounts?: Prisma.AccountUpdateManyWithoutUserNestedInput
+  statements?: Prisma.StatementUpdateManyWithoutUserNestedInput
+  transactions?: Prisma.TransactionUpdateManyWithoutUserNestedInput
+  classifications?: Prisma.ClassificationUpdateManyWithoutUserNestedInput
+  personTags?: Prisma.PersonTagUpdateManyWithoutUserNestedInput
+  activities?: Prisma.ActivityEventUpdateManyWithoutUserNestedInput
+  salarySlips?: Prisma.SalarySlipUpdateManyWithoutUserNestedInput
+  profile?: Prisma.UserProfileUpdateOneWithoutUserNestedInput
+}
+
+export type UserUncheckedUpdateWithoutUserDataInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  legalName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  nameAliases?: Prisma.UserUpdatenameAliasesInput | string[]
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  accounts?: Prisma.AccountUncheckedUpdateManyWithoutUserNestedInput
+  statements?: Prisma.StatementUncheckedUpdateManyWithoutUserNestedInput
+  transactions?: Prisma.TransactionUncheckedUpdateManyWithoutUserNestedInput
+  classifications?: Prisma.ClassificationUncheckedUpdateManyWithoutUserNestedInput
+  personTags?: Prisma.PersonTagUncheckedUpdateManyWithoutUserNestedInput
+  activities?: Prisma.ActivityEventUncheckedUpdateManyWithoutUserNestedInput
+  salarySlips?: Prisma.SalarySlipUncheckedUpdateManyWithoutUserNestedInput
+  profile?: Prisma.UserProfileUncheckedUpdateOneWithoutUserNestedInput
 }
 
 
@@ -1263,6 +1400,7 @@ export type UserSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = r
   activities?: boolean | Prisma.User$activitiesArgs<ExtArgs>
   salarySlips?: boolean | Prisma.User$salarySlipsArgs<ExtArgs>
   profile?: boolean | Prisma.User$profileArgs<ExtArgs>
+  userData?: boolean | Prisma.User$userDataArgs<ExtArgs>
   _count?: boolean | Prisma.UserCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["user"]>
 
@@ -1303,6 +1441,7 @@ export type UserInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
   activities?: boolean | Prisma.User$activitiesArgs<ExtArgs>
   salarySlips?: boolean | Prisma.User$salarySlipsArgs<ExtArgs>
   profile?: boolean | Prisma.User$profileArgs<ExtArgs>
+  userData?: boolean | Prisma.User$userDataArgs<ExtArgs>
   _count?: boolean | Prisma.UserCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type UserIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {}
@@ -1319,6 +1458,7 @@ export type $UserPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs =
     activities: Prisma.$ActivityEventPayload<ExtArgs>[]
     salarySlips: Prisma.$SalarySlipPayload<ExtArgs>[]
     profile: Prisma.$UserProfilePayload<ExtArgs> | null
+    userData: Prisma.$UserDataPayload<ExtArgs> | null
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -1729,6 +1869,7 @@ export interface Prisma__UserClient<T, Null = never, ExtArgs extends runtime.Typ
   activities<T extends Prisma.User$activitiesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$activitiesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ActivityEventPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   salarySlips<T extends Prisma.User$salarySlipsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$salarySlipsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$SalarySlipPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   profile<T extends Prisma.User$profileArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$profileArgs<ExtArgs>>): Prisma.Prisma__UserProfileClient<runtime.Types.Result.GetResult<Prisma.$UserProfilePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+  userData<T extends Prisma.User$userDataArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$userDataArgs<ExtArgs>>): Prisma.Prisma__UserDataClient<runtime.Types.Result.GetResult<Prisma.$UserDataPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -2341,6 +2482,25 @@ export type User$profileArgs<ExtArgs extends runtime.Types.Extensions.InternalAr
    */
   include?: Prisma.UserProfileInclude<ExtArgs> | null
   where?: Prisma.UserProfileWhereInput
+}
+
+/**
+ * User.userData
+ */
+export type User$userDataArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the UserData
+   */
+  select?: Prisma.UserDataSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the UserData
+   */
+  omit?: Prisma.UserDataOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.UserDataInclude<ExtArgs> | null
+  where?: Prisma.UserDataWhereInput
 }
 
 /**

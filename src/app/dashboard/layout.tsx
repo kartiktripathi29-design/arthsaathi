@@ -3,6 +3,10 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAppStore } from '@/store/AppStore'
+import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+import { useUser } from '@/lib/useUser'
+
+const SUPABASE_CONFIGURED = !!process.env.NEXT_PUBLIC_SUPABASE_URL
 
 const C = { primary: '#3A4B41', accent: '#E6CFA7', white: '#fff', bg: '#FDFAF6' }
 
@@ -19,8 +23,21 @@ function Logo() {
 
 function Sidebar() {
   const pathname = usePathname()
+  const router = useRouter()
   const { user, logout } = useAppStore()
   const [hasSalaryData, setHasSalaryData] = useState(false)
+
+  // Clear the real Supabase session (when configured) before wiping local state, otherwise the
+  // auth cookie lingers and Proxy keeps treating the user as signed in.
+  const handleSignOut = async () => {
+    try {
+      if (SUPABASE_CONFIGURED) await createSupabaseBrowserClient().auth.signOut()
+    } catch {
+      // ignore — still clear local state below
+    }
+    logout()
+    router.replace('/login')
+  }
   
   const initials = user?.name?.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase() || '?'
   
@@ -138,7 +155,7 @@ function Sidebar() {
             </div>
           </div>
         )}
-        <button onClick={logout} style={{
+        <button onClick={handleSignOut} style={{
           width: '100%', padding: '7px 10px', background: 'transparent',
           border: '1px solid rgba(255,255,255,0.08)', borderRadius: 5,
           color: 'rgba(255,255,255,0.35)', fontSize: 12, cursor: 'pointer',
@@ -193,22 +210,31 @@ function TopBar() {
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { user } = useAppStore()
+  const { user: supaUser, loading } = useUser()
   const router = useRouter()
   const pathname = usePathname()
-  
+
   useEffect(() => {
+    // Real-auth mode: trust the Supabase session (Proxy also guards server-side). Don't bounce a
+    // valid session just because local `as_user` is empty (e.g. a fresh device before sync).
+    if (SUPABASE_CONFIGURED) {
+      if (loading) return
+      if (!supaUser) { router.replace('/login'); return }
+      if (pathname === '/dashboard') router.replace('/dashboard/profile/documents')
+      return
+    }
+    // Mock mode (Supabase not configured): original localStorage-based gate.
     const timer = setTimeout(() => {
       const stored = typeof window !== 'undefined' ? localStorage.getItem('as_user') : null
       if (!stored && !user) {
         router.replace('/login')
       } else if (user && pathname === '/dashboard') {
-        // Redirect to Documents if user lands on /dashboard without data
         router.replace('/dashboard/profile/documents')
       }
     }, 150)
     return () => clearTimeout(timer)
-  }, [user, router, pathname])
-  
+  }, [user, supaUser, loading, router, pathname])
+
   return <>{children}</>
 }
 

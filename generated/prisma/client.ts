@@ -96,3 +96,8 @@ export type SalarySlip = Prisma.SalarySlipModel
  * 
  */
 export type UserProfile = Prisma.UserProfileModel
+/**
+ * Model UserData
+ * 
+ */
+export type UserData = Prisma.UserDataModel
