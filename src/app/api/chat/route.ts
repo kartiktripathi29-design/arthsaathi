@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { streamChatResponse } from '@/lib/claude'
 import { logActivity } from '@/lib/activity'
+import { getUser } from '@/lib/auth'
 
 export const maxDuration = 60
 
@@ -9,10 +10,11 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { messages, userContext } = body
 
-    // Fire-and-forget: log chat activity
-    logActivity('anonymous', 'CHAT_MESSAGE_SENT', null, {
-      messageCount: messages?.length || 0,
-    }).catch(() => {})
+    // Fire-and-forget: log chat activity under the signed-in user (skipped if not signed in).
+    // getUser() is called synchronously here so cookies() resolves within the request context.
+    getUser()
+      .then(u => { if (u) return logActivity(u.id, 'CHAT_MESSAGE_SENT', null, { messageCount: messages?.length || 0 }) })
+      .catch(() => {})
 
     const encoder = new TextEncoder()
     const stream = new ReadableStream({

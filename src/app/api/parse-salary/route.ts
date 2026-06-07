@@ -5,6 +5,7 @@ import { normalizePdfBase64 } from '@/lib/pdfNormalize'
 import type { ParsedSalaryData } from '@/types'
 import { prisma } from "@/lib/db"
 import { logActivity } from "@/lib/activity"
+import { getUser } from "@/lib/auth"
 
 export const maxDuration = 60
 
@@ -188,9 +189,13 @@ export async function POST(req: NextRequest) {
       errors: errors.length > 0 ? errors : undefined,
     })
 
-    // Fire-and-forget: persist salary slips to DB. DB failures must not affect the response.
+    // Resolve the signed-in user now (cookies are in request context here); the DB write below runs
+    // fire-and-forget. Persistence is scoped to that user and skipped entirely when not signed in.
+    const userP = getUser()
     Promise.resolve().then(async () => {
       try {
+        const user = await userP
+        if (!user) return
         for (const slip of validSlips) {
           const netPay = slip.netSalary || (slip as any).netPay || 0
           if (netPay <= 0) continue
@@ -198,7 +203,7 @@ export async function POST(req: NextRequest) {
           await prisma.salarySlip.upsert({
             where: {
               userId_periodMonth: {
-                userId: 'anonymous',
+                userId: user.id,
                 periodMonth: new Date(period),
               },
             },
@@ -208,7 +213,7 @@ export async function POST(req: NextRequest) {
               components: JSON.parse(JSON.stringify(slip)),
             },
             create: {
-              userId: 'anonymous',
+              userId: user.id,
               periodMonth: new Date(period),
               employer: slip.employerName || null,
               netPay,
@@ -216,7 +221,7 @@ export async function POST(req: NextRequest) {
             },
           })
         }
-        await logActivity('anonymous', 'SALARY_PARSE_SUCCESS', null, {
+        await logActivity(user.id, 'SALARY_PARSE_SUCCESS', null, {
           count: validSlips.length,
           netPay: validSlips[0]?.netSalary || (validSlips[0] as any)?.netPay,
         })

@@ -9,6 +9,7 @@ import type { IntelligenceReport } from '@/lib/txn-intelligence'
 import { prisma } from '@/lib/db'
 import { logActivity } from '@/lib/activity'
 import { hashBuffer } from '@/lib/storage'
+import { getUser } from '@/lib/auth'
 
 export const maxDuration = 120
 
@@ -17,6 +18,10 @@ const client = new Anthropic()
 export async function POST(req: NextRequest) {
   const t0 = Date.now()
   const log = (s: string) => console.log(`[bank-parse] ${s}: ${Date.now() - t0}ms`)
+
+  // Resolve the signed-in user now (cookies are in request context); the DB writes run
+  // fire-and-forget via persistStatement and are skipped entirely when not signed in.
+  const userP = getUser()
 
   try {
     let buffer: Buffer
@@ -82,7 +87,7 @@ export async function POST(req: NextRequest) {
               fileKind,
               parsedLocally: true,
             })
-            persistStatement(buffer, fileName, localResult, intelligence).catch(e =>
+            persistStatement(buffer, fileName, localResult, intelligence, userP).catch(e =>
               console.error('[bank-parse] DB persist failed (non-blocking):', e)
             )
             return resp1
@@ -94,7 +99,7 @@ export async function POST(req: NextRequest) {
               fileKind,
               parsedLocally: true,
             })
-            persistStatement(buffer, fileName, localResult, null).catch(e =>
+            persistStatement(buffer, fileName, localResult, null, userP).catch(e =>
               console.error('[bank-parse] DB persist failed (non-blocking):', e)
             )
             return resp2
@@ -134,7 +139,7 @@ export async function POST(req: NextRequest) {
               fileKind: 'pdf',
               parsedLocally: true,
             })
-            persistStatement(buffer, fileName, localResult, intelligence).catch(e =>
+            persistStatement(buffer, fileName, localResult, intelligence, userP).catch(e =>
               console.error('[bank-parse] DB persist failed (non-blocking):', e)
             )
             return resp3
@@ -146,7 +151,7 @@ export async function POST(req: NextRequest) {
               fileKind: 'pdf',
               parsedLocally: true,
             })
-            persistStatement(buffer, fileName, localResult, null).catch(e =>
+            persistStatement(buffer, fileName, localResult, null, userP).catch(e =>
               console.error('[bank-parse] DB persist failed (non-blocking):', e)
             )
             return resp4
@@ -194,7 +199,7 @@ export async function POST(req: NextRequest) {
       fileKind: result.kind,
       parsedLocally: false,
     })
-    persistStatement(buffer, fileName, haikuData, intelligence).catch(e =>
+    persistStatement(buffer, fileName, haikuData, intelligence, userP).catch(e =>
       console.error('[bank-parse] DB persist failed (non-blocking):', e)
     )
     return resp5
@@ -374,18 +379,21 @@ async function persistStatement(
   fileName: string,
   localResult: any,
   intelligence: IntelligenceReport | null,
+  userP: Promise<{ id: string } | null>,
 ) {
   try {
+    const user = await userP
+    if (!user) return // not signed in — skip persistence (avoids orphan 'anonymous' rows / FK errors)
     const contentHash = hashBuffer(buffer)
     const txnCount = localResult.transactions?.length || 0
 
     const statement = await prisma.statement.upsert({
       where: {
-        userId_contentHash: { userId: 'anonymous', contentHash },
+        userId_contentHash: { userId: user.id, contentHash },
       },
       update: { txnCount, parsedAt: new Date() },
       create: {
-        userId: 'anonymous',
+        userId: user.id,
         originalName: fileName,
         contentHash,
         storagePath: '',
@@ -395,7 +403,7 @@ async function persistStatement(
       },
     })
 
-    await logActivity('anonymous', 'STATEMENT_PARSE_SUCCESS', statement.id, {
+    await logActivity(user.id, 'STATEMENT_PARSE_SUCCESS', statement.id, {
       fileName,
       txnCount,
       bank: localResult.bank || 'unknown',
