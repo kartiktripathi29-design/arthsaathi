@@ -49,7 +49,13 @@ function Shell({ children }: { children: React.ReactNode }) {
         </div>
       </nav>
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 24px' }}>
-        <div style={{ width: '100%', maxWidth: 420 }}>{children}</div>
+        <div style={{ width: '100%', maxWidth: 420 }}>
+          {children}
+          <p style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', marginTop: 10 }}>
+            Just want to decode an offer letter?{' '}
+            <Link href="/offer" style={{ color: '#059669', fontWeight: 600, textDecoration: 'none' }}>Try it free, no sign-up →</Link>
+          </p>
+        </div>
       </div>
     </div>
   )
