@@ -84,3 +84,20 @@ Set `NEXT_PUBLIC_CLOUD_SYNC="1"` and redeploy.
   clears the Supabase session before local state.
 - `src/lib/auth.ts` `requireUser()` — the real authorization check used by API routes (Proxy is
   defense-in-depth only, per Next 16 docs).
+
+---
+
+## Update — auth flow is now email/phone + OTP + password
+
+Login/signup were rebuilt to: **identifier (email OR mobile) → OTP → set password → password login**.
+
+Setup required for each path:
+- **Email** (works once these are done):
+  - Resend SMTP connected (removes rate limit) — Project Settings → Authentication → SMTP.
+  - Authentication → Sign In/Providers → Email → **"Confirm email" OFF** (so a CODE is sent, not a link).
+  - Authentication → Emails → Magic Link template body = `Your ArthVo code is: {{ .Token }}`.
+- **Phone/mobile OTP** (extra, paid):
+  - Authentication → Sign In/Providers → **Phone** → enable, and configure a **paid SMS provider** (Twilio / MSG91 / etc.). Until this is set up, the "Mobile" option will error.
+- The page falls back to a mock phone+password login when `NEXT_PUBLIC_SUPABASE_URL` is unset, so nothing breaks before setup.
+
+"Forgot password" reuses the OTP path: send code → verify → set new password.
