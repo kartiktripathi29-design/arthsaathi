@@ -45,8 +45,8 @@ function Sidebar() {
   const PROFILE_SECTIONS = [
     { href: '/dashboard/profile/documents', label: 'Documents' },
     { href: '/dashboard/profile/salary', label: 'Salary' },
-    { href: '/dashboard/profile/other-income', label: 'Other Income' },
-    { href: '/dashboard/profile/exemptions', label: 'Exemptions' },
+    { href: '/dashboard/profile/other-income', label: 'Other earnings' },
+    { href: '/dashboard/profile/exemptions', label: 'Allowances' },
     { href: '/dashboard/profile/deductions', label: 'Deductions' },
   ]
 
@@ -122,7 +122,7 @@ function Sidebar() {
           transition: 'all 0.15s',
         }}>
           <span style={{ fontSize: 15, width: 20, textAlign: 'center' }}>🎯</span>
-          Tax Optimizer
+          Your Tax
         </Link>
       </nav>
 
@@ -173,10 +173,10 @@ function TopBar() {
   const pageTitle = pathname === '/dashboard' ? 'Dashboard'
     : pathname.startsWith('/dashboard/profile/documents') ? 'Documents'
     : pathname.startsWith('/dashboard/profile/salary') ? 'Salary'
-    : pathname.startsWith('/dashboard/profile/other-income') ? 'Other Income'
-    : pathname.startsWith('/dashboard/profile/exemptions') ? 'Exemptions'
+    : pathname.startsWith('/dashboard/profile/other-income') ? 'Other earnings'
+    : pathname.startsWith('/dashboard/profile/exemptions') ? 'Allowances'
     : pathname.startsWith('/dashboard/profile/deductions') ? 'Deductions'
-    : pathname.startsWith('/dashboard/tax') ? 'Tax Optimizer'
+    : pathname.startsWith('/dashboard/tax') ? 'Your Tax'
     : 'Dashboard'
 
   return (

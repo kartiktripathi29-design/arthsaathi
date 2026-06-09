@@ -377,7 +377,7 @@ export default function TaxOptimizerPage() {
   if (calcError) {
     return (
       <div style={{ maxWidth: 900, margin: '0 auto', padding: 40, textAlign: 'center' }}>
-        <p style={{ fontSize: 14, color: C.danger, margin: '0 0 8px' }}>Tax Optimizer hit an error: {calcError}</p>
+        <p style={{ fontSize: 14, color: C.danger, margin: '0 0 8px' }}>Your Tax hit an error: {calcError}</p>
         <p style={{ fontSize: 12, color: C.muted, margin: '0 0 20px' }}>Your salary data is safe. Try clearing this page's stale state and recomputing.</p>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
           <button onClick={() => { setCalcError(null); router.push('/dashboard/profile/salary') }} style={{ padding: '10px 20px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Back to Salary</button>
@@ -413,7 +413,7 @@ export default function TaxOptimizerPage() {
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '20px 0' }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Tax Optimization</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Your Tax</h1>
       <p style={{ fontSize: 13, color: C.muted, margin: '0 0 16px' }}>Your tax picture for FY 2025-26</p>
 
       {/* Senior-citizen + parents-senior toggles — affect old-regime slabs, 80D limits, 80TTA/80TTB eligibility */}
@@ -686,7 +686,7 @@ export default function TaxOptimizerPage() {
 
         {!calc.hraFilled && calc.grossSalary > 0 && (
           <div style={{ padding: '12px', background: '#FFF3DD', border: `1px solid ${C.wm}`, borderRadius: 6, marginBottom: 12 }}>
-            <p style={{ fontSize: 11, color: '#856404', margin: 0, fontWeight: 500 }}>💡 You haven't entered rent details. If you pay rent, fill <Link href="/dashboard/profile/exemptions" style={{ color: '#856404', textDecoration: 'underline' }}>Exemptions</Link> to claim HRA and save more.</p>
+            <p style={{ fontSize: 11, color: '#856404', margin: 0, fontWeight: 500 }}>💡 You haven't entered rent details. If you pay rent, fill <Link href="/dashboard/profile/exemptions" style={{ color: '#856404', textDecoration: 'underline' }}>Allowances</Link> to claim HRA and save more.</p>
           </div>
         )}
 

@@ -2033,7 +2033,7 @@ export default function SalaryPageCompleteFinal() {
                 <p key={i} style={{ fontSize: 11, color: C.text, margin: '2px 0' }}>{line}</p>
               ))}
             </div>
-            <p style={{ fontSize: 11, color: C.muted, margin: '10px 0 0', textAlign: 'center' }}>Final tax liability is computed in Tax Optimizer.</p>
+            <p style={{ fontSize: 11, color: C.muted, margin: '10px 0 0', textAlign: 'center' }}>Final tax liability is computed in Your Tax.</p>
           </div>
         )
       })()}
@@ -2126,7 +2126,7 @@ export default function SalaryPageCompleteFinal() {
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <button onClick={() => setWizardStep('intent-pick')} style={{ flex: 1, minWidth: 120, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Edit timeline</button>
         <button onClick={() => router.push('/dashboard/profile/documents')} style={{ flex: 1, minWidth: 120, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Upload more slips</button>
-        <button onClick={() => router.push('/dashboard/profile/other-income')} style={{ flex: 1, minWidth: 120, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Add Other Income →</button>
+        <button onClick={() => router.push('/dashboard/profile/other-income')} style={{ flex: 1, minWidth: 120, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Add Other earnings →</button>
       </div>
     </div>
   )

@@ -279,8 +279,8 @@ export default function ExemptionsPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '20px 0' }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Exemptions</h1>
-      <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>Section 10 — income that is completely tax-free (Old Regime only)</p>
+      <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Allowances</h1>
+      <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>Income that is completely tax-free — Old Regime only · Section 10</p>
 
       {salary && (salary.hra > 0 || detectedConveyance > 0) && (
         <div style={{ background: C.wl, border: `1px solid ${C.wm}`, borderRadius: 8, padding: 16, marginBottom: 20 }}>
@@ -306,8 +306,8 @@ export default function ExemptionsPage() {
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 16, overflow: 'hidden' }}>
         <button onClick={() => toggle('hra')} style={{ width: '100%', padding: '14px 16px', background: expanded.includes('hra') ? C.wl : '#fff', border: 'none', borderBottom: expanded.includes('hra') ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ textAlign: 'left' }}>
-            <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>House Rent Allowance (HRA) u/s 10(13A)</p>
-            <p style={{ fontSize: 10.5, color: C.muted, margin: 0 }}>Min of: actual HRA · rent − 10% basic · 50% (metro) / 40% basic · Old regime only</p>
+            <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>Do you get House Rent Allowance?</p>
+            <p style={{ fontSize: 10.5, color: C.muted, margin: 0 }}>HRA · u/s 10(13A) · Min of: actual HRA · rent − 10% basic · 50% (metro) / 40% basic · Old regime only</p>
           </div>
           <span style={{ fontSize: 14, color: C.fg }}>{expanded.includes('hra') ? '−' : '+'}</span>
         </button>
@@ -431,8 +431,8 @@ export default function ExemptionsPage() {
           <SimpleSection
             open={expanded.includes('lta')}
             onToggle={() => toggle('lta')}
-            q="Leave Travel Allowance (LTA) u/s 10(5)"
-            sub="Actual economy fare only · 2 journeys per 4-yr block · old regime"
+            q="Did you travel and get Leave Travel Allowance?"
+            sub="LTA · u/s 10(5) · Actual economy fare only · 2 journeys per 4-yr block · old regime"
             value={s.lta}
             onChange={(v) => update('lta', v)}
             claimed={s.lta}
@@ -455,8 +455,8 @@ export default function ExemptionsPage() {
       <SimpleSection
         open={expanded.includes('driver')}
         onToggle={() => toggle('driver')}
-        q="Driver salary u/s 10(14)(i)"
-        sub="Reimbursed driver of an official-use car · old regime"
+        q="Do you have a driver for an official-use car?"
+        sub="Driver salary · u/s 10(14)(i) · Reimbursed driver of an official-use car · old regime"
         value={s.driverSalary}
         onChange={(v) => update('driverSalary', v)}
         claimed={s.driverSalary}
@@ -467,8 +467,8 @@ export default function ExemptionsPage() {
       <SimpleSection
         open={expanded.includes('car')}
         onToggle={() => toggle('car')}
-        q="Car maintenance u/s 10(14)(i)"
-        sub="Official-use car running costs — fuel, repairs · old regime"
+        q="Do you claim car running costs?"
+        sub="Car maintenance · u/s 10(14)(i) · Official-use car running costs — fuel, repairs · old regime"
         value={s.carMaintenance}
         onChange={(v) => update('carMaintenance', v)}
         claimed={s.carMaintenance}
@@ -479,8 +479,8 @@ export default function ExemptionsPage() {
       <SimpleSection
         open={expanded.includes('da')}
         onToggle={() => toggle('da')}
-        q="Daily allowance on tour/transfer u/s 10(14)(ii)"
-        sub="Per-day allowance on official tour · old regime"
+        q="Do you get a daily allowance when travelling for work?"
+        sub="Daily allowance · u/s 10(14)(ii) · Per-day allowance on official tour · old regime"
         value={s.dailyAllowance}
         onChange={(v) => update('dailyAllowance', v)}
         claimed={s.dailyAllowance}
@@ -512,8 +512,8 @@ export default function ExemptionsPage() {
       <SimpleSection
         open={expanded.includes('gratuity')}
         onToggle={() => toggle('gratuity')}
-        q="Gratuity u/s 10(10)"
-        sub="On retirement · ½-month basic × years · cap ₹10L (non-govt)"
+        q="Did you receive gratuity?"
+        sub="Gratuity · u/s 10(10) · On retirement · ½-month basic × years · cap ₹10L (non-govt)"
         value={s.gratuity}
         onChange={(v) => update('gratuity', v)}
         claimed={gratuityCapped}
@@ -522,7 +522,7 @@ export default function ExemptionsPage() {
 
       {/* Total */}
       <div style={{ background: '#F0F9F7', border: `1px solid #D1E8E4`, borderRadius: 8, padding: 16, marginBottom: 24 }}>
-        <p style={{ fontSize: 11, color: C.muted, margin: '0 0 6px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>Total exemptions claimed (annual)</p>
+        <p style={{ fontSize: 11, color: C.muted, margin: '0 0 6px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>Total allowances claimed (annual)</p>
         <p style={{ fontSize: 18, fontWeight: 700, color: C.fg, margin: 0 }}>{fmt(totalAnnualExempt)}</p>
         <p style={{ fontSize: 10.5, color: C.muted, margin: '6px 0 0' }}>HRA {fmt(hraAnnualExemption)} · LTA {fmt(s.lta)} · Driver {fmt(s.driverSalary)} · Car {fmt(s.carMaintenance)} · DA {fmt(s.dailyAllowance)} · Super-ann {fmt(s.superannuation)} · PF {fmt(s.pfWithdrawal)} · Gratuity {fmt(gratuityCapped)}</p>
         <p style={{ fontSize: 10.5, color: C.muted, margin: '6px 0 0', fontStyle: 'italic' }}>These count only under Old Regime. New Regime disables Section 10 exemptions.</p>

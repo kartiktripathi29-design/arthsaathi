@@ -129,7 +129,7 @@ export default function OtherIncomePage() {
     { key: 'crypto', icon: '₿', label: 'Crypto / VDA', desc: 'Digital assets. Taxed at flat 30% — no deductions allowed.' },
     { key: 'fno', icon: '📊', label: 'F&O / Intraday', desc: 'Derivatives trading. Taxed at your slab rate.' },
     { key: 'interest', icon: '🏦', label: 'Interest & Dividends', desc: 'FD interest, savings interest, dividends. Taxed at slab rate.' },
-    { key: 'other', icon: '➕', label: 'Other Income', desc: 'Anything that doesn\'t fit above (royalties, casual income, gifts beyond limit, etc.) Single amount, taxed at slab.' },
+    { key: 'other', icon: '➕', label: 'Other earnings', desc: 'Anything that doesn\'t fit above (royalties, casual income, gifts beyond limit, etc.) Single amount, taxed at slab.' },
   ]
 
   const getTaxablePreview = (entry: OtherIncomeEntry) => {
@@ -199,7 +199,7 @@ export default function OtherIncomePage() {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '20px 0' }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Other Income</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Other earnings</h1>
       <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>Income beyond salary: freelance, investments, trading, interest. (Optional — skip if salary-only)</p>
 
       {/* Banner */}
@@ -422,7 +422,7 @@ export default function OtherIncomePage() {
       {/* Navigation */}
       <div style={{ display: 'flex', gap: 12 }}>
         <button onClick={() => router.push('/dashboard/profile/salary')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
-        <button onClick={() => router.push('/dashboard/profile/exemptions')} style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Next: Exemptions →</button>
+        <button onClick={() => router.push('/dashboard/profile/exemptions')} style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Next: Allowances →</button>
       </div>
     </div>
   )

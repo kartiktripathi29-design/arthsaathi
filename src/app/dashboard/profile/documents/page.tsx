@@ -356,7 +356,7 @@ export default function DocumentsPage() {
           border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500,
           cursor: 'pointer', fontFamily: 'inherit',
         }}>
-          Skip to Other Income
+          Skip to Other earnings
         </button>
       </div>
 
