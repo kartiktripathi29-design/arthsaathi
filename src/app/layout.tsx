@@ -5,6 +5,7 @@ import { Analytics } from '@vercel/analytics/react'
 import { AppProvider } from '@/store/AppStore'
 import { DialogHost } from '@/components/Dialog'
 import SyncProvider from '@/components/SyncProvider'
+import { tokens as T } from '@/lib/tokens'
 
 export const metadata: Metadata = {
   title: 'ArthVo — Wealth Evolved',
@@ -21,8 +22,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             position="top-right"
             toastOptions={{
               duration: 4000,
-              style: { background: '#1E293B', color: '#fff', borderRadius: '10px', fontSize: '14px', padding: '12px 16px' },
-              success: { style: { background: '#059669' } },
+              style: { background: T.ink, color: '#fff', borderRadius: '10px', fontSize: '14px', padding: '12px 16px' },
+              success: { style: { background: T.green } },
               error: { style: { background: '#DC2626' } },
             }}
           />
