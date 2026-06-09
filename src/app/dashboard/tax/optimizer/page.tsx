@@ -416,6 +416,43 @@ export default function TaxOptimizerPage() {
       <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Your Tax</h1>
       <p style={{ fontSize: 13, color: C.muted, margin: '0 0 16px' }}>Your tax picture for FY 2025-26</p>
 
+      {/* ── Verdict hero — leads with the recommendation: regime · saving · refund/payable · ITR.
+           Pure presentation of values already computed in `calc` (no math here). ── */}
+      <div style={{ background: C.card, border: `2px solid ${T.teal}`, borderRadius: 10, padding: '22px 20px', marginBottom: 16, position: 'relative' as const }}>
+        <span style={{ position: 'absolute' as const, top: -10, left: 16, fontSize: 10, fontWeight: 700, background: T.teal, color: T.ivory, padding: '3px 10px', borderRadius: 20, letterSpacing: '0.04em' }}>Recommended</span>
+        <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 24, alignItems: 'flex-start', marginTop: 2 }}>
+
+          {/* Recommended regime + saving vs the other regime */}
+          <div style={{ flex: '1 1 200px' }}>
+            <p style={{ fontSize: 11, color: C.muted, margin: '0 0 4px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>File under</p>
+            <p style={{ fontSize: 26, fontWeight: 800, color: C.fg, margin: 0, lineHeight: 1.1 }}>{calc.recommendation === 'new' ? 'New regime' : 'Old regime'}</p>
+            <p style={{ fontSize: 12.5, color: C.muted, margin: '6px 0 0' }}>Saves <strong style={{ color: T.green }}>{fmt(calc.savings)}</strong> vs the {calc.recommendation === 'new' ? 'old' : 'new'} regime</p>
+          </div>
+
+          {/* Refund due / balance payable for the recommended regime */}
+          {calc.tdsPaid > 0 && (() => {
+            const bal = calc.recommendation === 'new' ? calc.newBalance : calc.oldBalance
+            const total = calc.recommendation === 'new' ? calc.newTotal : calc.oldTotal
+            const refund = bal < 0
+            return (
+              <div style={{ flex: '1 1 200px' }}>
+                <p style={{ fontSize: 11, color: C.muted, margin: '0 0 4px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>{refund ? 'Refund due' : 'Balance payable'}</p>
+                <p style={{ fontSize: 26, fontWeight: 800, color: refund ? T.green : C.fg, margin: 0, lineHeight: 1.1 }}>{fmt(Math.abs(bal))}</p>
+                <p style={{ fontSize: 10, color: T.faint, margin: '3px 0 0', lineHeight: 1.4 }}>{calc.tdsSource === 'ais' ? 'TDS from your AIS / 26AS' : calc.tdsSource === 'estimated' ? 'TDS estimated' : 'TDS from your salary slips'}</p>
+                <p style={{ fontSize: 11, color: C.muted, margin: '6px 0 0', lineHeight: 1.45 }}>Tax {fmt(total)} − TDS {fmt(calc.tdsPaid)}{refund ? ' = refund due' : ' = still to pay'}</p>
+              </div>
+            )
+          })()}
+
+          {/* Which ITR to file */}
+          <div style={{ flex: '1 1 160px' }}>
+            <p style={{ fontSize: 11, color: C.muted, margin: '0 0 4px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>File form</p>
+            <p style={{ fontSize: 26, fontWeight: 800, color: C.fg, margin: 0, lineHeight: 1.1 }}>{calc.itrForm}</p>
+            {calc.itrReasons[0] && <p style={{ fontSize: 11, color: C.muted, margin: '6px 0 0', lineHeight: 1.45 }}>{calc.itrReasons[0]}</p>}
+          </div>
+        </div>
+      </div>
+
       {/* Senior-citizen + parents-senior toggles — affect old-regime slabs, 80D limits, 80TTA/80TTB eligibility */}
       <div style={{ marginBottom: 16, padding: 12, background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>You</span>
@@ -550,7 +587,7 @@ export default function TaxOptimizerPage() {
       <div style={{ background: calc.recommendation === 'new' ? '#F0F9F7' : C.card, border: `2px solid ${calc.recommendation === 'new' ? C.fg : C.border}`, borderRadius: 8, padding: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
           <h3 style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>New regime · slab-wise</h3>
-          {calc.recommendation === 'new' && <span style={{ fontSize: 9, fontWeight: 700, background: C.fg, color: '#fff', padding: '3px 8px', borderRadius: 3 }}>✓ RECOMMENDED</span>}
+          {calc.recommendation === 'new' && <span style={{ fontSize: 9, fontWeight: 700, background: C.fg, color: '#fff', padding: '3px 8px', borderRadius: 3 }}>Recommended</span>}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', fontSize: 11.5 }}>
           <div style={{ padding: '6px 8px', background: C.bg, fontWeight: 700, color: C.muted, borderBottom: `1px solid ${C.border}` }}>Slab</div>
@@ -590,10 +627,10 @@ export default function TaxOptimizerPage() {
       </div>
 
       {/* ── Slab-wise breakup — Old regime ── */}
-      <div style={{ background: calc.recommendation === 'old' ? '#FEF4E8' : C.card, border: `2px solid ${calc.recommendation === 'old' ? C.wm : C.border}`, borderRadius: 8, padding: 16 }}>
+      <div style={{ background: calc.recommendation === 'old' ? '#F0F9F7' : C.card, border: `2px solid ${calc.recommendation === 'old' ? C.fg : C.border}`, borderRadius: 8, padding: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
           <h3 style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Old regime · slab-wise</h3>
-          {calc.recommendation === 'old' && <span style={{ fontSize: 9, fontWeight: 700, background: C.wm, color: '#fff', padding: '3px 8px', borderRadius: 3 }}>✓ RECOMMENDED</span>}
+          {calc.recommendation === 'old' && <span style={{ fontSize: 9, fontWeight: 700, background: C.fg, color: '#fff', padding: '3px 8px', borderRadius: 3 }}>Recommended</span>}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', fontSize: 11.5 }}>
           <div style={{ padding: '6px 8px', background: C.bg, fontWeight: 700, color: C.muted, borderBottom: `1px solid ${C.border}` }}>Slab</div>
@@ -631,33 +668,6 @@ export default function TaxOptimizerPage() {
           )}
         </div>
       </div>
-      </div>
-
-      {/* ── Balance payable / refund — headline for the recommended regime ── */}
-      {calc.tdsPaid > 0 && (() => {
-        const bal = calc.recommendation === 'new' ? calc.newBalance : calc.oldBalance
-        const total = calc.recommendation === 'new' ? calc.newTotal : calc.oldTotal
-        const refund = bal < 0
-        return (
-          <div style={{ background: refund ? '#F0F9F4' : '#FEF4E8', border: `1px solid ${refund ? '#CFE6D8' : C.wm}`, borderRadius: 8, padding: 20, marginBottom: 16, textAlign: 'center' }}>
-            <p style={{ fontSize: 11, color: C.muted, margin: '0 0 8px', fontWeight: 600, textTransform: 'uppercase' as const }}>{refund ? 'Expected refund' : 'Balance tax still payable'} · {calc.recommendation === 'new' ? 'New' : 'Old'} regime</p>
-            <p style={{ fontSize: 24, fontWeight: 700, color: refund ? '#2A7A4A' : C.fg, margin: 0 }}>{fmt(Math.abs(bal))}</p>
-            <p style={{ fontSize: 10.5, color: C.muted, margin: '8px 0 0' }}>Tax liability {fmt(total)} − TDS already deducted {fmt(calc.tdsPaid)}{refund ? ' = refund due' : ' = still to pay'}</p>
-            <p style={{ fontSize: 10, color: C.muted, margin: '4px 0 0', fontStyle: 'italic' }}>
-              {calc.tdsSource === 'ais'
-                ? '✓ TDS from your uploaded AIS / 26AS (covers all heads incl. crypto, interest, dividends)'
-                : calc.tdsSource === 'estimated'
-                ? 'TDS = salary slips + estimated on other income (interest/dividend/freelance @10%, crypto as entered). Upload AIS / 26AS for an exact figure.'
-                : 'TDS from your salary slips. Add other-income TDS or upload AIS / 26AS for an exact figure.'}
-            </p>
-          </div>
-        )
-      })()}
-
-      {/* ── Savings ── */}
-      <div style={{ background: '#F0F9F7', border: `1px solid #D1E8E4`, borderRadius: 8, padding: 20, marginBottom: 16, textAlign: 'center' }}>
-        <p style={{ fontSize: 11, color: C.muted, margin: '0 0 8px', fontWeight: 600, textTransform: 'uppercase' as const }}>Tax savings by choosing {calc.recommendation === 'new' ? 'New' : 'Old'} Regime</p>
-        <p style={{ fontSize: 24, fontWeight: 700, color: C.fg, margin: 0 }}>{fmt(calc.savings)}</p>
       </div>
 
       {/* ── Which ITR form to file ── */}
