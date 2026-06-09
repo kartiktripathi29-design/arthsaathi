@@ -11,7 +11,9 @@ import type { IntelligenceReport, ClassifiedTransaction } from '@/lib/txn-intell
 import type { ParsedSalaryData } from '@/types'
 import { calcOldRegime, calcNewRegime, calcHRAExemption } from '@/lib/tax-engine'
 
-const C = { fg:'#3A4B41', wheat:'#E6CFA7', wl:'#F5ECD8', wm:'#D4B98A', bg:'#FDFAF6', card:'#fff', border:'#E4DDD1', text:'#1C2B22', muted:'#7A8A7E', danger:'#B94040' }
+import { tokens as T } from '@/lib/tokens'
+
+const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, bg:T.paper, card:T.card, border:T.hairline, text:T.ink, muted:T.muted, danger:'#B94040' }
 const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`
 const uid = () => Math.random().toString(36).slice(2,8)
 
@@ -2500,8 +2502,8 @@ function ProfileContent() {
                           {months.map(mk => {
                             const r = rollupMonth(salaryTimeline, mk)
                             const status = r.isActual ? 'actual' : r.isOverride ? 'override' : 'projected'
-                            const bg = status === 'actual' ? '#3A4B41' : status === 'override' ? '#C9A84C' : '#E4DDD1'
-                            const fg = status === 'actual' ? '#fff' : status === 'override' ? '#fff' : '#7A8A7E'
+                            const bg = status === 'actual' ? T.teal : status === 'override' ? '#C9A84C' : T.hairline
+                            const fg = status === 'actual' ? T.ivory : status === 'override' ? T.ivory : T.muted
                             return (
                               <button key={mk} onClick={() => {
                                 if (r.isActual) {
@@ -2519,9 +2521,9 @@ function ProfileContent() {
                           })}
                         </div>
                         <div style={{ display:'flex', gap:14, marginTop:10, fontSize:10.5, color:C.muted }}>
-                          <span><span style={{ display:'inline-block', width:8, height:8, borderRadius:2, background:'#3A4B41', marginRight:4 }} /> Slip uploaded</span>
+                          <span><span style={{ display:'inline-block', width:8, height:8, borderRadius:2, background:T.teal, marginRight:4 }} /> Slip uploaded</span>
                           <span><span style={{ display:'inline-block', width:8, height:8, borderRadius:2, background:'#C9A84C', marginRight:4 }} /> Edited projection</span>
-                          <span><span style={{ display:'inline-block', width:8, height:8, borderRadius:2, background:'#E4DDD1', marginRight:4 }} /> Auto-projected</span>
+                          <span><span style={{ display:'inline-block', width:8, height:8, borderRadius:2, background:T.hairline, marginRight:4 }} /> Auto-projected</span>
                         </div>
                         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, marginTop:14, paddingTop:12, borderTop:`1px solid ${C.border}` }}>
                           <button onClick={() => salaryRef.current?.click()} disabled={loadingDoc==='salary'} style={{ padding:'8px 14px', background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12, fontWeight:600, cursor: loadingDoc==='salary' ? 'wait' : 'pointer', fontFamily:'inherit', opacity: loadingDoc==='salary' ? 0.6 : 1 }}>

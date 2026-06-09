@@ -12,9 +12,11 @@
 
 import { useEffect, useState } from 'react'
 
+import { tokens as T } from '@/lib/tokens'
+
 const C = {
-  fg: '#3A4B41', bg: '#FDFAF6', card: '#fff', border: '#E4DDD1',
-  text: '#1C2B22', muted: '#7A8A7E', danger: '#B94040', wl: '#F5ECD8',
+  fg: T.teal, bg: T.paper, card: T.card, border: T.hairline,
+  text: T.ink, muted: T.muted, danger: '#B94040', wl: T.sand,
 }
 
 export interface ConfirmOptions {

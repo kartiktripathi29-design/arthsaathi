@@ -12,7 +12,9 @@ import { confirmDialog } from '@/components/Dialog'
 import { collectAppData, applyAppData, makeBackupEnvelope, readBackupEnvelope } from '@/lib/backupSync'
 import { useUser } from '@/lib/useUser'
 
-const C = { fg: '#3A4B41', border: '#E4DDD1', muted: '#7A8A7E', good: '#2A7A4A', goodBg: '#F0FDF4', goodBorder: '#A7F3D0' }
+import { tokens as T } from '@/lib/tokens'
+
+const C = { fg: T.teal, border: T.hairline, muted: T.muted, good: T.green, goodBg: T.slip.fill, goodBorder: T.slip.border }
 
 // Auto-backup is real only when the cloud-sync flag is on AND someone is signed in.
 const AUTO_BACKUP = process.env.NEXT_PUBLIC_CLOUD_SYNC === '1'

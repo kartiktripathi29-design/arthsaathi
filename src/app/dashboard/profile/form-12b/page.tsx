@@ -1,6 +1,7 @@
 'use client'
 import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import { tokens as T } from '@/lib/tokens'
 
 // ─── Inline types (mirror profile page's salary timeline shape) ─────────────
 interface SlipComponent { label: string; amount: number; type: 'earning' | 'deduction'; flag: 'recurring' | 'one_time' }
@@ -19,7 +20,7 @@ interface SalaryTimeline {
 }
 
 // ─── Color palette (matches dashboard) ───────────────────────────────────────
-const C = { fg:'#3A4B41', wheat:'#E6CFA7', wl:'#F5ECD8', wm:'#D4B98A', border:'#E4DDD1', text:'#1C2B22', muted:'#7A8A7E', danger:'#D85A30' }
+const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, border:T.hairline, text:T.ink, muted:T.muted, danger:'#D85A30' }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function monthLabel(monthKey: string): string {

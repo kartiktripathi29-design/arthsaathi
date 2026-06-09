@@ -1,7 +1,9 @@
 'use client'
 import { useState } from 'react'
 
-const C = { bg: '#FDFAF6', card: '#fff', border: '#E4DDD1', fg: '#1C2B22', muted: '#6B7770', primary: '#3A4B41', accent: '#E6CFA7' }
+import { tokens as T } from '@/lib/tokens'
+
+const C = { bg: T.paper, card: T.card, border: T.hairline, fg: T.ink, muted: T.muted, primary: T.teal, accent: T.taupe }
 
 interface ParsedComponent {
   label: string
