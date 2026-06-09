@@ -10,22 +10,12 @@ import toast from 'react-hot-toast'
 import { useAppStore, type AppUser } from '@/store/AppStore'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { tokens as T } from '@/lib/tokens'
+import Logo from '@/components/Logo'
 
 const C = { green: T.teal, ink: T.ink, sub: T.muted, line: T.hairline }
 const CONFIGURED = !!process.env.NEXT_PUBLIC_SUPABASE_URL
 const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)
 const isValidPhone = (p: string) => /^[6-9]\d{9}$/.test(p)
-
-function Logo({ size = 32 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 120 120" fill="none">
-      <rect width="120" height="120" rx="16" fill={C.green} />
-      <polygon points="9,9 21,9 60,101 99,9 111,9 60,111" fill={T.ivory} />
-      <circle cx="90" cy="24" r="18" fill={T.ivory} />
-      <circle cx="90" cy="24" r="11" fill={C.green} />
-    </svg>
-  )
-}
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -42,9 +32,8 @@ function Shell({ children }: { children: React.ReactNode }) {
       `}</style>
       <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 52px', borderBottom: `1px solid ${T.hairline}` }}>
         <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 11 }}>
-          <Logo />
+          <Logo variant="onLight" size={32} />
           <div>
-            <div style={{ fontWeight: 800, fontSize: 19, color: C.ink, letterSpacing: '-0.025em' }}>Arth<span style={{ color: C.green }}>Vo</span></div>
             <div style={{ fontSize: 8, color: T.faint, letterSpacing: '0.18em', marginTop: -1 }}>WEALTH EVOLVED</div>
           </div>
         </Link>

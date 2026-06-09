@@ -9,6 +9,7 @@ import toast from 'react-hot-toast'
 import { passwordDialog } from '@/components/Dialog'
 import { newRegimeAnnualTax } from '@/lib/tax-slabs'
 import { tokens as T } from '@/lib/tokens'
+import Logo from '@/components/Logo'
 
 interface OfferData {
   employeeName?: string; employerName?: string; designation?: string; joiningDate?: string
@@ -22,17 +23,6 @@ interface OfferData {
 }
 
 const fmt = (n: number) => '₹' + new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(Math.round(n || 0))
-
-function Logo({ size = 30 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 120 120" fill="none">
-      <rect width="120" height="120" rx="16" fill={T.teal} />
-      <polygon points="9,9 21,9 60,101 99,9 111,9 60,111" fill={T.ivory} />
-      <circle cx="90" cy="24" r="18" fill={T.ivory} />
-      <circle cx="90" cy="24" r="11" fill={T.teal} />
-    </svg>
-  )
-}
 
 export default function OfferParserPage() {
   const [status, setStatus] = useState<'idle' | 'parsing' | 'done' | 'error'>('idle')
@@ -102,9 +92,8 @@ export default function OfferParserPage() {
 
       <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 52px', borderBottom: `1px solid ${T.hairline}` }}>
         <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 11 }}>
-          <Logo />
+          <Logo variant="onLight" size={30} />
           <div>
-            <div style={{ fontWeight: 800, fontSize: 19, color: T.ink, letterSpacing: '-0.025em' }}>Arth<span style={{ color: T.teal }}>Vo</span></div>
             <div style={{ fontSize: 8, color: T.faint, letterSpacing: '0.18em', marginTop: -1 }}>WEALTH EVOLVED</div>
           </div>
         </Link>

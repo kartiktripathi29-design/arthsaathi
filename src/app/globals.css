@@ -29,10 +29,10 @@
   --caut-f: #FBF1DD;       /* fill */
   --caut-b: #ECD9AE;       /* border */
 
-  --brand: #1A3C5E;
-  --brand-light: #E8F1FA;
-  --accent: #E67E22;
-  --accent-light: #FEF3E2;
+  --brand: #0E4D47;
+  --brand-light: #E3EDEA;
+  --accent: #0E4D47;
+  --accent-light: #E3EDEA;
   --success: #1E8449;
   --success-light: #E9F7EF;
   --danger: #C0392B;
@@ -55,7 +55,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; c
 .component-deduction { border-left: 3px solid var(--danger); background: var(--danger-light); }
 .component-computed { border-left: 3px solid var(--accent); background: var(--accent-light); }
 .regime-card { transition: all 0.2s; }
-.regime-card.recommended { box-shadow: 0 0 0 2px var(--accent), 0 4px 20px rgba(230,126,34,0.15); }
+.regime-card.recommended { box-shadow: 0 0 0 2px var(--accent), 0 4px 20px rgba(14,77,71,0.15); }
 .chat-user { background: var(--brand); color: white; border-radius: 18px 18px 4px 18px; }
 .chat-assistant { background: white; border: 1px solid var(--border); border-radius: 18px 18px 18px 4px; }
 .nav-link { transition: all 0.15s; }

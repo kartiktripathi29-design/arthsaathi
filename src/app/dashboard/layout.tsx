@@ -6,22 +6,12 @@ import { useAppStore } from '@/store/AppStore'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { useUser } from '@/lib/useUser'
 import { tokens as T } from '@/lib/tokens'
+import Logo from '@/components/Logo'
 
 const SUPABASE_CONFIGURED = !!process.env.NEXT_PUBLIC_SUPABASE_URL
 
 // Dashboard chrome palette (desktop): taupe rail + teal brand cap + sand header.
 const C = { rail: T.taupe, railLine: T.taupeLine, cap: T.teal, accent: T.teal, nav: T.nav, bg: T.paper }
-
-function Logo() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 120 120" fill="none">
-      <rect width="120" height="120" rx="14" fill={T.teal}/>
-      <polygon points="9,9 21,9 60,101 99,9 111,9 60,111" fill={T.ivory}/>
-      <circle cx="90" cy="24" r="18" fill={T.ivory}/>
-      <circle cx="90" cy="24" r="11" fill={T.teal}/>
-    </svg>
-  )
-}
 
 function Sidebar() {
   const pathname = usePathname()
@@ -71,11 +61,8 @@ function Sidebar() {
       {/* Teal brand cap — logo reads in ivory on the teal block */}
       <div style={{ padding: '18px 16px 14px', background: C.cap, display: 'flex', alignItems: 'center', gap: 10 }}>
         <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Logo />
+          <Logo variant="onTeal" size={28} />
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: T.ivory, letterSpacing: '-0.02em', lineHeight: 1.2 }}>
-              Arth<span style={{ color: T.taupe }}>Vo</span>
-            </div>
             <div style={{ fontSize: 8, color: 'rgba(244,238,224,0.5)', letterSpacing: '0.12em', marginTop: 1 }}>WEALTH EVOLVED</div>
           </div>
         </Link>

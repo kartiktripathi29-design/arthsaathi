@@ -2,18 +2,8 @@
 import Link from 'next/link'
 import { useState, useEffect, useRef } from 'react'
 import BgDemo from '@/components/BgDemo'
+import Logo from '@/components/Logo'
 import { tokens as T } from '@/lib/tokens'
-
-function Logo({ size = 36 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 120 120" fill="none">
-      <rect width="120" height="120" rx="16" fill={T.teal}/>
-      <polygon points="9,9 21,9 60,101 99,9 111,9 60,111" fill={T.ivory}/>
-      <circle cx="90" cy="24" r="18" fill={T.ivory}/>
-      <circle cx="90" cy="24" r="11" fill={T.teal}/>
-    </svg>
-  )
-}
 
 function useCountUp(target: number, duration = 1800, start = false) {
   const [count, setCount] = useState(0)
@@ -104,9 +94,8 @@ export default function LandingPage() {
       {/* Sticky nav */}
       <nav style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'16px 52px', borderBottom:`1px solid ${T.hairline}`, position:'sticky', top:0, background:'rgba(248,242,231,0.95)', backdropFilter:'blur(8px)', zIndex:50 }}>
         <Link href="/" style={{ textDecoration:'none', display:'flex', alignItems:'center', gap:11 }}>
-          <Logo size={32} />
+          <Logo variant="onLight" size={32} />
           <div>
-            <div style={{ fontWeight:800, fontSize:19, color:T.ink, letterSpacing:'-0.025em' }}>Arth<span style={{ color:T.teal }}>Vo</span></div>
             <div style={{ fontSize:8, color:T.faint, letterSpacing:'0.18em', marginTop:-1 }}>WEALTH EVOLVED</div>
           </div>
           <span style={{ fontSize:9, background:T.tint, color:T.teal, padding:'3px 8px', borderRadius:20, marginLeft:4, border:`1px solid ${T.slip.border}`, fontWeight:700, letterSpacing:'0.04em' }}>GOV. REGISTERED</span>

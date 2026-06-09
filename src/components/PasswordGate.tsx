@@ -1,5 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { tokens as T } from '@/lib/tokens'
+import Logo from '@/components/Logo'
 
 const PASSWORD = 'Arthvo@2026'
 const SESSION_KEY = 'arthvo_access'
@@ -44,7 +46,7 @@ export function PasswordGate({ children }: { children: React.ReactNode }) {
 
   return (
     <div style={{
-      minHeight: '100vh', background: '#0F2640',
+      minHeight: '100vh', background: T.teal,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       padding: 24,
@@ -52,25 +54,16 @@ export function PasswordGate({ children }: { children: React.ReactNode }) {
       <div style={{ width: '100%', maxWidth: 400, textAlign: 'center' }}>
 
         {/* Logo */}
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
-          <svg width="64" height="64" viewBox="0 0 120 120" fill="none">
-            <rect width="120" height="120" rx="16" fill="#C9A84C"/>
-            <polygon points="9,9 21,9 60,101 99,9 111,9 60,111" fill="#0F2640"/>
-            <circle cx="90" cy="24" r="18" fill="#C9A84C"/>
-            <circle cx="90" cy="24" r="11" fill="#0F2640"/>
-          </svg>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
+          <Logo variant="onTeal" size={64} />
         </div>
-
-        <div style={{ fontSize: 32, fontWeight: 800, color: '#fff', letterSpacing: '-0.02em', marginBottom: 6 }}>
-          Arth<span style={{ color: '#C9A84C' }}>Vo</span>
-        </div>
-        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', letterSpacing: '0.2em', marginBottom: 40, textTransform: 'uppercase' }}>
+        <div style={{ fontSize: 11, color: 'rgba(244,238,224,0.4)', letterSpacing: '0.2em', marginBottom: 40, textTransform: 'uppercase' }}>
           Wealth Evolved
         </div>
 
-        <div style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: '32px 28px' }}>
-          <div style={{ fontSize: 15, fontWeight: 600, color: '#fff', marginBottom: 6 }}>Private Beta</div>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginBottom: 24, lineHeight: 1.6 }}>
+        <div style={{ background: 'rgba(244,238,224,0.06)', border: '1px solid rgba(244,238,224,0.15)', borderRadius: 16, padding: '32px 28px' }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: T.ivory, marginBottom: 6 }}>Private Beta</div>
+          <div style={{ fontSize: 13, color: 'rgba(244,238,224,0.6)', marginBottom: 24, lineHeight: 1.6 }}>
             ArthVo is currently in private testing. Enter the access password to continue.
           </div>
 
@@ -83,9 +76,9 @@ export function PasswordGate({ children }: { children: React.ReactNode }) {
             autoFocus
             style={{
               width: '100%', padding: '12px 16px',
-              background: 'rgba(255,255,255,0.08)',
-              border: `1px solid ${error ? '#E74C3C' : 'rgba(255,255,255,0.15)'}`,
-              borderRadius: 10, fontSize: 14, color: '#fff',
+              background: 'rgba(244,238,224,0.08)',
+              border: `1px solid ${error ? '#E74C3C' : 'rgba(244,238,224,0.2)'}`,
+              borderRadius: 10, fontSize: 14, color: T.ivory,
               outline: 'none', marginBottom: 12,
               fontFamily: 'inherit',
             }}
@@ -100,7 +93,7 @@ export function PasswordGate({ children }: { children: React.ReactNode }) {
           <button onClick={attempt}
             style={{
               width: '100%', padding: '12px',
-              background: '#C9A84C', color: '#0F2640',
+              background: T.taupe, color: T.teal,
               border: 'none', borderRadius: 10,
               fontWeight: 700, fontSize: 14, cursor: 'pointer',
             }}>
@@ -108,7 +101,7 @@ export function PasswordGate({ children }: { children: React.ReactNode }) {
           </button>
         </div>
 
-        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', marginTop: 24 }}>
+        <div style={{ fontSize: 11, color: 'rgba(244,238,224,0.3)', marginTop: 24 }}>
           © 2025 ArthVo · Private Beta
         </div>
       </div>
