@@ -111,7 +111,7 @@ function Sidebar() {
 
         <div style={{ margin: '8px 16px 6px', borderTop: `1px solid ${C.railLine}` }} />
 
-        <Link href="/dashboard/tax" style={{
+        <Link href="/dashboard/tax/optimizer" style={{
           display: 'flex', alignItems: 'center', gap: 9,
           padding: '10px 16px', textDecoration: 'none',
           fontSize: 13, fontFamily: 'inherit',
