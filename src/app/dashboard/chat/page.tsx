@@ -1,5 +1,6 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { useAppStore } from '@/store/AppStore'
 
 import { tokens as T } from '@/lib/tokens'
@@ -19,6 +20,9 @@ const SUGGESTIONS = [
 
 export default function ChatPage() {
   const { salary } = useAppStore()
+  // PHASE-2: remove this guard to re-enable
+  const router = useRouter()
+  useEffect(() => { router.replace('/dashboard/profile/documents') }, [router])
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)

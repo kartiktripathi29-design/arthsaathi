@@ -42,7 +42,7 @@ export default function PrivacyPage() {
         {[
           {
             title: '1. Who we are',
-            content: 'ArthVo is an AI-powered financial guidance platform designed for India\'s working class. We provide salary analysis, tax optimisation, and investment guidance. We are in the process of obtaining SEBI Investment Adviser (RIA) registration. Registered in India.',
+            content: 'ArthVo is an AI-powered financial tool designed for India\'s working class. We provide salary-slip analysis and tax-regime comparison. Registered in India.',
           },
           {
             title: '2. What data we collect',
@@ -122,7 +122,7 @@ export default function PrivacyPage() {
 
         {/* Footer note */}
         <div style={{ background: T.caution.fill, border: `1px solid ${T.caution.border}`, borderRadius: 12, padding: '16px 20px', fontSize: 13, color: T.caution.text, lineHeight: 1.7 }}>
-          ⚠️ <strong>Investment Disclaimer:</strong> ArthVo provides general financial guidance for educational purposes. All investment advice is indicative. Tax calculations are illustrative — consult a CA for ITR filing. We are in the process of obtaining SEBI RIA registration. Past performance of investments is not indicative of future returns.
+          ⚠️ <strong>Disclaimer:</strong> ArthVo is an informational tool, not a registered investment adviser. Tax calculations are illustrative — consult a CA for ITR filing.
         </div>
 
         <div style={{ marginTop: 32, textAlign: 'center' }}>

@@ -9,7 +9,7 @@ import { tokens as T } from '@/lib/tokens'
 
 export const metadata: Metadata = {
   title: 'ArthVo — Wealth Evolved',
-  description: 'SEBI RIA-backed AI financial companion. Parse salary slips, optimise taxes, build wealth.',
+  description: 'Parse your salary slip and compare the old vs new tax regime in minutes.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

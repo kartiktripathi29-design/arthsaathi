@@ -43,7 +43,6 @@ const TICKER_ITEMS = [
   '📑 Works with any salary slip from any company',
   '✅ We tell you which tax option saves you more money',
   '🏦 Finds income you forgot you even had',
-  '🎯 Trusted, government-registered financial advice',
 ]
 
 export default function LandingPage() {
@@ -98,7 +97,6 @@ export default function LandingPage() {
           <div>
             <div style={{ fontSize:8, color:T.faint, letterSpacing:'0.18em', marginTop:-1 }}>WEALTH EVOLVED</div>
           </div>
-          <span style={{ fontSize:9, background:T.tint, color:T.teal, padding:'3px 8px', borderRadius:20, marginLeft:4, border:`1px solid ${T.slip.border}`, fontWeight:700, letterSpacing:'0.04em' }}>GOV. REGISTERED</span>
         </Link>
         <div style={{ display:'flex', gap:8, alignItems:'center' }}>
           <Link href="/login" className="btn-ghost" style={{ padding:'8px 20px', background:'transparent', border:`1px solid ${T.hairline}`, borderRadius:8, color:T.muted, fontWeight:500, textDecoration:'none', fontSize:13 }}>Sign in</Link>
@@ -248,7 +246,7 @@ export default function LandingPage() {
               { num:'01', icon:'📑', title:'Upload your tax document', body:'Download it from the Income Tax website. ArthVo reads it instantly — no manual typing needed.' },
               { num:'02', icon:'🤖', title:'We find everything', body:'Your salary, bank interest, profits from selling shares or property — all found automatically.' },
               { num:'03', icon:'📊', title:'See exactly what you owe', body:'Two tax options compared side by side. We tell you which one puts more money back in your pocket.' },
-              { num:'04', icon:'💡', title:'Get a clear plan', body:'Where to invest, what to claim, how to legally pay less tax. Proper advice — not guesswork.' },
+              { num:'04', icon:'💡', title:'Get a clear plan', body:'Where to invest, what to claim, how to legally pay less tax. A clear plan, in plain English.' },
             ].map((s, i) => (
               <div key={i} style={{ background:T.card, border:`1.5px solid ${T.hairline}`, borderRadius:14, padding:'24px 20px', position:'relative' as const }}>
                 <div style={{ position:'absolute' as const, top:16, right:16, fontSize:11, fontWeight:900, color:T.hairline, letterSpacing:'0.05em' }}>{s.num}</div>
@@ -280,7 +278,7 @@ export default function LandingPage() {
           </Link>
         </div>
         <div style={{ marginTop:24, display:'flex', justifyContent:'center', gap:28, flexWrap:'wrap' as const }}>
-          {['No credit card needed', 'Free to try, no signup', 'Government-registered advisors'].map(t => (
+          {['No credit card needed', 'Free to try, no signup'].map(t => (
             <div key={t} style={{ fontSize:12, color:'rgba(244,238,224,0.3)', display:'flex', alignItems:'center', gap:6 }}>
               <span style={{ color:T.green }}>✓</span> {t}
             </div>
@@ -290,7 +288,7 @@ export default function LandingPage() {
 
       {/* Footer */}
       <div style={{ textAlign:'center', padding:'20px 48px', background:T.ink, fontSize:11, color:'rgba(244,238,224,0.2)' }}>
-        ArthVo provides general financial guidance. Consult a CA for ITR filing. © 2025 ArthVo
+        ArthVo helps you read your salary slip and compare tax regimes. Consult a CA for ITR filing. © 2025 ArthVo
         {' · '}
         <a href="/privacy" style={{ color:'rgba(244,238,224,0.3)', textDecoration:'underline' }}>Privacy</a>
       </div>

@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAppStore } from '@/store/AppStore'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
 import { tokens as T } from '@/lib/tokens'
 
@@ -110,6 +111,9 @@ function AmtInput({ value, onChange }: { value:number; onChange:(n:number)=>void
 
 export default function InvestPage() {
   const { salary } = useAppStore()
+  // PHASE-2: remove this guard to re-enable
+  const router = useRouter()
+  useEffect(() => { router.replace('/dashboard/profile/documents') }, [router])
   const [risk, setRisk] = useState<Risk>('moderate')
   const [goals, setGoals] = useState<Set<GoalKey>>(new Set(['emergency','retirement','wealth']))
   const [plan, setPlan] = useState<InvestRow[]>([])
@@ -311,13 +315,6 @@ export default function InvestPage() {
                 </div>
               )}
 
-              <Link href="/dashboard/chat" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'13px 18px', background:C.fg, borderRadius:6, textDecoration:'none' }}>
-                <div>
-                  <p style={{ fontSize:13, fontWeight:600, color:C.wheat, margin:'0 0 2px' }}>Ask AI Advisor about this plan →</p>
-                  <p style={{ fontSize:11, color:'rgba(230,207,167,0.5)', margin:0 }}>Deep dive into any fund or get alternatives</p>
-                </div>
-                <span style={{ color:C.wheat, fontSize:20 }}>→</span>
-              </Link>
             </>
           )}
         </>

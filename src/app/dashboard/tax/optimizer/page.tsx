@@ -704,13 +704,10 @@ export default function TaxOptimizerPage() {
           // Only surface deductions that still have UNUSED headroom — a fully-claimed deduction
           // (gap = 0) is not a saving opportunity, so it must not appear under "save more".
           const saveItems = [
-            // `project: true` only for wealth-building deductions (80C, NPS) where the unused
-            // gap would be plausibly invested. Health (80D) is a consumed expense and
-            // Home Loan Interest is debt service — neither builds a corpus, so no projection.
-            { label: 'Home Loan Interest', limit: 200000, used: calc.sec24b, project: false },
-            { label: '80C Investments', limit: 150000, used: calc.sec80C, project: true },
-            { label: 'Health Insurance (80D)', limit: 100000, used: calc.sec80D, project: false },
-            { label: 'NPS (80CCD(1B))', limit: 50000, used: calc.nps, project: true },
+            { label: 'Home Loan Interest', limit: 200000, used: calc.sec24b },
+            { label: '80C Investments', limit: 150000, used: calc.sec80C },
+            { label: 'Health Insurance (80D)', limit: 100000, used: calc.sec80D },
+            { label: 'NPS (80CCD(1B))', limit: 50000, used: calc.nps },
           ].filter(s => Math.max(0, s.limit - s.used) > 0)
           if (saveItems.length === 0) {
             return (
@@ -725,38 +722,18 @@ export default function TaxOptimizerPage() {
             const gap = Math.max(0, s.limit - s.used)
             const slabRate = 0.30   // assume 30% marginal slab for upper-middle salary
             const yearlyTaxSaved = gap * slabRate
-            // FV of yearly contribution at end of each period: FV = P × ((1+r)^n - 1) / r
-            // Using a conservative 8% (closer to long-term Indian debt/bank-MF returns) over 15 yrs.
-            const r = 0.08, n = 15
-            const fv = (yearly: number) => Math.round(yearly * (Math.pow(1 + r, n) - 1) / r)
-            // Pick the "yearly investment" reference: prefer unused headroom (encourages topping up),
-            // otherwise fall back to current contribution (encourages staying the course).
-            const yearlyContrib = gap > 0 ? gap : s.used
-            const corpusFromContrib = yearlyContrib > 0 ? fv(yearlyContrib) : 0
-            const corpusFromTaxSaved = yearlyContrib > 0 ? fv(yearlyContrib * slabRate) : 0
             return (
               <div key={s.label} style={{ padding: '10px', background: '#fff', borderRadius: 4, border: `1px solid ${C.border}` }}>
                 <p style={{ fontSize: 10, color: C.muted, margin: '0 0 4px', fontWeight: 500 }}>{s.label}</p>
                 <p style={{ fontSize: 12, fontWeight: 600, color: C.fg, margin: 0 }}>{fmt(gap)} unused</p>
                 <p style={{ fontSize: 9, color: C.muted, margin: '4px 0 0' }}>Annual tax saved ~{fmt(yearlyTaxSaved)}</p>
-                {s.project && corpusFromContrib > 0 && (
-                  <div style={{ marginTop: 6, padding: '6px 8px', background: '#F0F9F4', border: '1px solid #CFE6D8', borderRadius: 4 }}>
-                    <p style={{ fontSize: 9, color: C.muted, margin: '0 0 4px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Illustration · assumes 8%/yr for 15 yrs (not a forecast)</p>
-                    <p style={{ fontSize: 9.5, color: '#2A7A4A', margin: 0, lineHeight: 1.5 }}>
-                      💰 <strong>{fmt(yearlyContrib)}/yr</strong> invested could grow to <strong>~{fmt(corpusFromContrib)}</strong>.
-                    </p>
-                    <p style={{ fontSize: 9.5, color: '#2A7A4A', margin: '2px 0 0', lineHeight: 1.5 }}>
-                      💸 <strong>{fmt(yearlyContrib * slabRate)}/yr</strong> tax saved (@ 30%) could grow to <strong>~{fmt(corpusFromTaxSaved)}</strong>.
-                    </p>
-                  </div>
-                )}
               </div>
             )
           })}
           </div>
           )
         })()}
-        <p style={{ fontSize: 10, color: C.muted, margin: '12px 0 0', fontStyle: 'italic' }}>Projections are illustrative only — they assume a constant 8% annual return; actual returns vary and are not guaranteed. Only invest if it makes financial sense; tax saving is a bonus, not the goal.</p>
+        <p style={{ fontSize: 10, color: C.muted, margin: '12px 0 0', fontStyle: 'italic' }}>Only invest if it makes financial sense — tax saving is a bonus, not the goal.</p>
       </div>
 
       <div style={{ display: 'flex', gap: 12 }}>

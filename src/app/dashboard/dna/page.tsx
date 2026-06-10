@@ -144,6 +144,8 @@ const PROFILES: Record<string, any> = {
 
 export default function DNAPage() {
   const router = useRouter()
+  // PHASE-2: remove this guard to re-enable
+  useEffect(() => { router.replace('/dashboard/profile/documents') }, [router])
   const [step, setStep] = useState<'quiz'|'processing'|'result'>('quiz')
   const [current, setCurrent] = useState(0)
   const [scores, setScores] = useState({ E:0, B:0, P:0, O:0 })

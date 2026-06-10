@@ -66,7 +66,6 @@ export default function BgDemo() {
           </svg>
           <span style={{ fontWeight: 800, fontSize: 14, color: T.ink }}>Arth<span style={{ color: T.teal }}>Vo</span></span>
         </div>
-        <span style={{ fontSize: 9, color: T.slip.text, background: T.slip.fill, border: `1px solid ${T.slip.border}`, padding: '2px 6px', borderRadius: 20, fontWeight: 600 }}>SEBI RIA</span>
       </div>
 
       <div style={s.nav}>

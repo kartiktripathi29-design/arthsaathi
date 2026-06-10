@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useAppStore } from '@/store/AppStore'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
 import { tokens as T } from '@/lib/tokens'
 
@@ -17,6 +18,9 @@ type Step = 'input' | 'verdict'
 
 export default function DecidePage() {
   const { salary } = useAppStore()
+  // PHASE-2: remove this guard to re-enable
+  const router = useRouter()
+  useEffect(() => { router.replace('/dashboard/profile/documents') }, [router])
   const [step, setStep] = useState<Step>('input')
   const [itemName, setItemName] = useState('')
   const [price, setPrice] = useState('')
