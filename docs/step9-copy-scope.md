@@ -12,7 +12,7 @@ Carve-out: never rename "exemption"/"deduction"/section numbers where they are t
 - Tagline / wordmark — replace "Wealth Evolved" everywhere, sized to placement (3 tiers):
   - Tier 1 (tight in-app chrome): wordmark "ArthVo" ALONE, no descriptor. Locations: dashboard/layout.tsx:66 (sidebar cap), page.tsx:98 (landing nav), offer/page.tsx:97 (offer nav).
   - Tier 2 (first-touch / orientation):
-    - Auth screens -> "Your tax, finally in plain English". Locations: signup/page.tsx:38, login/page.tsx:37, components/PasswordGate.tsx:61.
+    - Auth screens + password gate show the wordmark ALONE, no tagline (matches in-app nav chrome). Locations: signup/page.tsx, login/page.tsx, components/PasswordGate.tsx. The auth/gate descriptor was tried and removed — auth users already know the product; descriptor now lives only in metadata.
     - Metadata / browser tab -> "ArthVo — your income tax, in plain English". Location: layout.tsx:11.
   - Tier 3 (landing hero brand line + enlarged centred logo): DEFERRED to the landing rebuild / Phase-2. The Phase-1 lines above are functional descriptors, NOT the permanent brand tagline.
 - Optional: spell out AIS / CTC / TDS once at first use.
