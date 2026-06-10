@@ -94,9 +94,6 @@ export default function LandingPage() {
       <nav style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'16px 52px', borderBottom:`1px solid ${T.hairline}`, position:'sticky', top:0, background:'rgba(248,242,231,0.95)', backdropFilter:'blur(8px)', zIndex:50 }}>
         <Link href="/" style={{ textDecoration:'none', display:'flex', alignItems:'center', gap:11 }}>
           <Logo variant="onLight" size={32} />
-          <div>
-            <div style={{ fontSize:8, color:T.faint, letterSpacing:'0.18em', marginTop:-1 }}>WEALTH EVOLVED</div>
-          </div>
         </Link>
         <div style={{ display:'flex', gap:8, alignItems:'center' }}>
           <Link href="/login" className="btn-ghost" style={{ padding:'8px 20px', background:'transparent', border:`1px solid ${T.hairline}`, borderRadius:8, color:T.muted, fontWeight:500, textDecoration:'none', fontSize:13 }}>Sign in</Link>

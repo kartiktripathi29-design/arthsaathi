@@ -124,12 +124,12 @@ export default function OtherIncomePage() {
   }, [])
 
   const types = [
-    { key: 'freelance', icon: '💼', label: 'Freelance / Consulting', desc: 'Professional services. You can claim 50% as presumptive (44ADA) or actual expenses.' },
-    { key: 'equity', icon: '📈', label: 'Stocks & Mutual Funds', desc: 'Capital gains. Long-term (>1 yr): 12.5% above ₹1.25L. Short-term: 20%.' },
-    { key: 'crypto', icon: '₿', label: 'Crypto / VDA', desc: 'Digital assets. Taxed at flat 30% — no deductions allowed.' },
-    { key: 'fno', icon: '📊', label: 'F&O / Intraday', desc: 'Derivatives trading. Taxed at your slab rate.' },
-    { key: 'interest', icon: '🏦', label: 'Interest & Dividends', desc: 'FD interest, savings interest, dividends. Taxed at slab rate.' },
-    { key: 'other', icon: '➕', label: 'Other earnings', desc: 'Anything that doesn\'t fit above (royalties, casual income, gifts beyond limit, etc.) Single amount, taxed at slab.' },
+    { key: 'freelance', icon: '💼', label: 'Freelance / Consulting', desc: 'Professional or consulting income. Declare 50% profit (if eligible) or actual income minus expenses.' },
+    { key: 'equity', icon: '📈', label: 'Stocks & Mutual Funds', desc: 'Shares or funds you bought and later sold. Taxed as capital gains.' },
+    { key: 'crypto', icon: '₿', label: 'Crypto', desc: 'Crypto, NFTs and other virtual digital assets. Flat 30% — losses can\'t be offset.' },
+    { key: 'fno', icon: '📊', label: 'Trading (intraday & F&O)', desc: 'Intraday or F&O. Taxed as business income, not capital gains.' },
+    { key: 'interest', icon: '🏦', label: 'Interest & Dividends', desc: 'FD interest, savings interest and dividends. Taxed at your slab rate.' },
+    { key: 'other', icon: '➕', label: 'Other earnings', desc: 'Anything else — rent, royalties, gifts. Taxed at your slab rate.' },
   ]
 
   const getTaxablePreview = (entry: OtherIncomeEntry) => {
@@ -212,7 +212,7 @@ export default function OtherIncomePage() {
       {/* AIS prefill / reconciliation — shown when an AIS/26AS was parsed on the Documents page */}
       {aisData && aisHasIncome && (
         <div style={{ background: '#EAF4EF', border: '1px solid #BCDCCB', borderRadius: 8, padding: 16, marginBottom: 24 }}>
-          <p style={{ fontSize: 12, fontWeight: 600, color: C.fg, margin: '0 0 6px' }}>📄 Income found in your AIS / 26AS</p>
+          <p style={{ fontSize: 12, fontWeight: 600, color: C.fg, margin: '0 0 6px' }}>📄 Found from your AIS: interest, dividends and capital gains. Add freelance, crypto, F&O and rent manually below.</p>
           <p style={{ fontSize: 12, color: C.text, margin: '0 0 10px', lineHeight: 1.6 }}>
             Interest <strong>{fmt(aisInterest)}</strong> · Dividends <strong>{fmt(aisDividends)}</strong> · Capital gains <strong>{fmt(aisCG)}</strong>
           </p>
@@ -306,11 +306,11 @@ export default function OtherIncomePage() {
                     <label style={{ fontSize: 12, fontWeight: 500, color: C.text, marginBottom: 6, display: 'block' }}>How do you want to declare?</label>
                     <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, cursor: 'pointer' }}>
                       <input type="radio" checked={openForm.declarationMethod === 'presumptive_44ada'} onChange={() => setOpenForm({ ...openForm, declarationMethod: 'presumptive_44ada' })} />
-                      <div><div style={{ fontSize: 12, fontWeight: 500, color: C.text }}>Section 44ADA (50% presumptive)</div><div style={{ fontSize: 10.5, color: C.muted }}>Simpler, no expense tracking needed</div></div>
+                      <div><div style={{ fontSize: 12, fontWeight: 500, color: C.text }}>Declare 50% as profit (simpler)</div><div style={{ fontSize: 10.5, color: C.muted }}>Section 44ADA · if eligible · no expense tracking</div></div>
                     </label>
                     <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                       <input type="radio" checked={openForm.declarationMethod === 'actual'} onChange={() => setOpenForm({ ...openForm, declarationMethod: 'actual' })} />
-                      <div><div style={{ fontSize: 12, fontWeight: 500, color: C.text }}>Actual income (gross minus expenses)</div><div style={{ fontSize: 10.5, color: C.muted }}>Need to track expenses</div></div>
+                      <div><div style={{ fontSize: 12, fontWeight: 500, color: C.text }}>Report actual income (minus expenses)</div><div style={{ fontSize: 10.5, color: C.muted }}>Need to track expenses</div></div>
                     </label>
                   </div>
                   {openForm.declarationMethod === 'actual' && (

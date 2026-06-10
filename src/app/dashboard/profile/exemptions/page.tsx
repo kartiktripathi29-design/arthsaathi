@@ -490,7 +490,7 @@ export default function ExemptionsPage() {
       <SimpleSection
         open={expanded.includes('superann')}
         onToggle={() => toggle('superann')}
-        q="Superannuation fund contribution"
+        q="Did your employer contribute to a superannuation fund?"
         sub="Employer contribution · exempt up to 15% of (basic + DA)"
         value={s.superannuation}
         onChange={(v) => update('superannuation', v)}
@@ -501,7 +501,7 @@ export default function ExemptionsPage() {
       <SimpleSection
         open={expanded.includes('pf')}
         onToggle={() => toggle('pf')}
-        q="PF withdrawal on retirement / separation"
+        q="Did you withdraw your PF when leaving a job?"
         sub="Tax-free after 5 yrs' service or on retirement"
         value={s.pfWithdrawal}
         onChange={(v) => update('pfWithdrawal', v)}

@@ -1612,7 +1612,7 @@ export default function SalaryPageCompleteFinal() {
                                     }}
                                     style={{ padding: '3px 8px', background: '#E07B3A', color: '#fff', border: 'none', borderRadius: 3, fontSize: 10, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'uppercase', letterSpacing: '0.03em' }}
                                   >
-                                    Override
+                                    Edit
                                   </button>
                                 )}
                               </div>
@@ -1654,7 +1654,7 @@ export default function SalaryPageCompleteFinal() {
                                     }}
                                     style={{ padding: '3px 8px', background: '#E07B3A', color: '#fff', border: 'none', borderRadius: 3, fontSize: 10, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'uppercase', letterSpacing: '0.03em' }}
                                   >
-                                    Override
+                                    Edit
                                   </button>
                                 )}
                               </div>

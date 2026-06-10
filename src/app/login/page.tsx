@@ -34,7 +34,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 11 }}>
           <Logo variant="onLight" size={32} />
           <div>
-            <div style={{ fontSize: 8, color: T.faint, letterSpacing: '0.18em', marginTop: -1 }}>WEALTH EVOLVED</div>
+            <div style={{ fontSize: 8, color: T.faint, letterSpacing: '0.18em', marginTop: -1 }}>Your tax, finally in plain English</div>
           </div>
         </Link>
         <div style={{ fontSize: 13, color: C.sub }}>New to ArthVo?{' '}<Link href="/signup" style={{ color: C.green, fontWeight: 600, textDecoration: 'none' }}>Sign up</Link></div>

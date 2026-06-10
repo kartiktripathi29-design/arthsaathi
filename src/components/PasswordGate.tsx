@@ -58,7 +58,7 @@ export function PasswordGate({ children }: { children: React.ReactNode }) {
           <Logo variant="onTeal" size={64} />
         </div>
         <div style={{ fontSize: 11, color: 'rgba(244,238,224,0.4)', letterSpacing: '0.2em', marginBottom: 40, textTransform: 'uppercase' }}>
-          Wealth Evolved
+          Your tax, finally in plain English
         </div>
 
         <div style={{ background: 'rgba(244,238,224,0.06)', border: '1px solid rgba(244,238,224,0.15)', borderRadius: 16, padding: '32px 28px' }}>

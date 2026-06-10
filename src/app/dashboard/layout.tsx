@@ -62,9 +62,6 @@ function Sidebar() {
       <div style={{ padding: '18px 16px 14px', background: C.cap, display: 'flex', alignItems: 'center', gap: 10 }}>
         <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
           <Logo variant="onTeal" size={28} />
-          <div>
-            <div style={{ fontSize: 8, color: 'rgba(244,238,224,0.5)', letterSpacing: '0.12em', marginTop: 1 }}>WEALTH EVOLVED</div>
-          </div>
         </Link>
       </div>
 

@@ -93,9 +93,6 @@ export default function OfferParserPage() {
       <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 52px', borderBottom: `1px solid ${T.hairline}` }}>
         <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 11 }}>
           <Logo variant="onLight" size={30} />
-          <div>
-            <div style={{ fontSize: 8, color: T.faint, letterSpacing: '0.18em', marginTop: -1 }}>WEALTH EVOLVED</div>
-          </div>
         </Link>
         <div style={{ fontSize: 13, color: T.muted }}>
           <Link href="/login" style={{ color: T.teal, fontWeight: 600, textDecoration: 'none' }}>Sign in</Link>

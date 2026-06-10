@@ -8,7 +8,7 @@ import SyncProvider from '@/components/SyncProvider'
 import { tokens as T } from '@/lib/tokens'
 
 export const metadata: Metadata = {
-  title: 'ArthVo — Wealth Evolved',
+  title: 'ArthVo — your income tax, in plain English',
   description: 'Parse your salary slip and compare the old vs new tax regime in minutes.',
 }
 

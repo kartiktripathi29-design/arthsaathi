@@ -423,10 +423,10 @@ export default function DeductionsPage() {
                     backgroundPosition: 'right 10px center',
                   }}
                 >
-                  <option value="100NoLimit">100% · No limit</option>
-                  <option value="50NoLimit">50% · No limit</option>
-                  <option value="100WithLimit">100% · 10% AGTI cap</option>
-                  <option value="50WithLimit">50% · 10% AGTI cap</option>
+                  <option value="100NoLimit">100% — no limit</option>
+                  <option value="50NoLimit">50% — no limit</option>
+                  <option value="100WithLimit">100% — capped at 10% of income</option>
+                  <option value="50WithLimit">50% — capped at 10% of income</option>
                 </select>
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden', height: 36, boxSizing: 'border-box' }}>
                   <span style={{ padding: '0 10px', height: '100%', display: 'flex', alignItems: 'center', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
