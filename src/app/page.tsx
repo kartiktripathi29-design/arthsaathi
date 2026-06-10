@@ -23,22 +23,14 @@ function useCountUp(target: number, duration = 1800, start = false) {
   return count
 }
 
-function StatCard({ num, suffix, label, sublabel, started }: { num: number; suffix: string; label: string; sublabel: string; started: boolean }) {
-  const count = useCountUp(num, 1600, started)
+function StatCard({ label, started }: { label: string; started: boolean }) {
   return (
-    <div style={{ textAlign: 'center', padding: '28px 16px' }}>
-      <div style={{ fontSize: 'clamp(32px,5vw,52px)', fontWeight: 900, color: T.green, letterSpacing: '-0.04em', lineHeight: 1, fontFamily: '"Sora",sans-serif' }}>
-        {num >= 1000 ? `₹${(count/100).toFixed(0)}L` : count}{suffix}
-      </div>
-      <div style={{ fontSize: 15, fontWeight: 700, color: T.ink, marginTop: 8, fontFamily: '"Sora",sans-serif' }}>{label}</div>
-      <div style={{ fontSize: 12, color: T.muted, marginTop: 4, lineHeight: 1.5 }}>{sublabel}</div>
-    </div>
+    <span style={{ background: T.tint, color: T.teal, padding: '7px 16px', borderRadius: 100, fontSize: 13, fontWeight: 600, fontFamily: '"Sora",sans-serif', opacity: started ? 1 : 0, transition: 'opacity 0.6s ease' }}>{label}</span>
   )
 }
 
 const TICKER_ITEMS = [
   '🇮🇳 Made for every working Indian',
-  '💸 Most users save ₹68,000 in taxes every year',
   '⚡ Know your exact taxes in under 8 minutes',
   '🔒 Your documents stay private — always',
   '📑 Works with any salary slip from any company',
@@ -116,7 +108,7 @@ export default function LandingPage() {
 
       {/* HERO */}
       <div style={{ maxWidth:860, margin:'0 auto', padding:'80px 48px 32px', textAlign:'center' }}>
-        <h1 className="fu d2" style={{ fontSize:'clamp(38px, 6.5vw, 72px)', fontWeight:900, lineHeight:1.04, letterSpacing:'-0.04em', color:T.ink, marginBottom:8 }}>
+        <h1 className="fu d2" style={{ fontSize:'clamp(32px, 5vw, 54px)', fontWeight:900, lineHeight:1.04, letterSpacing:'-0.04em', color:T.ink, marginBottom:8 }}>
           Your employer taxed what they knew.<br />
           <span style={{ color:T.teal }} className="highlight">Not what's true for you.</span>
         </h1>
@@ -174,18 +166,16 @@ export default function LandingPage() {
         </div>
       </div>
 
-      {/* Stats strip — dark section: number → green (positive + pops on dark) */}
-      <div ref={statsRef} style={{ background:T.ink, padding:'0 48px' }}>
-        <div style={{ maxWidth:960, margin:'0 auto', display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:0 }}>
+      {/* Stats strip — light pill row: claims as soft teal pills on the paper background */}
+      <div ref={statsRef} style={{ padding:'32px 24px' }}>
+        <div style={{ maxWidth:960, margin:'0 auto', display:'flex', flexWrap:'wrap' as const, justifyContent:'center', alignItems:'center', gap:10 }}>
           {[
-            { num: 6800, suffix: '+', label: 'Average tax saved', sublabel: 'per person, per year' },
-            { num: 8, suffix: ' min', label: 'Start to finish', sublabel: 'upload your doc, get your answer' },
-            { num: 100, suffix: '%', label: 'Reads any slip', sublabel: 'any company, any format' },
-            { num: 0, suffix: ' ₹ fee', label: 'Forever free', sublabel: 'no credit card, no catch' },
+            'Free',
+            'Reads any payslip',
+            'The right regime for you',
+            'In minutes',
           ].map((s, i) => (
-            <div key={i} style={{ borderRight: i < 3 ? '1px solid rgba(244,238,224,0.07)' : 'none' }}>
-              <StatCard {...s} started={statsVisible} />
-            </div>
+            <StatCard key={i} label={s} started={statsVisible} />
           ))}
         </div>
       </div>
