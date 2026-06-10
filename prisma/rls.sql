@@ -9,6 +9,7 @@
     ALTER TABLE "ActivityEvent"    ENABLE ROW LEVEL SECURITY;
     ALTER TABLE "SalarySlip"       ENABLE ROW LEVEL SECURITY;
     ALTER TABLE "UserProfile"      ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE "UserData"         ENABLE ROW LEVEL SECURITY;
 
     CREATE POLICY user_select_own ON "User" FOR SELECT TO authenticated USING (id = (select auth.uid())::text);
     CREATE POLICY user_update_own ON "User" FOR UPDATE TO authenticated USING (id = (select auth.uid())::text);
@@ -22,6 +23,7 @@
     CREATE POLICY activity_owner ON "ActivityEvent" FOR ALL TO authenticated USING ("userId" = (select auth.uid())::text) WITH CHECK ("userId" = (select auth.uid())::text);
     CREATE POLICY salary_owner ON "SalarySlip" FOR ALL TO authenticated USING ("userId" = (select auth.uid())::text) WITH CHECK ("userId" = (select auth.uid())::text);
     CREATE POLICY profile_owner ON "UserProfile" FOR ALL TO authenticated USING ("userId" = (select auth.uid())::text) WITH CHECK ("userId" = (select auth.uid())::text);
+    CREATE POLICY userdata_owner ON "UserData" FOR ALL TO authenticated USING ("userId" = (select auth.uid())::text) WITH CHECK ("userId" = (select auth.uid())::text);
 
     CREATE POLICY "bank_statements_owner_select" ON storage.objects FOR SELECT TO authenticated USING (bucket_id = 'bank-statements' AND (storage.foldername(name))[1] = (select auth.uid())::text);
     CREATE POLICY "bank_statements_owner_insert" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'bank-statements' AND (storage.foldername(name))[1] = (select auth.uid())::text);
