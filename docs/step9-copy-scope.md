@@ -9,7 +9,12 @@ Carve-out: never rename "exemption"/"deduction"/section numbers where they are t
 - Deductions (deductions/page.tsx): 80G donation dropdown + bucket/eligibility wording ("100% / No limit / 10% AGTI cap" -> plain). [PENDING]
 - Allowances (exemptions/page.tsx): two headlines still leading with jargon -> plain questions. "Superannuation fund contribution" (~:493), "PF withdrawal on retirement / separation" (~:504). [PENDING]
 - Salary (salary/page.tsx): "Override" (~:1615) -> "Edit manually". [PENDING]
-- Master tagline "Wealth Evolved" -> [PENDING pick]. 7 locations: layout.tsx:11, dashboard/layout.tsx:66, page.tsx:98, offer/page.tsx:97, signup/page.tsx:38, login/page.tsx:37, components/PasswordGate.tsx:61.
+- Tagline / wordmark — replace "Wealth Evolved" everywhere, sized to placement (3 tiers):
+  - Tier 1 (tight in-app chrome): wordmark "ArthVo" ALONE, no descriptor. Locations: dashboard/layout.tsx:66 (sidebar cap), page.tsx:98 (landing nav), offer/page.tsx:97 (offer nav).
+  - Tier 2 (first-touch / orientation):
+    - Auth screens -> "Your tax, finally in plain English". Locations: signup/page.tsx:38, login/page.tsx:37, components/PasswordGate.tsx:61.
+    - Metadata / browser tab -> "ArthVo — your income tax, in plain English". Location: layout.tsx:11.
+  - Tier 3 (landing hero brand line + enlarged centred logo): DEFERRED to the landing rebuild / Phase-2. The Phase-1 lines above are functional descriptors, NOT the permanent brand tagline.
 - Optional: spell out AIS / CTC / TDS once at first use.
 
 ## LEAVE PRECISE (do NOT rewrite)

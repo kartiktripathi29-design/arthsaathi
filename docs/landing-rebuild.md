@@ -14,7 +14,7 @@ This is a second claims-removal pass + bug fixes + copy + UI, NOT a copy-only it
 - StatCard label is dark-on-dark on the dark stats strip (:32 ink text on :171 ink bg) — near-invisible.
 
 ## OLD POSITIONING
-- "WEALTH EVOLVED" tagline (:98) — swapped via the global tagline change.
+- Tagline: chrome handled in Step 9 (3-tier split — wordmark alone in-app; functional descriptor on auth/metadata). The STORYTELLING brand line + enlarged centred-logo hero treatment is to be designed HERE as part of the hero composition, at Phase-2 execution. Do not reuse the Phase-1 functional descriptor as the permanent tagline.
 - "8 minutes" repeated 5x: :41, :132, :175, :241, :272 — decide keep/cut. [PENDING]
 - BgDemo mock (:166) shows dummy savings/figures.
 
