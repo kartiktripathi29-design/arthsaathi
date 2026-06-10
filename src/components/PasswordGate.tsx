@@ -54,11 +54,8 @@ export function PasswordGate({ children }: { children: React.ReactNode }) {
       <div style={{ width: '100%', maxWidth: 400, textAlign: 'center' }}>
 
         {/* Logo */}
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 40 }}>
           <Logo variant="onTeal" size={64} />
-        </div>
-        <div style={{ fontSize: 11, color: 'rgba(244,238,224,0.4)', letterSpacing: '0.2em', marginBottom: 40, textTransform: 'uppercase' }}>
-          Your tax, finally in plain English
         </div>
 
         <div style={{ background: 'rgba(244,238,224,0.06)', border: '1px solid rgba(244,238,224,0.15)', borderRadius: 16, padding: '32px 28px' }}>
