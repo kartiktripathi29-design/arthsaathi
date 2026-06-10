@@ -116,25 +116,18 @@ export default function LandingPage() {
 
       {/* HERO */}
       <div style={{ maxWidth:860, margin:'0 auto', padding:'80px 48px 32px', textAlign:'center' }}>
-        {/* dark badge on light page — text → ivory, pulse dot → green for visibility */}
-        <div className="fu d1" style={{ display:'inline-flex', alignItems:'center', gap:8, background:T.ink, color:T.ivory, padding:'6px 18px', borderRadius:100, fontSize:12, marginBottom:28, fontWeight:600, letterSpacing:'0.02em' }}>
-          <span style={{ width:6, height:6, borderRadius:'50%', background:T.green, display:'inline-block', animation:'pulse 2s infinite' }} />
-          ₹68,000 is sitting in your pocket. You just don't know it yet.
-        </div>
-
         <h1 className="fu d2" style={{ fontSize:'clamp(38px, 6.5vw, 72px)', fontWeight:900, lineHeight:1.04, letterSpacing:'-0.04em', color:T.ink, marginBottom:8 }}>
-          Stop overpaying tax.<br />
-          <span style={{ color:T.teal }} className="highlight">Start this year.</span>
+          Your employer taxed what they knew.<br />
+          <span style={{ color:T.teal }} className="highlight">Not what's true for you.</span>
         </h1>
 
         <p className="fu d3" style={{ fontSize:'clamp(15px,2vw,18px)', color:T.muted, margin:'20px auto 32px', maxWidth:520, lineHeight:1.75, fontWeight:400 }}>
-          Upload your government tax document. In 8 minutes, ArthVo shows you exactly how much tax you've been overpaying — and exactly how to get it back.
+          One slip. Your real tax — and which regime it belongs in.
         </p>
 
         {/* Quick calculator */}
         <div className="fu d4" style={{ background:T.card, border:`1.5px solid ${T.hairline}`, borderRadius:16, padding:'24px 28px', maxWidth:440, margin:'0 auto 12px', textAlign:'left' }}>
           <div style={{ fontSize:13, fontWeight:700, color:T.teal, marginBottom:12 }}>Quick estimate — what's your monthly salary?</div>
-          <div style={{ fontSize:12.5, color:T.muted, lineHeight:1.5, marginBottom:14 }}>Your employer taxed what they knew. Not what's true for you.</div>
           <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:taxSaving !== null ? 14 : 0 }}>
             <div style={{ display:'flex', flex:1, border:`1.5px solid ${T.hairline}`, borderRadius:10, overflow:'hidden', background:T.card }}>
               <span style={{ padding:'11px 12px', fontSize:15, color:T.teal, fontWeight:700, borderRight:`1px solid ${T.hairline}` }}>₹</span>
