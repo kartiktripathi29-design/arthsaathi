@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import BgDemo from '@/components/BgDemo'
 import Logo from '@/components/Logo'
 import { tokens as T } from '@/lib/tokens'
+import { estimateAnnualTax } from '@/lib/tax-slabs'
 
 function useCountUp(target: number, duration = 1800, start = false) {
   const [count, setCount] = useState(0)
@@ -48,7 +49,7 @@ const TICKER_ITEMS = [
 export default function LandingPage() {
   const [statsVisible, setStatsVisible] = useState(false)
   const [salary, setSalary] = useState('')
-  const [taxSaving, setTaxSaving] = useState<number | null>(null)
+  const [taxSaving, setTaxSaving] = useState<{ monthly: number; newTax: number; oldTax: number } | null>(null)
   const statsRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -61,8 +62,9 @@ export default function LandingPage() {
     const monthly = parseFloat(s.replace(/,/g, '')) || 0
     if (!monthly) { setTaxSaving(null); return }
     const annual = monthly * 12
-    const saving = Math.max(0, Math.round(annual * 0.06))
-    setTaxSaving(saving > 0 ? saving : null)
+    const newTax = estimateAnnualTax(annual, 'new')
+    const oldTax = estimateAnnualTax(annual, 'old')
+    setTaxSaving({ monthly, newTax, oldTax })
   }
 
   return (
@@ -132,6 +134,7 @@ export default function LandingPage() {
         {/* Quick calculator */}
         <div className="fu d4" style={{ background:T.card, border:`1.5px solid ${T.hairline}`, borderRadius:16, padding:'24px 28px', maxWidth:440, margin:'0 auto 12px', textAlign:'left' }}>
           <div style={{ fontSize:13, fontWeight:700, color:T.teal, marginBottom:12 }}>Quick estimate — what's your monthly salary?</div>
+          <div style={{ fontSize:12.5, color:T.muted, lineHeight:1.5, marginBottom:14 }}>Your employer taxed what they knew. Not what's true for you.</div>
           <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:taxSaving !== null ? 14 : 0 }}>
             <div style={{ display:'flex', flex:1, border:`1.5px solid ${T.hairline}`, borderRadius:10, overflow:'hidden', background:T.card }}>
               <span style={{ padding:'11px 12px', fontSize:15, color:T.teal, fontWeight:700, borderRight:`1px solid ${T.hairline}` }}>₹</span>
@@ -145,8 +148,22 @@ export default function LandingPage() {
             </Link>
           </div>
           {taxSaving !== null && (
-            <div style={{ background:T.slip.fill, borderRadius:8, padding:'10px 14px', fontSize:13, color:T.slip.text, fontWeight:500 }}>
-              🎉 You could save approx. <strong style={{ color:T.green }}>₹{taxSaving.toLocaleString('en-IN')}/year</strong> by picking the right tax option.
+            <div style={{ marginTop:14, borderTop:`1px solid ${T.hairline}`, paddingTop:14 }}>
+              <div style={{ fontSize:12, color:T.muted, marginBottom:14 }}>You're on one of these two. Probably without choosing.</div>
+              <div style={{ display:'flex', gap:10, marginBottom:6 }}>
+                <div style={{ flex:1, background:T.paper, border:`1px solid ${T.hairline}`, borderRadius:10, padding:'12px 14px' }}>
+                  <div style={{ fontSize:11, color:T.muted, fontWeight:600, marginBottom:4 }}>New regime</div>
+                  <div style={{ fontSize:20, fontWeight:800, color:T.ink, letterSpacing:'-0.02em' }}>₹{taxSaving.newTax.toLocaleString('en-IN')}</div>
+                </div>
+                <div style={{ flex:1, background:T.paper, border:`1px solid ${T.hairline}`, borderRadius:10, padding:'12px 14px' }}>
+                  <div style={{ fontSize:11, color:T.muted, fontWeight:600, marginBottom:4 }}>Old regime</div>
+                  <div style={{ fontSize:20, fontWeight:800, color:T.ink, letterSpacing:'-0.02em' }}>₹{taxSaving.oldTax.toLocaleString('en-IN')}</div>
+                </div>
+              </div>
+              <div style={{ fontSize:11, color:T.faint, marginBottom:14 }}>on ₹{taxSaving.monthly.toLocaleString('en-IN')}/month · before your deductions</div>
+              <div style={{ fontSize:12.5, color:T.muted, lineHeight:1.6, marginBottom:14 }}>Which one's actually yours depends on what you can claim — and running the comparison is the only way to know.</div>
+              <div style={{ fontSize:10.5, color:T.faint, lineHeight:1.5, marginBottom:14 }}>Estimate on salary alone — your deductions change it.</div>
+              <Link href="/signup" className="btn-green" style={{ display:'inline-block', padding:'11px 20px', background:T.teal, color:T.ivory, borderRadius:10, fontWeight:700, fontSize:13, textDecoration:'none' }}>See which one's yours →</Link>
             </div>
           )}
         </div>
