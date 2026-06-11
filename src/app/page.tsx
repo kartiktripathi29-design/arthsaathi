@@ -57,7 +57,7 @@ export default function LandingPage() {
       {/* HERO */}
       <div style={{ maxWidth:1000, margin:'0 auto', padding:'80px 32px 32px', textAlign:'center' }}>
         <h1 className="fu d2" style={{ fontSize:'clamp(32px, 5vw, 54px)', fontWeight:900, lineHeight:1.04, letterSpacing:'-0.04em', color:T.ink, marginBottom:8 }}>
-          Your employer taxed what they knew.<br />
+          <span style={{ display:'block' }}>Your employer taxed<br />what they knew.</span>
           <span style={{ color:T.teal }} className="highlight">Not what's true for you.</span>
         </h1>
 
