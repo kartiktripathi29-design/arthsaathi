@@ -24,6 +24,7 @@ export const tokens = {
   green: '#157A5B',        // real positives only — refund / recommended / progress / Example / slip pill text
   hairline: '#E7DEC9',     // dividers
   tint: '#E3EDEA',         // soft badge / active-nav background
+  marigold: '#B07F1A',     // attention accent — empty/pending values, reveal flash ONLY; never decoration
 
   /** "found-on-slip" pill */
   slip: {

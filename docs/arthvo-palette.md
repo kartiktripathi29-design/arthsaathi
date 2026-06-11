@@ -14,6 +14,7 @@ only — no raw hex in components.
 --cta-label:#111111; --ivory:#F4EEE0;
 --teal:#0E4D47; --green:#157A5B;
 --hairline:#E7DEC9; --tint:#E3EDEA;
+--marigold:#B07F1A;
 --slip-t:#157A5B; --slip-f:#E7F3EC; --slip-b:#BFE0CC;
 --caut-t:#9A6B16; --caut-f:#FBF1DD; --caut-b:#ECD9AE;
 ```
@@ -38,6 +39,7 @@ only — no raw hex in components.
 | `green` | `#157A5B` | real positives only — refund / recommended / progress / Example / slip pill text |
 | `hairline` | `#E7DEC9` | dividers |
 | `tint` | `#E3EDEA` | soft badge / active-nav background |
+| `marigold` | `#B07F1A` | attention accent — empty/pending values, reveal flash ONLY; never decoration |
 
 ### Slip set — "found-on-slip" pill
 
