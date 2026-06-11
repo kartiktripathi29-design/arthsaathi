@@ -166,7 +166,7 @@ export default function LandingPage() {
           Know what you owe.<br />
           <span style={{ color:T.green }}>And which regime is yours.</span>
         </h2>
-        <p style={{ fontSize:16, color:'rgba(244,238,224,0.5)', marginBottom:44, maxWidth:400, margin:'0 auto 44px', lineHeight:1.75 }}>
+        <p style={{ fontSize:16, color:'rgba(244,238,224,0.75)', marginBottom:44, maxWidth:400, margin:'0 auto 44px', lineHeight:1.75 }}>
           No credit card. No guesswork.
         </p>
         <div style={{ display:'flex', gap:12, justifyContent:'center', flexWrap:'wrap' as const }}>
@@ -177,7 +177,7 @@ export default function LandingPage() {
         </div>
         <div style={{ marginTop:20, display:'flex', justifyContent:'center', gap:28, flexWrap:'wrap' as const }}>
           {['No signup for the estimate', 'Plain English, always'].map(t => (
-            <div key={t} style={{ fontSize:12, color:'rgba(244,238,224,0.3)', display:'flex', alignItems:'center', gap:6 }}>
+            <div key={t} style={{ fontSize:13, color:'rgba(244,238,224,0.7)', display:'flex', alignItems:'center', gap:6 }}>
               <span style={{ color:T.green }}>✓</span> {t}
             </div>
           ))}
@@ -185,10 +185,10 @@ export default function LandingPage() {
       </div>
 
       {/* Footer */}
-      <div style={{ textAlign:'center', padding:'20px 48px', background:T.ink, fontSize:11, color:'rgba(244,238,224,0.2)' }}>
+      <div style={{ textAlign:'center', padding:'20px 48px', background:T.ink, fontSize:11, color:'rgba(244,238,224,0.55)' }}>
         ArthVo helps you read your salary slip and compare tax regimes. Consult a CA for ITR filing. © 2025 ArthVo
         {' · '}
-        <a href="/privacy" style={{ color:'rgba(244,238,224,0.3)', textDecoration:'underline' }}>Privacy</a>
+        <a href="/privacy" style={{ color:'rgba(244,238,224,0.7)', textDecoration:'underline' }}>Privacy</a>
       </div>
     </div>
   )
