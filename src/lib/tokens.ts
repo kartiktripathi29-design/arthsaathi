@@ -15,16 +15,16 @@ export const tokens = {
   card: '#FFFDF8',         // panels
   cap: '#0E4D47',          // teal sidebar brand cap
   ink: '#1E2B28',          // primary text
-  muted: '#6E7B72',        // statutory sub-labels
+  muted: '#5E6B62',        // statutory sub-labels — body-safe ≥4.5:1
   nav: '#55615B',          // sidebar nav label on taupe
-  faint: '#8A938C',        // meta text
+  faint: '#79827B',        // meta text — meta ≥13px only, never body text
   ctaLabel: '#111111',     // black CTA label
   ivory: '#F4EEE0',        // text/marks on teal
   teal: '#0E4D47',         // brand accent — CTA / border / header rule / active-nav / winner outline
   green: '#157A5B',        // real positives only — refund / recommended / progress / Example / slip pill text
   hairline: '#E7DEC9',     // dividers
   tint: '#E3EDEA',         // soft badge / active-nav background
-  marigold: '#B07F1A',     // attention accent — empty/pending values, reveal flash ONLY; never decoration
+  marigold: '#8F6510',     // attention accent — empty/pending values, reveal flash ONLY; never decoration
 
   /** "found-on-slip" pill */
   slip: {

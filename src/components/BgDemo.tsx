@@ -99,7 +99,7 @@ export default function BgDemo({ monthly }: { monthly?: number | null }) {
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
           {slots.map((label, i) => (
-            <div key={i} style={{ border: `1px dashed ${T.hairline}`, borderRadius: 9, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div key={i} style={{ border: `1px dashed ${T.taupeLine}`, borderRadius: 9, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: 12, color: T.muted }}>{label}</span>
               <span style={{ fontSize: 12, color: T.marigold, fontWeight: 600, letterSpacing: '0.04em' }}>₹ —</span>
             </div>
