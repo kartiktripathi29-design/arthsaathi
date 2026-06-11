@@ -190,23 +190,23 @@ export default function LandingPage() {
       {/* Final CTA — dark section: eyebrow/accents → green, headline → ivory, CTA button → green (teal would vanish on dark) */}
       <div style={{ background:T.ink, padding:'100px 48px', textAlign:'center' }}>
         <div style={{ fontSize:11, color:T.green, fontWeight:700, letterSpacing:'0.2em', marginBottom:20, textTransform:'uppercase' as const }}>
-          Your CA doesn't want you to read this
+          One slip is all it takes
         </div>
         <h2 style={{ fontSize:'clamp(32px,5vw,60px)', fontWeight:900, letterSpacing:'-0.04em', color:T.ivory, lineHeight:1.05, marginBottom:20 }}>
-          Know exactly what you owe.<br />
-          <span style={{ color:T.green }}>Keep the rest.</span>
+          Know what you owe.<br />
+          <span style={{ color:T.green }}>And which regime is yours.</span>
         </h2>
         <p style={{ fontSize:16, color:'rgba(244,238,224,0.5)', marginBottom:44, maxWidth:400, margin:'0 auto 44px', lineHeight:1.75 }}>
-          Free forever. No credit card. Takes 8 minutes.
+          No credit card. No guesswork.
         </p>
         <div style={{ display:'flex', gap:12, justifyContent:'center', flexWrap:'wrap' as const }}>
           <Link href="/signup" className="btn-green"
             style={{ display:'inline-flex', alignItems:'center', gap:12, padding:'16px 40px', background:T.green, color:T.ivory, borderRadius:12, fontWeight:800, textDecoration:'none', fontSize:17, letterSpacing:'-0.01em' }}>
-            Start saving tax — free →
+            See which one's yours →
           </Link>
         </div>
         <div style={{ marginTop:24, display:'flex', justifyContent:'center', gap:28, flexWrap:'wrap' as const }}>
-          {['No credit card needed', 'Free to try, no signup'].map(t => (
+          {['No signup for the estimate', 'Plain English, always'].map(t => (
             <div key={t} style={{ fontSize:12, color:'rgba(244,238,224,0.3)', display:'flex', alignItems:'center', gap:6 }}>
               <span style={{ color:T.green }}>✓</span> {t}
             </div>
