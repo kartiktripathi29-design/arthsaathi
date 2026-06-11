@@ -92,10 +92,10 @@ export default function LandingPage() {
       </div>
 
       {/* Pain section */}
-      <div style={{ padding:'40px 52px 80px', background:T.paper }}>
+      <div style={{ padding:'40px 52px 24px', background:T.paper }}>
         <div style={{ maxWidth:1100, margin:'0 auto' }}>
           <div style={{ textAlign:'center', marginBottom:52 }}>
-            <div style={{ fontSize:11, color:T.teal, fontWeight:700, letterSpacing:'0.15em', textTransform:'uppercase' as const, marginBottom:12 }}>Why ArthVo exists</div>
+            <div style={{ fontSize:11, color:T.faint, fontWeight:700, letterSpacing:'0.3em', textTransform:'uppercase' as const, marginBottom:12 }}>Why ArthVo exists</div>
             <h2 style={{ fontSize:'clamp(26px,4vw,42px)', fontWeight:900, letterSpacing:'-0.03em', color:T.ink, lineHeight:1.1 }}>
               We've all been there.
             </h2>
@@ -109,14 +109,14 @@ export default function LandingPage() {
                 answer: 'ArthVo shows you both regimes on your actual salary.',
               },
               {
-                statement: 'Your payslip is written for payroll software, not for you.',
+                statement: 'Your salary slip is written for payroll software, not for you.',
                 body: 'Basic, special allowance, employer PF — what does any of it mean for your tax?',
                 answer: 'ArthVo turns it into plain numbers.',
               },
               {
-                statement: 'A CA charges thousands to answer one question.',
-                body: 'And the question — old or new regime? — changes every year.',
-                answer: 'The comparison here is free, in minutes.',
+                statement: 'HR gives you a deadline and a dropdown. You guess.',
+                body: 'Regime election, investment declarations — decided in a rush, once a year, with zero explanation.',
+                answer: 'Run the real numbers here before you commit.',
               },
             ].map((p, i) => (
               <div key={i} className="pain-card" style={{ background:T.card, border:`1.5px solid ${T.hairline}`, borderRadius:16, padding:'28px 24px', cursor:'pointer' }}>
@@ -132,24 +132,23 @@ export default function LandingPage() {
       </div>
 
       {/* How it works */}
-      <div style={{ padding:'80px 52px', background:T.paper }}>
+      <div style={{ padding:'80px 52px', background:T.sand }}>
         <div style={{ maxWidth:1100, margin:'0 auto' }}>
           <div style={{ textAlign:'center', marginBottom:52 }}>
-            <div style={{ fontSize:11, color:T.teal, fontWeight:700, letterSpacing:'0.15em', textTransform:'uppercase' as const, marginBottom:12 }}>How it works</div>
+            <div style={{ fontSize:11, color:T.faint, fontWeight:700, letterSpacing:'0.3em', textTransform:'uppercase' as const, marginBottom:12 }}>How it works</div>
             <h2 style={{ fontSize:'clamp(24px,3.5vw,40px)', fontWeight:900, letterSpacing:'-0.03em', color:T.ink }}>
               From slip to answer. In minutes.
             </h2>
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:16 }}>
             {[
-              { num:'01', icon:'📑', title:'Add your payslip', body:'ArthVo reads it for you — no manual typing.' },
-              { num:'02', icon:'🤖', title:'It pulls your income', body:'Your salary and the earnings it can read from your documents.' },
-              { num:'03', icon:'📊', title:'See what you owe', body:'Old vs new regime, side by side, on your numbers.' },
-              { num:'04', icon:'💡', title:'Know your next step', body:'Which regime fits and what to check — in plain English.' },
+              { num:'01', title:'Add your salary slip', body:'ArthVo reads it for you — no manual typing.' },
+              { num:'02', title:'It pulls your income', body:'Your salary and the earnings it can read from your documents.' },
+              { num:'03', title:'See what you owe', body:'Old vs new regime, side by side, on your numbers.' },
+              { num:'04', title:'Know your next step', body:'Which regime fits and what to check — in plain English.' },
             ].map((s, i) => (
-              <div key={i} style={{ background:T.card, border:`1.5px solid ${T.hairline}`, borderRadius:14, padding:'24px 20px', position:'relative' as const }}>
-                <div style={{ position:'absolute' as const, top:16, right:16, fontSize:11, fontWeight:900, color:T.hairline, letterSpacing:'0.05em' }}>{s.num}</div>
-                <div style={{ fontSize:32, marginBottom:14 }}>{s.icon}</div>
+              <div key={i} style={{ background:T.card, border:`1.5px solid ${T.hairline}`, borderRadius:14, padding:'24px 20px' }}>
+                <div style={{ fontSize:28, fontWeight:800, color:T.teal, letterSpacing:'0.02em', marginBottom:14 }}>{s.num}</div>
                 <div style={{ fontSize:15, fontWeight:700, color:T.ink, marginBottom:8 }}>{s.title}</div>
                 <div style={{ fontSize:13, color:T.muted, lineHeight:1.7 }}>{s.body}</div>
               </div>
