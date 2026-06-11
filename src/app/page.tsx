@@ -50,7 +50,7 @@ export default function LandingPage() {
       </nav>
 
       {/* HERO */}
-      <div style={{ maxWidth:860, margin:'0 auto', padding:'80px 48px 32px', textAlign:'center' }}>
+      <div style={{ maxWidth:1000, margin:'0 auto', padding:'80px 32px 32px', textAlign:'center' }}>
         <h1 className="fu d2" style={{ fontSize:'clamp(32px, 5vw, 54px)', fontWeight:900, lineHeight:1.04, letterSpacing:'-0.04em', color:T.ink, marginBottom:8 }}>
           Your employer taxed what they knew.<br />
           <span style={{ color:T.teal }} className="highlight">Not what's true for you.</span>
@@ -100,7 +100,7 @@ export default function LandingPage() {
       </div>
 
       {/* Demo */}
-      <div style={{ maxWidth:860, margin:'0 auto', padding:'8px 48px 24px' }}>
+      <div style={{ maxWidth:1080, margin:'0 auto', padding:'8px 32px 24px' }}>
         <div style={{ textAlign:'center', marginBottom:16 }}>
           <span style={{ fontSize:10, color:T.faint, fontWeight:700, letterSpacing:'0.25em', textTransform:'uppercase' as const }}>See it in action</span>
         </div>
@@ -111,7 +111,7 @@ export default function LandingPage() {
 
       {/* Pain section */}
       <div style={{ padding:'40px 52px 80px', background:T.paper }}>
-        <div style={{ maxWidth:960, margin:'0 auto' }}>
+        <div style={{ maxWidth:1100, margin:'0 auto' }}>
           <div style={{ textAlign:'center', marginBottom:52 }}>
             <div style={{ fontSize:11, color:T.teal, fontWeight:700, letterSpacing:'0.15em', textTransform:'uppercase' as const, marginBottom:12 }}>Why ArthVo exists</div>
             <h2 style={{ fontSize:'clamp(26px,4vw,42px)', fontWeight:900, letterSpacing:'-0.03em', color:T.ink, lineHeight:1.1 }}>
@@ -151,7 +151,7 @@ export default function LandingPage() {
 
       {/* How it works */}
       <div style={{ padding:'80px 52px', background:T.paper }}>
-        <div style={{ maxWidth:960, margin:'0 auto' }}>
+        <div style={{ maxWidth:1100, margin:'0 auto' }}>
           <div style={{ textAlign:'center', marginBottom:52 }}>
             <div style={{ fontSize:11, color:T.teal, fontWeight:700, letterSpacing:'0.15em', textTransform:'uppercase' as const, marginBottom:12 }}>How it works</div>
             <h2 style={{ fontSize:'clamp(24px,3.5vw,40px)', fontWeight:900, letterSpacing:'-0.03em', color:T.ink }}>
