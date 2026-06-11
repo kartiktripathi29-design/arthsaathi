@@ -1,54 +1,14 @@
 'use client'
 import Link from 'next/link'
-import { useState, useEffect, useRef } from 'react'
+import { useState } from 'react'
 import BgDemo from '@/components/BgDemo'
 import Logo from '@/components/Logo'
 import { tokens as T } from '@/lib/tokens'
 import { estimateAnnualTax } from '@/lib/tax-slabs'
 
-function useCountUp(target: number, duration = 1800, start = false) {
-  const [count, setCount] = useState(0)
-  useEffect(() => {
-    if (!start) return
-    let startTime: number
-    const step = (timestamp: number) => {
-      if (!startTime) startTime = timestamp
-      const progress = Math.min((timestamp - startTime) / duration, 1)
-      const ease = 1 - Math.pow(1 - progress, 3)
-      setCount(Math.floor(ease * target))
-      if (progress < 1) requestAnimationFrame(step)
-    }
-    requestAnimationFrame(step)
-  }, [target, duration, start])
-  return count
-}
-
-function StatCard({ label, started }: { label: string; started: boolean }) {
-  return (
-    <span style={{ background: T.tint, color: T.teal, padding: '7px 16px', borderRadius: 100, fontSize: 13, fontWeight: 600, fontFamily: '"Sora",sans-serif', opacity: started ? 1 : 0, transition: 'opacity 0.6s ease' }}>{label}</span>
-  )
-}
-
-const TICKER_ITEMS = [
-  '🇮🇳 Made for every working Indian',
-  '⚡ Know your exact taxes in under 8 minutes',
-  '🔒 Your documents stay private — always',
-  '📑 Works with any salary slip from any company',
-  '✅ We tell you which tax option saves you more money',
-  '🏦 Finds income you forgot you even had',
-]
-
 export default function LandingPage() {
-  const [statsVisible, setStatsVisible] = useState(false)
   const [salary, setSalary] = useState('')
   const [taxSaving, setTaxSaving] = useState<{ monthly: number; newTax: number; oldTax: number } | null>(null)
-  const statsRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(([e]) => { if (e.isIntersecting) setStatsVisible(true) }, { threshold: 0.3 })
-    if (statsRef.current) observer.observe(statsRef.current)
-    return () => observer.disconnect()
-  }, [])
 
   const calcQuickSaving = (s: string) => {
     const monthly = parseFloat(s.replace(/,/g, '')) || 0
@@ -71,13 +31,9 @@ export default function LandingPage() {
         .pain-card{transition:transform 0.2s,box-shadow 0.2s}
         .pain-card:hover{transform:translateY(-4px);box-shadow:0 12px 40px rgba(14,77,71,0.1)}
         @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes ticker{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
-        @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
         @keyframes wiggle{0%,100%{transform:rotate(-2deg)}50%{transform:rotate(2deg)}}
         .fu{animation:fadeUp 0.7s cubic-bezier(0.16,1,0.3,1) both}
-        .d1{animation-delay:0.05s}.d2{animation-delay:0.2s}.d3{animation-delay:0.35s}.d4{animation-delay:0.5s}
-        .ticker-track{display:flex;animation:ticker 28s linear infinite;white-space:nowrap}
-        .ticker-track:hover{animation-play-state:paused}
+        .d2{animation-delay:0.2s}.d3{animation-delay:0.35s}.d4{animation-delay:0.5s}
         .wobble:hover{animation:wiggle 0.3s ease}
         .salary-input:focus{outline:none;border-color:var(--teal)!important;box-shadow:0 0 0 3px rgba(14,77,71,0.12)}
         .highlight{position:relative;display:inline-block}
@@ -94,17 +50,6 @@ export default function LandingPage() {
           <Link href="/signup" className="btn-green" style={{ padding:'9px 22px', background:T.teal, color:T.ivory, borderRadius:8, fontWeight:700, textDecoration:'none', fontSize:13 }}>Sign up — it's free →</Link>
         </div>
       </nav>
-
-      {/* Ticker strip */}
-      <div style={{ background:T.tint, borderBottom:`1px solid ${T.hairline}`, padding:'10px 0', overflow:'hidden' }}>
-        <div className="ticker-track">
-          {[...TICKER_ITEMS, ...TICKER_ITEMS].map((item, i) => (
-            <span key={i} style={{ fontSize:12, color:T.teal, fontWeight:500, padding:'0 32px', flexShrink:0 }}>
-              {item} <span style={{ color:T.faint, margin:'0 8px' }}>·</span>
-            </span>
-          ))}
-        </div>
-      </div>
 
       {/* HERO */}
       <div style={{ maxWidth:860, margin:'0 auto', padding:'80px 48px 32px', textAlign:'center' }}>
@@ -163,20 +108,6 @@ export default function LandingPage() {
         </div>
         <div style={{ borderRadius:20, overflow:'hidden', border:`1.5px solid ${T.hairline}`, boxShadow:'0 8px 48px rgba(14,77,71,0.1)' }}>
           <BgDemo />
-        </div>
-      </div>
-
-      {/* Stats strip — light pill row: claims as soft teal pills on the paper background */}
-      <div ref={statsRef} style={{ padding:'32px 24px' }}>
-        <div style={{ maxWidth:960, margin:'0 auto', display:'flex', flexWrap:'wrap' as const, justifyContent:'center', alignItems:'center', gap:10 }}>
-          {[
-            'Free',
-            'Reads any payslip',
-            'The right regime for you',
-            'In minutes',
-          ].map((s, i) => (
-            <StatCard key={i} label={s} started={statsVisible} />
-          ))}
         </div>
       </div>
 
