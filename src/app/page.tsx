@@ -19,6 +19,11 @@ export default function LandingPage() {
     setTaxSaving({ monthly, newTax, oldTax })
   }
 
+  const runCheck = () => {
+    calcQuickSaving(salary)
+    document.getElementById('live-demo')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   return (
     <div style={{ minHeight: '100vh', background: T.paper, color: T.ink, fontFamily: '"Sora",-apple-system,sans-serif', overflowX: 'hidden' }}>
       <style>{`
@@ -63,47 +68,24 @@ export default function LandingPage() {
         {/* Quick calculator */}
         <div className="fu d4" style={{ background:T.card, border:`1.5px solid ${T.hairline}`, borderRadius:16, padding:'24px 28px', maxWidth:440, margin:'0 auto 12px', textAlign:'left' }}>
           <div style={{ fontSize:13, fontWeight:700, color:T.teal, marginBottom:12 }}>Quick estimate — what's your monthly salary?</div>
-          <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:taxSaving !== null ? 14 : 0 }}>
+          <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:0 }}>
             <div style={{ display:'flex', flex:1, border:`1.5px solid ${T.hairline}`, borderRadius:10, overflow:'hidden', background:T.card }}>
               <span style={{ padding:'11px 12px', fontSize:15, color:T.teal, fontWeight:700, borderRight:`1px solid ${T.hairline}` }}>₹</span>
-              <input type="tel" value={salary} onChange={e => { setSalary(e.target.value); calcQuickSaving(e.target.value) }}
+              <input type="tel" value={salary} onChange={e => setSalary(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') runCheck() }}
                 placeholder="e.g. 1,20,000" className="salary-input"
                 style={{ flex:1, padding:'11px 12px', border:'none', fontSize:14, fontFamily:'"Sora",sans-serif' }} />
             </div>
-            <Link href="/signup" className="btn-green"
-              style={{ padding:'11px 18px', background:T.teal, color:T.ivory, borderRadius:10, fontWeight:700, fontSize:13, textDecoration:'none', whiteSpace:'nowrap' as const }}>
+            <button onClick={runCheck} className="btn-green"
+              style={{ padding:'11px 18px', background:T.teal, color:T.ivory, borderRadius:10, fontWeight:700, fontSize:13, border:'none', cursor:'pointer', fontFamily:'"Sora",sans-serif', whiteSpace:'nowrap' as const }}>
               Check now →
-            </Link>
+            </button>
           </div>
-          {taxSaving !== null && (
-            <div style={{ marginTop:14, borderTop:`1px solid ${T.hairline}`, paddingTop:14 }}>
-              <div style={{ fontSize:12, color:T.muted, marginBottom:14 }}>You're on one of these two. Probably without choosing.</div>
-              <div style={{ display:'flex', gap:10, marginBottom:6 }}>
-                <div style={{ flex:1, background:T.paper, border:`1px solid ${T.hairline}`, borderRadius:10, padding:'12px 14px' }}>
-                  <div style={{ fontSize:11, color:T.muted, fontWeight:600, marginBottom:4 }}>New regime</div>
-                  <div style={{ fontSize:20, fontWeight:800, color:T.ink, letterSpacing:'-0.02em' }}>₹{taxSaving.newTax.toLocaleString('en-IN')}</div>
-                </div>
-                <div style={{ flex:1, background:T.paper, border:`1px solid ${T.hairline}`, borderRadius:10, padding:'12px 14px' }}>
-                  <div style={{ fontSize:11, color:T.muted, fontWeight:600, marginBottom:4 }}>Old regime</div>
-                  <div style={{ fontSize:20, fontWeight:800, color:T.ink, letterSpacing:'-0.02em' }}>₹{taxSaving.oldTax.toLocaleString('en-IN')}</div>
-                </div>
-              </div>
-              <div style={{ fontSize:11, color:T.faint, marginBottom:14 }}>on ₹{taxSaving.monthly.toLocaleString('en-IN')}/month · before your deductions</div>
-              <div style={{ fontSize:12.5, color:T.muted, lineHeight:1.6, marginBottom:14 }}>Which one's actually yours depends on what you can claim — and running the comparison is the only way to know.</div>
-              <div style={{ fontSize:10.5, color:T.faint, lineHeight:1.5, marginBottom:14 }}>Estimate on salary alone — your deductions change it.</div>
-              <Link href="/signup" className="btn-green" style={{ display:'inline-block', padding:'11px 20px', background:T.teal, color:T.ivory, borderRadius:10, fontWeight:700, fontSize:13, textDecoration:'none' }}>See which one's yours →</Link>
-            </div>
-          )}
+          <div style={{ fontSize:11, color:T.muted, marginTop:12 }}>No signup needed.</div>
         </div>
-
-        <div style={{ fontSize:11, color:T.faint, marginTop:8 }}>No signup needed for the estimate. Free, forever.</div>
       </div>
 
       {/* Demo */}
-      <div style={{ maxWidth:1080, margin:'0 auto', padding:'8px 32px 24px' }}>
-        <div style={{ textAlign:'center', marginBottom:16 }}>
-          <span style={{ fontSize:10, color:T.faint, fontWeight:700, letterSpacing:'0.25em', textTransform:'uppercase' as const }}>See it in action</span>
-        </div>
+      <div id="live-demo" style={{ maxWidth:680, margin:'0 auto', padding:'4px 32px 24px' }}>
         <div style={{ borderRadius:20, overflow:'hidden', border:`1.5px solid ${T.hairline}`, boxShadow:'0 8px 48px rgba(14,77,71,0.1)' }}>
           <BgDemo monthly={taxSaving?.monthly ?? null} />
         </div>
