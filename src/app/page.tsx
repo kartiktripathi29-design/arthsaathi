@@ -31,10 +31,8 @@ export default function LandingPage() {
         .pain-card{transition:transform 0.2s,box-shadow 0.2s}
         .pain-card:hover{transform:translateY(-4px);box-shadow:0 12px 40px rgba(14,77,71,0.1)}
         @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes wiggle{0%,100%{transform:rotate(-2deg)}50%{transform:rotate(2deg)}}
         .fu{animation:fadeUp 0.7s cubic-bezier(0.16,1,0.3,1) both}
         .d2{animation-delay:0.2s}.d3{animation-delay:0.35s}.d4{animation-delay:0.5s}
-        .wobble:hover{animation:wiggle 0.3s ease}
         .salary-input:focus{outline:none;border-color:var(--teal)!important;box-shadow:0 0 0 3px rgba(14,77,71,0.12)}
         .highlight{position:relative;display:inline-block}
         .highlight::after{content:'';position:absolute;bottom:4px;left:0;width:100%;height:6px;background:var(--tint);z-index:-1;border-radius:2px}
@@ -102,7 +100,7 @@ export default function LandingPage() {
       </div>
 
       {/* Demo */}
-      <div style={{ maxWidth:860, margin:'0 auto', padding:'8px 48px 56px' }}>
+      <div style={{ maxWidth:860, margin:'0 auto', padding:'8px 48px 24px' }}>
         <div style={{ textAlign:'center', marginBottom:16 }}>
           <span style={{ fontSize:10, color:T.faint, fontWeight:700, letterSpacing:'0.25em', textTransform:'uppercase' as const }}>See it in action</span>
         </div>
@@ -112,7 +110,7 @@ export default function LandingPage() {
       </div>
 
       {/* Pain section */}
-      <div style={{ padding:'80px 52px', background:T.paper }}>
+      <div style={{ padding:'40px 52px 80px', background:T.paper }}>
         <div style={{ maxWidth:960, margin:'0 auto' }}>
           <div style={{ textAlign:'center', marginBottom:52 }}>
             <div style={{ fontSize:11, color:T.teal, fontWeight:700, letterSpacing:'0.15em', textTransform:'uppercase' as const, marginBottom:12 }}>Why ArthVo exists</div>
@@ -124,35 +122,26 @@ export default function LandingPage() {
           <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:18 }}>
             {[
               {
-                emoji: '😰',
-                pain: '"I got a notice from the Income Tax office for bank interest I didn\'t even know I had to report."',
-                fix: 'ArthVo checks your government tax records and tells you about every rupee before the taxman does.',
-                tag: 'Tax Notice',
-                tagColor: '#DC2626',
+                statement: 'You picked a regime once. Maybe.',
+                body: 'Most people never ran the comparison — they ticked a box in an HR form years ago.',
+                answer: 'ArthVo shows you both regimes on your actual salary.',
               },
               {
-                emoji: '🤑',
-                pain: '"My CA charges ₹5,000 just to tell me which tax option to pick. Every. Single. Year."',
-                fix: 'ArthVo compares both tax options in seconds with YOUR exact numbers. Free. No appointment.',
-                tag: 'CA Fees',
-                tagColor: '#D97706',
+                statement: 'Your payslip is written for payroll software, not for you.',
+                body: 'Basic, special allowance, employer PF — what does any of it mean for your tax?',
+                answer: 'ArthVo turns it into plain numbers.',
               },
               {
-                emoji: '😅',
-                pain: '"I sold some mutual funds last year and had no idea I had to report the profit anywhere."',
-                fix: 'The government already knows about your profits. ArthVo reads that record and handles it for you.',
-                tag: 'Missed Reporting',
-                tagColor: '#7C3AED',
+                statement: 'A CA charges thousands to answer one question.',
+                body: 'And the question — old or new regime? — changes every year.',
+                answer: 'The comparison here is free, in minutes.',
               },
             ].map((p, i) => (
               <div key={i} className="pain-card" style={{ background:T.card, border:`1.5px solid ${T.hairline}`, borderRadius:16, padding:'28px 24px', cursor:'pointer' }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16 }}>
-                  <div style={{ fontSize:32 }} className="wobble">{p.emoji}</div>
-                  <span style={{ fontSize:10, fontWeight:700, color:p.tagColor, background:`${p.tagColor}12`, padding:'3px 10px', borderRadius:20, border:`1px solid ${p.tagColor}30` }}>{p.tag}</span>
-                </div>
-                <div style={{ fontSize:14, color:T.muted, fontStyle:'italic', marginBottom:16, lineHeight:1.75, paddingLeft:14, borderLeft:`2px solid ${T.hairline}` }}>{p.pain}</div>
-                <div style={{ fontSize:13, color:T.green, fontWeight:600, lineHeight:1.68, display:'flex', gap:8 }}>
-                  <span>✓</span><span>{p.fix}</span>
+                <div style={{ fontSize:16, fontWeight:700, color:T.ink, lineHeight:1.35, marginBottom:10 }}>{p.statement}</div>
+                <div style={{ fontSize:13.5, color:T.muted, lineHeight:1.7, marginBottom:16 }}>{p.body}</div>
+                <div style={{ fontSize:13, color:T.green, fontWeight:600, lineHeight:1.6, display:'flex', gap:8 }}>
+                  <span>✓</span><span>{p.answer}</span>
                 </div>
               </div>
             ))}
@@ -166,15 +155,15 @@ export default function LandingPage() {
           <div style={{ textAlign:'center', marginBottom:52 }}>
             <div style={{ fontSize:11, color:T.teal, fontWeight:700, letterSpacing:'0.15em', textTransform:'uppercase' as const, marginBottom:12 }}>How it works</div>
             <h2 style={{ fontSize:'clamp(24px,3.5vw,40px)', fontWeight:900, letterSpacing:'-0.03em', color:T.ink }}>
-              4 steps. 8 minutes. Done.
+              From slip to answer. In minutes.
             </h2>
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:16 }}>
             {[
-              { num:'01', icon:'📑', title:'Upload your tax document', body:'Download it from the Income Tax website. ArthVo reads it instantly — no manual typing needed.' },
-              { num:'02', icon:'🤖', title:'We find everything', body:'Your salary, bank interest, profits from selling shares or property — all found automatically.' },
-              { num:'03', icon:'📊', title:'See exactly what you owe', body:'Two tax options compared side by side. We tell you which one puts more money back in your pocket.' },
-              { num:'04', icon:'💡', title:'Get a clear plan', body:'Where to invest, what to claim, how to legally pay less tax. A clear plan, in plain English.' },
+              { num:'01', icon:'📑', title:'Add your payslip', body:'ArthVo reads it for you — no manual typing.' },
+              { num:'02', icon:'🤖', title:'It pulls your income', body:'Your salary and the earnings it can read from your documents.' },
+              { num:'03', icon:'📊', title:'See what you owe', body:'Old vs new regime, side by side, on your numbers.' },
+              { num:'04', icon:'💡', title:'Know your next step', body:'Which regime fits and what to check — in plain English.' },
             ].map((s, i) => (
               <div key={i} style={{ background:T.card, border:`1.5px solid ${T.hairline}`, borderRadius:14, padding:'24px 20px', position:'relative' as const }}>
                 <div style={{ position:'absolute' as const, top:16, right:16, fontSize:11, fontWeight:900, color:T.hairline, letterSpacing:'0.05em' }}>{s.num}</div>
@@ -188,8 +177,8 @@ export default function LandingPage() {
       </div>
 
       {/* Final CTA — dark section: eyebrow/accents → green, headline → ivory, CTA button → green (teal would vanish on dark) */}
-      <div style={{ background:T.ink, padding:'100px 48px', textAlign:'center' }}>
-        <div style={{ fontSize:11, color:T.green, fontWeight:700, letterSpacing:'0.2em', marginBottom:20, textTransform:'uppercase' as const }}>
+      <div style={{ background:T.ink, padding:'72px 48px', textAlign:'center' }}>
+        <div style={{ fontSize:11, color:T.green, fontWeight:700, letterSpacing:'0.2em', marginBottom:16, textTransform:'uppercase' as const }}>
           One slip is all it takes
         </div>
         <h2 style={{ fontSize:'clamp(32px,5vw,60px)', fontWeight:900, letterSpacing:'-0.04em', color:T.ivory, lineHeight:1.05, marginBottom:20 }}>
@@ -205,7 +194,7 @@ export default function LandingPage() {
             See which one's yours →
           </Link>
         </div>
-        <div style={{ marginTop:24, display:'flex', justifyContent:'center', gap:28, flexWrap:'wrap' as const }}>
+        <div style={{ marginTop:20, display:'flex', justifyContent:'center', gap:28, flexWrap:'wrap' as const }}>
           {['No signup for the estimate', 'Plain English, always'].map(t => (
             <div key={t} style={{ fontSize:12, color:'rgba(244,238,224,0.3)', display:'flex', alignItems:'center', gap:6 }}>
               <span style={{ color:T.green }}>✓</span> {t}
