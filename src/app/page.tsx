@@ -50,7 +50,7 @@ export default function LandingPage() {
         </Link>
         <div style={{ display:'flex', gap:8, alignItems:'center' }}>
           <Link href="/login" className="btn-ghost" style={{ padding:'8px 20px', background:'transparent', border:`1px solid ${T.hairline}`, borderRadius:8, color:T.muted, fontWeight:500, textDecoration:'none', fontSize:13 }}>Sign in</Link>
-          <Link href="/signup" className="btn-green" style={{ padding:'9px 22px', background:T.teal, color:T.ivory, borderRadius:8, fontWeight:700, textDecoration:'none', fontSize:13 }}>Sign up — it's free →</Link>
+          <Link href="/signup" className="btn-green" style={{ padding:'9px 22px', background:T.teal, color:T.ivory, borderRadius:8, fontWeight:700, textDecoration:'none', fontSize:13 }}>Sign up →</Link>
         </div>
       </nav>
 
@@ -186,7 +186,7 @@ export default function LandingPage() {
 
       {/* Footer */}
       <div style={{ textAlign:'center', padding:'20px 48px', background:T.ink, fontSize:11, color:'rgba(244,238,224,0.55)' }}>
-        ArthVo helps you read your salary slip and compare tax regimes. Consult a CA for ITR filing. © 2025 ArthVo
+        ArthVo helps you read your salary slip and compare tax regimes. Consult a CA for ITR filing. © 2026 ArthVo
         {' · '}
         <a href="/privacy" style={{ color:'rgba(244,238,224,0.7)', textDecoration:'underline' }}>Privacy</a>
       </div>

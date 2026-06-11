@@ -8,8 +8,8 @@ import SyncProvider from '@/components/SyncProvider'
 import { tokens as T } from '@/lib/tokens'
 
 export const metadata: Metadata = {
-  title: 'ArthVo — your income tax, in plain English',
-  description: 'Parse your salary slip and compare the old vs new tax regime in minutes.',
+  title: 'ArthVo — Your salary slip, in plain English',
+  description: 'One salary slip shows your real tax — old vs new regime, side by side, in minutes. No jargon, no guesswork.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
