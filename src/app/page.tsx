@@ -105,7 +105,7 @@ export default function LandingPage() {
           <span style={{ fontSize:10, color:T.faint, fontWeight:700, letterSpacing:'0.25em', textTransform:'uppercase' as const }}>See it in action</span>
         </div>
         <div style={{ borderRadius:20, overflow:'hidden', border:`1.5px solid ${T.hairline}`, boxShadow:'0 8px 48px rgba(14,77,71,0.1)' }}>
-          <BgDemo />
+          <BgDemo monthly={taxSaving?.monthly ?? null} />
         </div>
       </div>
 
