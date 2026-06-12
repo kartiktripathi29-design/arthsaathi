@@ -82,11 +82,11 @@ export default function BgDemo({ monthly }: { monthly?: number | null }) {
         <div id="demo-reveal" className="demo-regime" style={{ marginBottom: 6 }}>
           <div style={{ background: T.tint, borderRadius: 10, padding: '14px 16px' }}>
             <div style={{ fontSize: 10, fontWeight: 600, color: T.teal, letterSpacing: '0.04em', marginBottom: 6 }}>New regime</div>
-            <div style={{ fontSize: 26, fontWeight: 800, color: flash ? T.marigold : T.teal, letterSpacing: '-0.02em' }}>₹{Math.round(displayNew).toLocaleString('en-IN')}</div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: flash ? T.marigold : T.teal, transition: flash ? 'none' : 'color 450ms ease-out', letterSpacing: '-0.02em' }}>₹{Math.round(displayNew).toLocaleString('en-IN')}</div>
           </div>
           <div style={{ background: T.paper, border: `1px solid ${T.hairline}`, borderRadius: 10, padding: '14px 16px' }}>
             <div style={{ fontSize: 10, fontWeight: 600, color: T.muted, letterSpacing: '0.04em', marginBottom: 6 }}>Old regime</div>
-            <div style={{ fontSize: 26, fontWeight: 800, color: flash ? T.marigold : T.ink, letterSpacing: '-0.02em' }}>₹{Math.round(displayOld).toLocaleString('en-IN')}</div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: flash ? T.marigold : T.ink, transition: flash ? 'none' : 'color 450ms ease-out', letterSpacing: '-0.02em' }}>₹{Math.round(displayOld).toLocaleString('en-IN')}</div>
           </div>
         </div>
         <div style={{ fontSize: 12.5, textAlign: 'center', margin: '10px 0 16px' }}>
