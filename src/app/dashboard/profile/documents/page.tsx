@@ -8,7 +8,7 @@ import BackupRestore from '@/components/BackupRestore'
 
 import { tokens as T } from '@/lib/tokens'
 
-const C = { bg: T.paper, card: T.card, border: T.hairline, fg: T.ink, muted: T.muted, primary: T.teal }
+const C = { bg: T.paper, card: T.card, border: T.hairline, fg: T.ink, muted: T.muted, primary: T.teal, faint: T.faint, green: T.green, sand: T.sand, navText: T.nav, ivory: T.ivory, caution: T.caution }
 
 export default function DocumentsPage() {
   const router = useRouter()
@@ -88,7 +88,7 @@ export default function DocumentsPage() {
 
   const DocStatusLine = ({ status }: { status: DocStatus }) => {
     if (status.state === 'idle') return null
-    const color = status.state === 'done' ? '#2A7A4A' : status.state === 'error' ? '#B94040' : C.muted
+    const color = status.state === 'done' ? C.green : status.state === 'error' ? '#B94040' : C.muted
     const text = status.state === 'reading' ? 'Reading document…' : status.msg
     return <p style={{ fontSize: 11, color, margin: '8px 0 0', fontWeight: 500 }}>{text}</p>
   }
@@ -224,7 +224,7 @@ export default function DocumentsPage() {
   return (
     <div style={{ maxWidth: 800, margin: '0 auto' }}>
       <div style={{ marginBottom: 24 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, color: C.fg, margin: '0 0 6px' }}>Upload Your Documents</h2>
+        <h2 style={{ fontSize: 20, fontWeight: 700, color: C.fg, margin: '0 0 6px' }}>Upload your documents</h2>
         <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>
           Start by uploading your salary slip. AIS and Form 26AS are optional.
         </p>
@@ -233,19 +233,19 @@ export default function DocumentsPage() {
       {/* Salary Slips - Required (multi-file) */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: 12 }}>
-          <div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <h3 style={{ fontSize: 14, fontWeight: 600, color: C.fg, margin: '0 0 4px' }}>Salary Slips</h3>
             <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>PDF, image, or Excel — upload one or many at once</p>
           </div>
-          <span style={{ fontSize: 11, background: '#FEE', color: '#C33', padding: '2px 8px', borderRadius: 4, fontWeight: 500 }}>Required</span>
+          <span style={{ fontSize: 11, background: C.caution.fill, color: C.caution.text, border: `1px solid ${C.caution.border}`, padding: '2px 8px', borderRadius: 4, fontWeight: 500, flexShrink: 0, whiteSpace: 'nowrap' }}>Required</span>
         </div>
         {salaryFiles.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
             {salaryFiles.map((f, i) => (
               <div key={`${f.name}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: C.bg, borderRadius: 6, border: `1px solid ${C.border}` }}>
                 <span style={{ fontSize: 18 }}>📄</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: C.fg }}>{f.name}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: C.fg, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
                   <div style={{ fontSize: 11, color: C.muted }}>{(f.size / 1024).toFixed(1)} KB</div>
                 </div>
                 <button
@@ -286,17 +286,17 @@ export default function DocumentsPage() {
       {/* AIS - Optional */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: 12 }}>
-          <div>
-            <h3 style={{ fontSize: 14, fontWeight: 600, color: C.fg, margin: '0 0 4px' }}>AIS (Annual Information Statement)</h3>
-            <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>From Income Tax Portal — optional</p>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 600, color: C.fg, margin: '0 0 4px' }}>AIS</h3>
+            <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>Annual Information Statement — from the Income Tax Portal</p>
           </div>
-          <span style={{ fontSize: 11, background: '#F0F0F0', color: '#666', padding: '2px 8px', borderRadius: 4, fontWeight: 500 }}>Optional</span>
+          <span style={{ fontSize: 11, background: C.sand, color: C.navText, padding: '2px 8px', borderRadius: 4, fontWeight: 500, flexShrink: 0, whiteSpace: 'nowrap' }}>Optional</span>
         </div>
         {aisFile ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: C.bg, borderRadius: 6, border: `1px solid ${C.border}` }}>
             <span style={{ fontSize: 18 }}>📄</span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 500, color: C.fg }}>{aisFile.name}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: C.fg, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{aisFile.name}</div>
               <div style={{ fontSize: 11, color: C.muted }}>{(aisFile.size / 1024).toFixed(1)} KB</div>
             </div>
             <button onClick={() => { setAisFile(null); setAisStatus({ state: 'idle' }) }} style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 18 }}>×</button>
@@ -316,17 +316,17 @@ export default function DocumentsPage() {
       {/* Form 26AS - Optional */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: 12 }}>
-          <div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <h3 style={{ fontSize: 14, fontWeight: 600, color: C.fg, margin: '0 0 4px' }}>Form 26AS</h3>
-            <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>TDS certificate — optional</p>
+            <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>TDS certificate</p>
           </div>
-          <span style={{ fontSize: 11, background: '#F0F0F0', color: '#666', padding: '2px 8px', borderRadius: 4, fontWeight: 500 }}>Optional</span>
+          <span style={{ fontSize: 11, background: C.sand, color: C.navText, padding: '2px 8px', borderRadius: 4, fontWeight: 500, flexShrink: 0, whiteSpace: 'nowrap' }}>Optional</span>
         </div>
         {form26File ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: C.bg, borderRadius: 6, border: `1px solid ${C.border}` }}>
             <span style={{ fontSize: 18 }}>📄</span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 500, color: C.fg }}>{form26File.name}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: C.fg, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{form26File.name}</div>
               <div style={{ fontSize: 11, color: C.muted }}>{(form26File.size / 1024).toFixed(1)} KB</div>
             </div>
             <button onClick={() => { setForm26File(null); setForm26Status({ state: 'idle' }) }} style={{ background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 18 }}>×</button>
@@ -343,10 +343,11 @@ export default function DocumentsPage() {
         <input ref={form26Ref} type="file" accept=".pdf" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) { setForm26File(f); processTaxDoc(f, 'form26as') } }} />
       </div>
 
-      <div style={{ display: 'flex', gap: 12 }}>
+      <style>{`@media (max-width: 480px) { .doc-actions { flex-direction: column } .doc-actions button { width: 100% } }`}</style>
+      <div className="doc-actions" style={{ display: 'flex', gap: 12 }}>
         <button onClick={handleProceed} disabled={!(salaryFiles.length > 0 || aisFile || form26File) || uploading} style={{
-          flex: 1, padding: '12px', background: (salaryFiles.length > 0 || aisFile || form26File) && !uploading ? C.primary : '#CCC',
-          color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600,
+          flex: 1, padding: '12px', background: (salaryFiles.length > 0 || aisFile || form26File) && !uploading ? C.primary : C.sand,
+          color: (salaryFiles.length > 0 || aisFile || form26File) && !uploading ? C.ivory : C.faint, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600,
           cursor: (salaryFiles.length > 0 || aisFile || form26File) && !uploading ? 'pointer' : 'not-allowed', fontFamily: 'inherit',
         }}>
           {uploading ? (uploadProgress || 'Parsing…') : (salaryFiles.length > 1 ? `Proceed (${salaryFiles.length} slips)` : 'Proceed')}
