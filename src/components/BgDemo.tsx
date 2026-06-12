@@ -63,7 +63,7 @@ export default function BgDemo({ monthly }: { monthly?: number | null }) {
 
   return (
     <div style={s.wrap}>
-      <div style={s.topbar}>
+      <div className="demo-topbar" style={s.topbar}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <svg width="20" height="20" viewBox="0 0 120 120" fill="none">
             <rect width="120" height="120" rx="14" fill={T.teal}/>
@@ -79,7 +79,7 @@ export default function BgDemo({ monthly }: { monthly?: number | null }) {
       </div>
 
       <div style={s.content}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 6 }}>
+        <div className="demo-regime" style={{ marginBottom: 6 }}>
           <div style={{ background: T.tint, borderRadius: 10, padding: '14px 16px' }}>
             <div style={{ fontSize: 10, fontWeight: 600, color: T.teal, letterSpacing: '0.04em', marginBottom: 6 }}>New regime</div>
             <div style={{ fontSize: 26, fontWeight: 800, color: flash ? T.marigold : T.teal, letterSpacing: '-0.02em' }}>₹{Math.round(displayNew).toLocaleString('en-IN')}</div>
@@ -97,7 +97,7 @@ export default function BgDemo({ monthly }: { monthly?: number | null }) {
         <div style={{ fontSize: 15, fontWeight: 700, color: T.ink, marginBottom: 4 }}>What your salary slip unlocks</div>
         <div style={{ fontSize: 12, color: T.muted, marginBottom: 14 }}>Four blanks stand between you and your real answer.</div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
+        <div className="demo-slots" style={{ marginBottom: 14 }}>
           {slots.map((label, i) => (
             <div key={i} style={{ border: `1px dashed ${T.taupeLine}`, borderRadius: 9, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: 12, color: T.muted }}>{label}</span>

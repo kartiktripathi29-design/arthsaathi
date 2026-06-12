@@ -41,10 +41,25 @@ export default function LandingPage() {
         .salary-input:focus{outline:none;border-color:var(--teal)!important;box-shadow:0 0 0 3px rgba(14,77,71,0.12)}
         .highlight{position:relative;display:inline-block}
         .highlight::after{content:'';position:absolute;bottom:4px;left:0;width:100%;height:6px;background:var(--tint);z-index:-1;border-radius:2px}
+        .nav-bar{padding:16px 52px}
+        .hero-sec{padding:80px 32px 32px}
+        .demo-wrap{padding:4px 32px 24px}
+        .pain-sec{padding:40px 52px 24px}
+        .pain-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+        .hiw-sec{padding:80px 52px}
+        .hiw-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+        .cta-sec{padding:72px 48px}
+        .footer-bar{padding:20px 48px}
+        .demo-regime{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+        .demo-slots{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+        @media (max-width:900px){ .pain-grid{grid-template-columns:1fr} .hiw-grid{grid-template-columns:repeat(2,1fr)} }
+        @media (max-width:768px){ .nav-bar{padding:12px 20px} .hero-sec{padding:56px 20px 24px} .demo-wrap{padding:4px 16px 24px} .pain-sec{padding:32px 20px 24px} .hiw-sec{padding:56px 20px} .cta-sec{padding:56px 24px} .footer-bar{padding:16px 20px} }
+        @media (max-width:560px){ .hiw-grid{grid-template-columns:1fr} .demo-slots{grid-template-columns:1fr} }
+        @media (max-width:480px){ .demo-regime{grid-template-columns:1fr} .demo-topbar{flex-wrap:wrap;row-gap:4px} }
       `}</style>
 
       {/* Sticky nav */}
-      <nav style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'16px 52px', borderBottom:`1px solid ${T.hairline}`, position:'sticky', top:0, background:'rgba(248,242,231,0.95)', backdropFilter:'blur(8px)', zIndex:50 }}>
+      <nav className="nav-bar" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:`1px solid ${T.hairline}`, position:'sticky', top:0, background:'rgba(248,242,231,0.95)', backdropFilter:'blur(8px)', zIndex:50 }}>
         <Link href="/" style={{ textDecoration:'none', display:'flex', alignItems:'center', gap:11 }}>
           <Logo variant="onLight" size={32} />
         </Link>
@@ -55,8 +70,8 @@ export default function LandingPage() {
       </nav>
 
       {/* HERO */}
-      <div style={{ maxWidth:1000, margin:'0 auto', padding:'80px 32px 32px', textAlign:'center' }}>
-        <h1 className="fu d2" style={{ fontSize:'clamp(32px, 5vw, 54px)', fontWeight:900, lineHeight:1.04, letterSpacing:'-0.04em', color:T.ink, marginBottom:8 }}>
+      <div className="hero-sec" style={{ maxWidth:1000, margin:'0 auto', textAlign:'center' }}>
+        <h1 className="fu d2" style={{ fontSize:'clamp(26px, 7vw, 54px)', fontWeight:900, lineHeight:1.04, letterSpacing:'-0.04em', color:T.ink, marginBottom:8 }}>
           <span style={{ display:'block' }}>Your employer taxed<br />what they knew.</span>
           <span style={{ color:T.teal }} className="highlight">Not what's true for you.</span>
         </h1>
@@ -85,14 +100,14 @@ export default function LandingPage() {
       </div>
 
       {/* Demo */}
-      <div id="live-demo" style={{ maxWidth:680, margin:'0 auto', padding:'4px 32px 24px' }}>
+      <div id="live-demo" className="demo-wrap" style={{ maxWidth:680, margin:'0 auto' }}>
         <div style={{ borderRadius:20, overflow:'hidden', border:`1.5px solid ${T.hairline}`, boxShadow:'0 8px 48px rgba(14,77,71,0.1)' }}>
           <BgDemo monthly={taxSaving?.monthly ?? null} />
         </div>
       </div>
 
       {/* Pain section */}
-      <div style={{ padding:'40px 52px 24px', background:T.paper }}>
+      <div className="pain-sec" style={{ background:T.paper }}>
         <div style={{ maxWidth:1100, margin:'0 auto' }}>
           <div style={{ textAlign:'center', marginBottom:52 }}>
             <div style={{ fontSize:11, color:T.faint, fontWeight:700, letterSpacing:'0.3em', textTransform:'uppercase' as const, marginBottom:12 }}>Why ArthVo exists</div>
@@ -101,7 +116,7 @@ export default function LandingPage() {
             </h2>
           </div>
 
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:18 }}>
+          <div className="pain-grid">
             {[
               {
                 statement: 'You picked a regime once. Maybe.',
@@ -132,7 +147,7 @@ export default function LandingPage() {
       </div>
 
       {/* How it works */}
-      <div style={{ padding:'80px 52px', background:T.sand }}>
+      <div className="hiw-sec" style={{ background:T.sand }}>
         <div style={{ maxWidth:1100, margin:'0 auto' }}>
           <div style={{ textAlign:'center', marginBottom:52 }}>
             <div style={{ fontSize:11, color:T.faint, fontWeight:700, letterSpacing:'0.3em', textTransform:'uppercase' as const, marginBottom:12 }}>How it works</div>
@@ -140,7 +155,7 @@ export default function LandingPage() {
               From slip to answer. In minutes.
             </h2>
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:16 }}>
+          <div className="hiw-grid">
             {[
               { num:'01', title:'Add your salary slip', body:'ArthVo reads it for you — no manual typing.' },
               { num:'02', title:'It pulls your income', body:'Your salary and the earnings it can read from your documents.' },
@@ -158,7 +173,7 @@ export default function LandingPage() {
       </div>
 
       {/* Final CTA — dark section: eyebrow/accents → green, headline → ivory, CTA button → green (teal would vanish on dark) */}
-      <div style={{ background:T.ink, padding:'72px 48px', textAlign:'center' }}>
+      <div className="cta-sec" style={{ background:T.ink, textAlign:'center' }}>
         <div style={{ fontSize:11, color:T.green, fontWeight:700, letterSpacing:'0.2em', marginBottom:16, textTransform:'uppercase' as const }}>
           One slip is all it takes
         </div>
@@ -185,7 +200,7 @@ export default function LandingPage() {
       </div>
 
       {/* Footer */}
-      <div style={{ textAlign:'center', padding:'20px 48px', background:T.ink, fontSize:11, color:'rgba(244,238,224,0.55)' }}>
+      <div className="footer-bar" style={{ textAlign:'center', background:T.ink, fontSize:11, color:'rgba(244,238,224,0.55)' }}>
         ArthVo helps you read your salary slip and compare tax regimes. Consult a CA for ITR filing. © 2026 ArthVo
         {' · '}
         <a href="/privacy" style={{ color:'rgba(244,238,224,0.7)', textDecoration:'underline' }}>Privacy</a>
