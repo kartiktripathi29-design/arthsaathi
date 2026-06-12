@@ -230,10 +230,18 @@ function TopBar() {
       position: 'sticky', top: 0, zIndex: 40,
       fontFamily: '"Sora",-apple-system,sans-serif',
     }}>
-      <h1 style={{ fontSize: 13, fontWeight: 600, color: T.ink, margin: 0 }}>{pageTitle}</h1>
+      {/* Mobile-only brand lockup — same V mark as the sidebar cap, teal on sand. Hidden on desktop. */}
+      <Link href="/dashboard" className="dash-toplogo" style={{ display: 'none', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
+        <svg width={22} height={22} viewBox="0 0 120 120" fill="none" aria-hidden="true">
+          <rect x="8" y="8" width="104" height="104" rx="28" fill="none" stroke={T.teal} strokeWidth="8" />
+          <polygon points="28,28 36,28 60,85 84,28 92,28 60,92" fill={T.teal} />
+        </svg>
+        <span style={{ fontSize: 14, fontWeight: 700, color: T.ink }}>ArthVo</span>
+      </Link>
+      <h1 className="dash-toptitle" style={{ fontSize: 13, fontWeight: 600, color: T.ink, margin: 0 }}>{pageTitle}</h1>
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ fontSize: 11, color: T.muted }}>{selectedFY}</span>
-        <span style={{
+        <span className="dash-topbadge" style={{
           fontSize: 11, background: T.card, color: T.teal,
           padding: '2px 9px', borderRadius: 3, fontWeight: 500,
           border: `1px solid ${T.taupeLine}`,
@@ -380,6 +388,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           .dash-tabbar { display: flex !important; }
           .dash-segment { display: flex !important; }
           .dash-topchip { display: flex !important; }
+          .dash-toplogo { display: flex !important; }
+          .dash-toptitle { display: none !important; }
+          .dash-topbadge { display: none !important; }
         }
       `}</style>
       <div style={{ display: 'flex', minHeight: '100vh', background: C.bg, fontFamily: '"Sora",-apple-system,sans-serif' }}>
