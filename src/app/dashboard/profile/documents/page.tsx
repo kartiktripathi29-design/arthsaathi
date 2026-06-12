@@ -235,7 +235,7 @@ export default function DocumentsPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: 12 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <h3 style={{ fontSize: 14, fontWeight: 600, color: C.fg, margin: '0 0 4px' }}>Salary Slips</h3>
-            <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>PDF, image, or Excel — upload one or many at once</p>
+            <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>PDF, image, or Excel — <span style={{ whiteSpace: 'nowrap' }}>upload one or many at once</span></p>
           </div>
           <span style={{ fontSize: 11, background: C.caution.fill, color: C.caution.text, border: `1px solid ${C.caution.border}`, padding: '2px 8px', borderRadius: 4, fontWeight: 500, flexShrink: 0, whiteSpace: 'nowrap' }}>Required</span>
         </div>
@@ -288,7 +288,7 @@ export default function DocumentsPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: 12 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <h3 style={{ fontSize: 14, fontWeight: 600, color: C.fg, margin: '0 0 4px' }}>AIS</h3>
-            <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>Annual Information Statement — from the Income Tax Portal</p>
+            <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>Annual Information Statement — <span style={{ whiteSpace: 'nowrap' }}>from the Income Tax Portal</span></p>
           </div>
           <span style={{ fontSize: 11, background: C.sand, color: C.navText, padding: '2px 8px', borderRadius: 4, fontWeight: 500, flexShrink: 0, whiteSpace: 'nowrap' }}>Optional</span>
         </div>
