@@ -1,5 +1,5 @@
 'use client'
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAppStore } from '@/store/AppStore'
@@ -80,7 +80,7 @@ function Sidebar() {
   }
 
   return (
-    <aside style={{
+    <aside className="dash-rail" style={{
       width: 216, minHeight: '100vh', background: C.rail,
       borderRight: `1px solid ${C.railLine}`,
       display: 'flex', flexDirection: 'column', flexShrink: 0,
@@ -176,7 +176,26 @@ function Sidebar() {
 
 function TopBar() {
   const pathname = usePathname()
+  const router = useRouter()
+  const { user, logout } = useAppStore()
   const [selectedFY, setSelectedFY] = useState('FY 2026–27')
+  // Mobile-only account menu: the sidebar footer (chip + sign-out) hides with the rail under 768px,
+  // so the chip resurfaces here in the top bar as a tap-to-open dropdown.
+  const [menuOpen, setMenuOpen] = useState(false)
+  const chipRef = useRef<HTMLDivElement>(null)
+
+  const initials = user?.name?.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase() || '?'
+
+  // Same teardown as the sidebar's sign-out: clear the Supabase session before wiping local state.
+  const handleSignOut = async () => {
+    try {
+      if (SUPABASE_CONFIGURED) await createSupabaseBrowserClient().auth.signOut()
+    } catch {
+      // ignore — still clear local state below
+    }
+    logout()
+    router.replace('/login')
+  }
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -184,6 +203,16 @@ function TopBar() {
       if (stored) setSelectedFY(stored)
     }
   }, [])
+
+  // Close the account menu on any tap outside the chip.
+  useEffect(() => {
+    if (!menuOpen) return
+    const onDocClick = (e: MouseEvent) => {
+      if (chipRef.current && !chipRef.current.contains(e.target as Node)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [menuOpen])
 
   const pageTitle = pathname === '/dashboard' ? 'Dashboard'
     : pathname.startsWith('/dashboard/profile/documents') ? 'Documents'
@@ -209,8 +238,103 @@ function TopBar() {
           padding: '2px 9px', borderRadius: 3, fontWeight: 500,
           border: `1px solid ${T.taupeLine}`,
         }}>ArthVo</span>
+        {/* Mobile-only account chip — hidden on desktop (display:none flipped by .dash-topchip media rule). */}
+        <div className="dash-topchip" ref={chipRef} style={{ display: 'none', position: 'relative', alignItems: 'center' }}>
+          <button onClick={() => setMenuOpen(o => !o)} aria-label="Account menu" style={{
+            width: 28, height: 28, borderRadius: '50%',
+            background: T.teal, color: T.ivory, border: 'none',
+            fontSize: 11, fontWeight: 700, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit',
+          }}>{initials}</button>
+          {menuOpen && user && (
+            <div style={{
+              position: 'absolute', top: 'calc(100% + 8px)', right: 0, minWidth: 200,
+              background: T.card, border: `1px solid ${T.hairline}`, borderRadius: 10,
+              boxShadow: '0 6px 24px rgba(0,0,0,0.12)', padding: 6, zIndex: 70,
+            }}>
+              <div style={{ padding: '8px 10px' }}>
+                <div style={{ fontSize: 12, color: T.ink, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name}</div>
+                <div style={{ fontSize: 10, color: T.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(user as any).phone || (user as any).email || ''}</div>
+              </div>
+              <button onClick={handleSignOut} style={{
+                width: '100%', textAlign: 'left', padding: '8px 10px', marginTop: 2,
+                background: 'transparent', border: 'none', borderTop: `1px solid ${T.hairline}`,
+                color: T.nav, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit',
+              }}>↪ Sign out</button>
+            </div>
+          )}
+        </div>
       </div>
     </header>
+  )
+}
+
+// Mobile bottom tab bar — 4 family-level tabs. Hidden on desktop (display:none flipped by media rule).
+function BottomTabBar() {
+  const pathname = usePathname()
+  const tabs = [
+    { label: 'Documents', href: '/dashboard/profile/documents', active: pathname.startsWith('/dashboard/profile/documents') },
+    { label: 'Income', href: '/dashboard/profile/salary', active: pathname.startsWith('/dashboard/profile/salary') || pathname.startsWith('/dashboard/profile/other-income') },
+    { label: 'Tax breaks', href: '/dashboard/profile/exemptions', active: pathname.startsWith('/dashboard/profile/exemptions') || pathname.startsWith('/dashboard/profile/deductions') },
+    { label: 'Your Tax', href: '/dashboard/tax/optimizer', active: pathname.startsWith('/dashboard/tax') },
+  ]
+  return (
+    <nav className="dash-tabbar" style={{
+      display: 'none', position: 'fixed', bottom: 0, left: 0, right: 0,
+      background: T.card, borderTop: `1px solid ${T.hairline}`,
+      paddingBottom: 'env(safe-area-inset-bottom)', zIndex: 60,
+      fontFamily: '"Sora",-apple-system,sans-serif',
+    }}>
+      {tabs.map(tab => (
+        <Link key={tab.href} href={tab.href} style={{
+          flex: 1, textAlign: 'center', textDecoration: 'none',
+          fontSize: 11, fontWeight: 600, padding: '10px 0 12px',
+          color: tab.active ? T.teal : T.nav,
+          borderTop: `2px solid ${tab.active ? T.teal : 'transparent'}`,
+        }}>
+          {tab.label}
+        </Link>
+      ))}
+    </nav>
+  )
+}
+
+// Mobile family segment — the two-pill control under the top bar on Income / Tax breaks routes.
+// Renders nothing off-family or on desktop (display:none flipped by media rule).
+function FamilySegment() {
+  const pathname = usePathname()
+  let pills: { label: string; href: string }[] | null = null
+  if (pathname.startsWith('/dashboard/profile/salary') || pathname.startsWith('/dashboard/profile/other-income')) {
+    pills = [
+      { label: 'Salary', href: '/dashboard/profile/salary' },
+      { label: 'Other earnings', href: '/dashboard/profile/other-income' },
+    ]
+  } else if (pathname.startsWith('/dashboard/profile/exemptions') || pathname.startsWith('/dashboard/profile/deductions')) {
+    pills = [
+      { label: 'Allowances', href: '/dashboard/profile/exemptions' },
+      { label: 'Deductions', href: '/dashboard/profile/deductions' },
+    ]
+  }
+  if (!pills) return null
+  return (
+    <div className="dash-segment" style={{
+      display: 'none', margin: '10px 16px 0', background: T.sand,
+      borderRadius: 10, padding: 3, fontFamily: '"Sora",-apple-system,sans-serif',
+    }}>
+      {pills.map(pill => {
+        const active = pathname.startsWith(pill.href)
+        return (
+          <Link key={pill.href} href={pill.href} style={{
+            flex: 1, textAlign: 'center', textDecoration: 'none',
+            fontSize: 13, fontWeight: 600, padding: '7px 0', borderRadius: 8,
+            background: active ? T.teal : 'transparent',
+            color: active ? T.ivory : T.nav,
+          }}>
+            {pill.label}
+          </Link>
+        )
+      })}
+    </div>
   )
 }
 
@@ -248,10 +372,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <AuthGate>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap');`}</style>
+      {/* Mobile overrides only — desktop (≥768px) gets no rules here, so inline styles rule untouched. */}
+      <style>{`
+        @media (max-width: 767px) {
+          .dash-rail { display: none !important; }
+          .dash-main { margin-left: 0 !important; padding-bottom: 76px; }
+          .dash-tabbar { display: flex !important; }
+          .dash-segment { display: flex !important; }
+          .dash-topchip { display: flex !important; }
+        }
+      `}</style>
       <div style={{ display: 'flex', minHeight: '100vh', background: C.bg, fontFamily: '"Sora",-apple-system,sans-serif' }}>
         <Sidebar />
-        <div style={{ marginLeft: 216, flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <BottomTabBar />
+        <div className="dash-main" style={{ marginLeft: 216, flex: 1, display: 'flex', flexDirection: 'column' }}>
           <TopBar />
+          <FamilySegment />
           <main style={{ flex: 1, padding: '28px 28px', maxWidth: 1100, width: '100%' }}>
             {children}
           </main>
