@@ -56,3 +56,7 @@ only — no raw hex in components.
 | `caut-t` | `#9A6B16` | text |
 | `caut-f` | `#FBF1DD` | fill |
 | `caut-b` | `#ECD9AE` | border |
+
+## Locked decisions
+
+- **T.faint is paper-only.** On the taupe rail (#CDB78E), faint (#79827B) lacks contrast — rail section labels use T.nav (#55615B). Never place faint on taupe.

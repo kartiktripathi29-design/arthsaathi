@@ -59,7 +59,7 @@ function Sidebar() {
     ] },
   ]
   // Shared section-label style so the family labels match "MY PROFILE" exactly.
-  const sectionLabelStyle: React.CSSProperties = { fontSize: 9, color: T.faint, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '10px 16px 5px' }
+  const sectionLabelStyle: React.CSSProperties = { fontSize: 10, color: T.nav, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '10px 16px 5px' }
   // One profile link; paddingLeft sets the indent (26 = top-level, 42 = nested under a family).
   const profileLink = (item: { href: string; label: string }, paddingLeft: number) => {
     const active = isActive(item.href)
@@ -67,11 +67,11 @@ function Sidebar() {
       <Link key={item.href} href={item.href} style={{
         display: 'flex', alignItems: 'center',
         padding: `9px 16px 9px ${paddingLeft}px`, textDecoration: 'none',
-        fontSize: 12.5, fontFamily: 'inherit',
+        fontSize: 13, fontFamily: 'inherit',
         borderLeft: `2px solid ${active ? C.accent : 'transparent'}`,
         background: active ? T.tint : 'transparent',
         color: active ? C.accent : C.nav,
-        fontWeight: active ? 600 : 400,
+        fontWeight: active ? 600 : 500,
         transition: 'all 0.15s',
       }}>
         {item.label}
@@ -104,7 +104,7 @@ function Sidebar() {
               borderLeft: `2px solid ${pathname === '/dashboard' ? C.accent : 'transparent'}`,
               background: pathname === '/dashboard' ? T.tint : 'transparent',
               color: pathname === '/dashboard' ? C.accent : C.nav,
-              fontWeight: pathname === '/dashboard' ? 600 : 400,
+              fontWeight: pathname === '/dashboard' ? 600 : 500,
               transition: 'all 0.15s',
             }}>
               <span style={{ fontSize: 15, width: 20, textAlign: 'center' }}>📊</span>
@@ -133,7 +133,7 @@ function Sidebar() {
           borderLeft: `2px solid ${isActive('/dashboard/tax') ? C.accent : 'transparent'}`,
           background: isActive('/dashboard/tax') ? T.tint : 'transparent',
           color: isActive('/dashboard/tax') ? C.accent : C.nav,
-          fontWeight: isActive('/dashboard/tax') ? 600 : 400,
+          fontWeight: isActive('/dashboard/tax') ? 600 : 500,
           transition: 'all 0.15s',
         }}>
           <span style={{ fontSize: 15, width: 20, textAlign: 'center' }}>🎯</span>
