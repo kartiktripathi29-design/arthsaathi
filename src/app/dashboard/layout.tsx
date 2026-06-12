@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAppStore } from '@/store/AppStore'
@@ -42,13 +42,42 @@ function Sidebar() {
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/')
 
-  const PROFILE_SECTIONS = [
+  // One top-level profile item (Documents), then two always-visible families. Each family renders a
+  // section label styled like "MY PROFILE" with its sub-items nested below — no expand/collapse.
+  // (This is the sidebar's own structure; TopBar keeps its separate title lookup.)
+  const PROFILE_TOP = [
     { href: '/dashboard/profile/documents', label: 'Documents' },
-    { href: '/dashboard/profile/salary', label: 'Salary' },
-    { href: '/dashboard/profile/other-income', label: 'Other earnings' },
-    { href: '/dashboard/profile/exemptions', label: 'Allowances' },
-    { href: '/dashboard/profile/deductions', label: 'Deductions' },
   ]
+  const PROFILE_FAMILIES = [
+    { label: 'Income', items: [
+      { href: '/dashboard/profile/salary', label: 'Salary' },
+      { href: '/dashboard/profile/other-income', label: 'Other earnings' },
+    ] },
+    { label: 'Tax breaks', items: [
+      { href: '/dashboard/profile/exemptions', label: 'Allowances' },
+      { href: '/dashboard/profile/deductions', label: 'Deductions' },
+    ] },
+  ]
+  // Shared section-label style so the family labels match "MY PROFILE" exactly.
+  const sectionLabelStyle: React.CSSProperties = { fontSize: 9, color: T.faint, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '10px 16px 5px' }
+  // One profile link; paddingLeft sets the indent (26 = top-level, 42 = nested under a family).
+  const profileLink = (item: { href: string; label: string }, paddingLeft: number) => {
+    const active = isActive(item.href)
+    return (
+      <Link key={item.href} href={item.href} style={{
+        display: 'flex', alignItems: 'center',
+        padding: `9px 16px 9px ${paddingLeft}px`, textDecoration: 'none',
+        fontSize: 12.5, fontFamily: 'inherit',
+        borderLeft: `2px solid ${active ? C.accent : 'transparent'}`,
+        background: active ? T.tint : 'transparent',
+        color: active ? C.accent : C.nav,
+        fontWeight: active ? 600 : 400,
+        transition: 'all 0.15s',
+      }}>
+        {item.label}
+      </Link>
+    )
+  }
 
   return (
     <aside style={{
@@ -85,26 +114,15 @@ function Sidebar() {
           </>
         )}
 
-        <div style={{ fontSize: 9, color: T.faint, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '10px 16px 5px' }}>
-          My Profile
-        </div>
-        {PROFILE_SECTIONS.map(item => {
-          const active = isActive(item.href)
-          return (
-            <Link key={item.href} href={item.href} style={{
-              display: 'flex', alignItems: 'center',
-              padding: '9px 16px 9px 26px', textDecoration: 'none',
-              fontSize: 12.5, fontFamily: 'inherit',
-              borderLeft: `2px solid ${active ? C.accent : 'transparent'}`,
-              background: active ? T.tint : 'transparent',
-              color: active ? C.accent : C.nav,
-              fontWeight: active ? 600 : 400,
-              transition: 'all 0.15s',
-            }}>
-              {item.label}
-            </Link>
-          )
-        })}
+        <div style={sectionLabelStyle}>My Profile</div>
+        {PROFILE_TOP.map(item => profileLink(item, 26))}
+
+        {PROFILE_FAMILIES.map(family => (
+          <Fragment key={family.label}>
+            <div style={sectionLabelStyle}>{family.label}</div>
+            {family.items.map(item => profileLink(item, 42))}
+          </Fragment>
+        ))}
 
         <div style={{ margin: '8px 16px 6px', borderTop: `1px solid ${C.railLine}` }} />
 
