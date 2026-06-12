@@ -4,8 +4,18 @@ import { useRouter } from 'next/navigation'
 
 import { tokens as T } from '@/lib/tokens'
 
-const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, bg:T.paper, card:T.card, border:T.hairline, text:T.ink, muted:T.muted, danger:'#B94040' }
+const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, bg:T.paper, card:T.card, border:T.hairline, text:T.ink, muted:T.muted, green:T.green, ivory:T.ivory, slip:T.slip, danger:'#B94040' }
 const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`
+
+// Mobile-only layout overrides (≤767px). Desktop gets no rules here, so inline styles rule untouched.
+const OI_MOBILE_CSS = `
+@media (max-width: 767px) {
+  .oi-types { grid-template-columns: 1fr !important; }
+  .oi-row { flex-direction: column !important; align-items: stretch !important; }
+  .oi-row-actions { margin-top: 8px; }
+  .oi-modal { padding: 16px !important; }
+}
+`
 
 interface OtherIncomeEntry {
   id: string
@@ -124,12 +134,12 @@ export default function OtherIncomePage() {
   }, [])
 
   const types = [
-    { key: 'freelance', icon: '💼', label: 'Freelance / Consulting', desc: 'Professional or consulting income. Declare 50% profit (if eligible) or actual income minus expenses.' },
-    { key: 'equity', icon: '📈', label: 'Stocks & Mutual Funds', desc: 'Shares or funds you bought and later sold. Taxed as capital gains.' },
+    { key: 'freelance', icon: '💼', label: 'Freelance / Consulting', desc: 'Consulting or side work — declare 50% as profit (simpler) or actual income minus expenses.' },
+    { key: 'equity', icon: '📈', label: 'Stocks & mutual funds', desc: 'Shares or funds you bought and later sold. Taxed as capital gains.' },
     { key: 'crypto', icon: '₿', label: 'Crypto', desc: 'Crypto, NFTs and other virtual digital assets. Flat 30% — losses can\'t be offset.' },
     { key: 'fno', icon: '📊', label: 'Trading (intraday & F&O)', desc: 'Intraday or F&O. Taxed as business income, not capital gains.' },
-    { key: 'interest', icon: '🏦', label: 'Interest & Dividends', desc: 'FD interest, savings interest and dividends. Taxed at your slab rate.' },
-    { key: 'other', icon: '➕', label: 'Other earnings', desc: 'Anything else — rent, royalties, gifts. Taxed at your slab rate.' },
+    { key: 'interest', icon: '🏦', label: 'Interest & dividends', desc: 'FD interest, savings interest and dividends. Taxed at your slab rate.' },
+    { key: 'other', icon: '➕', label: 'Anything else', desc: 'Rent, royalties, gifts — taxed at your slab rate.' },
   ]
 
   const getTaxablePreview = (entry: OtherIncomeEntry) => {
@@ -199,6 +209,7 @@ export default function OtherIncomePage() {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '20px 0' }}>
+      <style>{OI_MOBILE_CSS}</style>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Other earnings</h1>
       <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>Income beyond salary: freelance, investments, trading, interest. (Optional — skip if salary-only)</p>
 
@@ -211,24 +222,24 @@ export default function OtherIncomePage() {
 
       {/* AIS prefill / reconciliation — shown when an AIS/26AS was parsed on the Documents page */}
       {aisData && aisHasIncome && (
-        <div style={{ background: '#EAF4EF', border: '1px solid #BCDCCB', borderRadius: 8, padding: 16, marginBottom: 24 }}>
-          <p style={{ fontSize: 12, fontWeight: 600, color: C.fg, margin: '0 0 6px' }}>📄 Found from your AIS: interest, dividends and capital gains. Add freelance, crypto, F&O and rent manually below.</p>
+        <div style={{ background: C.slip.fill, border: `1px solid ${C.slip.border}`, borderRadius: 8, padding: 16, marginBottom: 24 }}>
+          <p style={{ fontSize: 12, fontWeight: 600, color: C.fg, margin: '0 0 6px' }}>Found in your AIS — interest, dividends and capital gains.</p>
           <p style={{ fontSize: 12, color: C.text, margin: '0 0 10px', lineHeight: 1.6 }}>
-            Interest <strong>{fmt(aisInterest)}</strong> · Dividends <strong>{fmt(aisDividends)}</strong> · Capital gains <strong>{fmt(aisCG)}</strong>
+            <span style={{ whiteSpace: 'nowrap' }}>Interest <strong>{fmt(aisInterest)}</strong></span> · <span style={{ whiteSpace: 'nowrap' }}>Dividends <strong>{fmt(aisDividends)}</strong></span> · <span style={{ whiteSpace: 'nowrap' }}>Capital gains <strong>{fmt(aisCG)}</strong></span>
           </p>
           {hasAisImported && (
-            <p style={{ fontSize: 11, color: '#2A7A4A', margin: '0 0 10px', lineHeight: 1.5 }}>
+            <p style={{ fontSize: 11, color: C.green, margin: '0 0 10px', lineHeight: 1.5 }}>
               ✓ Imported into the entries below (rows marked “From AIS”). Edit any of them to adjust, or re-import to refresh from the latest AIS.
             </p>
           )}
           <button
             onClick={handleImportFromAis}
-            style={{ padding: '9px 16px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+            style={{ padding: '9px 16px', background: C.fg, color: C.ivory, border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
           >
             {hasAisImported ? 'Re-import from AIS' : 'Import from AIS'}
           </button>
           <p style={{ fontSize: 10.5, color: C.muted, margin: '8px 0 0', lineHeight: 1.5 }}>
-            We map AIS capital gains to the right asset type (equity / debt MF / unlisted) and apply the correct rate. Review the imported rows — AIS figures can lag or differ from your records.
+            We map AIS capital gains to the right asset type (equity / debt MF / unlisted) and apply the correct rate. Review the imported rows — AIS figures can lag or differ from your records. Add freelance, crypto, F&O and rent manually below.
           </p>
         </div>
       )}
@@ -236,20 +247,20 @@ export default function OtherIncomePage() {
       {entries.length === 0 && !menuOpen ? (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24, textAlign: 'center', marginBottom: 24 }}>
           <p style={{ fontSize: 14, color: C.muted, margin: '0 0 16px' }}>No other income added yet. (This is optional.)</p>
-          <button onClick={() => setMenuOpen(true)} style={{ padding: '10px 20px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-            + Add Income Source
+          <button onClick={() => setMenuOpen(true)} style={{ padding: '10px 20px', background: C.fg, color: C.ivory, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+            + Add income
           </button>
         </div>
       ) : (
         <>
           {entries.map(entry => (
-            <div key={entry.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16, marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
+            <div key={entry.id} className="oi-row" style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16, marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ minWidth: 0 }}>
                 {/* Equity has no source name (all assets in one source) — title it by type instead. */}
-                <p style={{ fontSize: 13, fontWeight: 600, color: C.text, margin: '0 0 4px' }}>{entry.sourceName?.trim() || types.find(t => t.key === entry.type)?.label}</p>
+                <p style={{ fontSize: 13, fontWeight: 600, color: C.text, margin: '0 0 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.sourceName?.trim() || types.find(t => t.key === entry.type)?.label}</p>
                 {entry.sourceName?.trim() && <p style={{ fontSize: 11, color: C.muted, margin: 0 }}>{types.find(t => t.key === entry.type)?.label}</p>}
               </div>
-              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+              <div className="oi-row-actions" style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                 <div style={{ textAlign: 'right' }}>
                   <p style={{ fontSize: 11, color: C.muted, margin: '0 0 4px' }}>Taxable</p>
                   <p style={{ fontSize: 14, fontWeight: 700, color: C.fg, margin: 0 }}>{fmt(getTaxablePreview(entry))}</p>
@@ -259,19 +270,19 @@ export default function OtherIncomePage() {
               </div>
             </div>
           ))}
-          <button onClick={() => setMenuOpen(true)} style={{ width: '100%', padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', marginBottom: 24 }}>
-            + Add Another Source
+          <button onClick={() => setMenuOpen(true)} style={{ width: '100%', padding: '12px', background: C.fg, color: C.ivory, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', marginBottom: 24 }}>
+            + Add another
           </button>
         </>
       )}
 
       {menuOpen && !openForm && (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 24 }}>
-          <p style={{ fontSize: 12, fontWeight: 700, color: C.muted, margin: '0 0 14px', textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>Select income type</p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: C.muted, margin: '0 0 14px' }}>What kind of income?</p>
+          <div className="oi-types" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
             {types.map(t => (
               <button key={t.key} onClick={() => handleAdd(t.key)} style={{ padding: '14px', background: '#fff', border: `1px solid ${C.border}`, borderRadius: 6, textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }} onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = C.fg; (e.currentTarget as HTMLElement).style.background = C.wl }} onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = C.border; (e.currentTarget as HTMLElement).style.background = '#fff' }}>
-                <p style={{ fontSize: 14, fontWeight: 600, color: C.text, margin: '0 0 4px' }}><span style={{ fontSize: 16, marginRight: 8 }}>{t.icon}</span>{t.label}</p>
+                <p style={{ fontSize: 14, fontWeight: 600, color: C.text, margin: '0 0 4px' }}>{t.label}</p>
                 <p style={{ fontSize: 11, color: C.muted, margin: 0, lineHeight: 1.4 }}>{t.desc}</p>
               </button>
             ))}
@@ -283,7 +294,7 @@ export default function OtherIncomePage() {
       {/* Form Modal */}
       {openForm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(28,43,34,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 20 }}>
-          <div style={{ background: C.card, borderRadius: 10, padding: 24, maxWidth: 560, width: '100%', maxHeight: '90vh', overflow: 'auto' }}>
+          <div className="oi-modal" style={{ background: C.card, borderRadius: 10, padding: 24, maxWidth: 560, width: '100%', maxHeight: '90vh', overflow: 'auto' }}>
             <h2 style={{ fontSize: 16, fontWeight: 700, color: C.text, margin: '0 0 12px' }}>{types.find(t => t.key === openForm.type)?.label}</h2>
             <p style={{ fontSize: 11.5, color: C.muted, margin: '0 0 16px', lineHeight: 1.6 }}>{types.find(t => t.key === openForm.type)?.desc}</p>
 
@@ -413,7 +424,7 @@ export default function OtherIncomePage() {
 
             <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
               <button onClick={() => setOpenForm(null)} style={{ flex: 1, padding: '10px', background: C.card, color: C.muted, border: `1px solid ${C.border}`, borderRadius: 5, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
-              <button onClick={handleSave} style={{ flex: 1, padding: '10px', background: C.fg, color: '#fff', border: 'none', borderRadius: 5, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
+              <button onClick={handleSave} style={{ flex: 1, padding: '10px', background: C.fg, color: C.ivory, border: 'none', borderRadius: 5, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
             </div>
           </div>
         </div>
@@ -422,7 +433,7 @@ export default function OtherIncomePage() {
       {/* Navigation */}
       <div style={{ display: 'flex', gap: 12 }}>
         <button onClick={() => router.push('/dashboard/profile/salary')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
-        <button onClick={() => router.push('/dashboard/profile/exemptions')} style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Next: Allowances →</button>
+        <button onClick={() => router.push('/dashboard/profile/exemptions')} style={{ flex: 1, padding: '12px', background: C.fg, color: C.ivory, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Allowances →</button>
       </div>
     </div>
   )
