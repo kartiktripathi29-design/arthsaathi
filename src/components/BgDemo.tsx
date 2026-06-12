@@ -91,7 +91,7 @@ export default function BgDemo({ monthly }: { monthly?: number | null }) {
         </div>
         <div style={{ fontSize: 12.5, textAlign: 'center', margin: '10px 0 16px' }}>
           <span style={{ color: T.ink, fontWeight: 700 }}>₹{gap.toLocaleString('en-IN')}</span>
-          <span style={{ color: T.muted }}> — decided by a box you ticked once. Time to re-decide.</span>
+          <span style={{ color: T.muted }}> — decided by a box you ticked once. <span style={{ whiteSpace: 'nowrap' }}>Time to re-decide.</span></span>
         </div>
 
         <div style={{ fontSize: 15, fontWeight: 700, color: T.ink, marginBottom: 4 }}>What your salary slip unlocks</div>

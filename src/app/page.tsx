@@ -179,7 +179,7 @@ export default function LandingPage() {
         </div>
         <h2 style={{ fontSize:'clamp(32px,5vw,60px)', fontWeight:900, letterSpacing:'-0.04em', color:T.ivory, lineHeight:1.05, marginBottom:20 }}>
           Know what you owe.<br />
-          <span style={{ color:T.green }}>And which regime is yours.</span>
+          <span style={{ color:T.green }}>And which regime <span style={{ whiteSpace:'nowrap' }}>is yours.</span></span>
         </h2>
         <p style={{ fontSize:16, color:'rgba(244,238,224,0.75)', marginBottom:44, maxWidth:400, margin:'0 auto 44px', lineHeight:1.75 }}>
           No credit card. No guesswork.
