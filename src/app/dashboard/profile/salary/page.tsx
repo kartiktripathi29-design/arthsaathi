@@ -14,8 +14,28 @@ import {
 
 import { tokens as T } from '@/lib/tokens'
 
-const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, bg:T.paper, card:T.card, border:T.hairline, text:T.ink, muted:T.muted, danger:'#B94040' }
+const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, bg:T.paper, card:T.card, border:T.hairline, text:T.ink, muted:T.muted, green:T.green, danger:'#B94040' }
 const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`
+
+// Mobile-only layout overrides (≤767px). Desktop gets no rules here, so the inline styles rule
+// untouched. Class hooks are added to the timeline grid, wizard rows, accordion headers, modal,
+// and the remap/bonus/manual grids.
+const SAL_MOBILE_CSS = `
+.sal-emp-line { display: none; }
+@media (max-width: 767px) {
+  .sal-timeline-grid { grid-template-columns: repeat(4, 1fr) !important; row-gap: 6px; }
+  .sal-emp-band { display: none !important; }
+  .sal-emp-line { display: block !important; }
+  .sal-slip-row { flex-direction: column !important; align-items: stretch !important; }
+  .sal-slip-actions { margin-top: 8px; gap: 8px !important; }
+  .sal-slip-grow { flex: 1 !important; }
+  .sal-acc-head { flex-wrap: wrap !important; row-gap: 4px; }
+  .sal-modal { padding: 16px !important; }
+  .sal-remap { grid-template-columns: 1fr !important; }
+  .sal-bonus { grid-template-columns: repeat(3, 1fr) !important; }
+  .sal-manual { grid-template-columns: 1fr !important; }
+}
+`
 
 const monthLabel = (mk: string) => {
   const [y, m] = mk.split('-')
@@ -80,9 +100,9 @@ interface Earning {
 const FREQUENCY_OPTIONS: { id: Frequency; label: string }[] = [
   { id: 'monthly',     label: 'Monthly' },
   { id: 'quarterly',   label: 'Quarterly' },
-  { id: 'half_yearly', label: 'Half-Yearly' },
+  { id: 'half_yearly', label: 'Half-yearly' },
   { id: 'yearly',      label: 'Yearly' },
-  { id: 'one_time',    label: 'One-Time' },
+  { id: 'one_time',    label: 'One-time' },
 ]
 
 // Heuristic for first-load defaulting: bonus/joining/etc → one_time; everything else → monthly.
@@ -1064,7 +1084,7 @@ export default function SalaryPageCompleteFinal() {
       <div style={{ maxWidth: 900, margin: '0 auto', padding: 20 }}>
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, textAlign: 'center' }}>
           <p style={{ fontSize: 14, color: C.muted, margin: '0 0 16px' }}>No salary data uploaded yet</p>
-          <button onClick={() => router.push('/dashboard/profile/documents')} style={{ padding: '10px 20px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Upload Salary Slip</button>
+          <button onClick={() => router.push('/dashboard/profile/documents')} style={{ padding: '10px 20px', background: C.fg, color: T.ivory, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Upload salary slip</button>
         </div>
       </div>
     )
@@ -1074,14 +1094,15 @@ export default function SalaryPageCompleteFinal() {
   if (wizardStep !== 'review') {
     return (
       <div style={{ maxWidth: 700, margin: '0 auto', padding: '20px 0' }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Salary Setup</h1>
+        <style>{SAL_MOBILE_CSS}</style>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Salary setup</h1>
         <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>FY {fyStartYear}-{fyStartYear + 1}</p>
 
         {wizardStep === 'intent-pick' && (() => {
           const slipCount = slips.length
           const intents: { id: Intent; title: string; desc: string }[] = [
-            { id: 'validate', title: 'My current year — how much tax do I owe?', desc: `Best when the financial year is ongoing or just ended and you want to check what you'll pay or get refunded. Uses your ${slipCount} uploaded slip${slipCount === 1 ? '' : 's'} + other income + deductions for THIS FY.` },
-            { id: 'forecast', title: 'Plan ahead — what if my salary changes?', desc: 'Best when you want to model "if I get a 10% increment in June" or "if I switch jobs at ₹X". Lets you add multiple expected changes (increment, bonus, job switch) and see the tax impact.' },
+            { id: 'validate', title: 'My current year — how much tax do I owe?', desc: `Checks what you'll pay — or get back — using your ${slipCount} uploaded slip${slipCount === 1 ? '' : 's'} for this year.` },
+            { id: 'forecast', title: 'Plan ahead — what if my salary changes?', desc: 'Model an increment, bonus, or job switch — and see the tax impact.' },
           ]
           const pickIntent = (id: Intent) => {
             setWizard(prev => ({ ...prev, intent: id, periodMapping: [], slipConfirmations: {} }))
@@ -1090,7 +1111,7 @@ export default function SalaryPageCompleteFinal() {
           return (
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24 }}>
               <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 8px' }}>What do you want to do?</h2>
-              <p style={{ fontSize: 13, color: C.muted, margin: '0 0 20px' }}>Pick the path that matches your situation. We'll only ask the questions relevant to it.</p>
+              <p style={{ fontSize: 13, color: C.muted, margin: '0 0 20px' }}>Pick one — we'll only ask what's relevant.</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {intents.map(it => (
                   <button
@@ -1112,24 +1133,24 @@ export default function SalaryPageCompleteFinal() {
           const inferred = wizard.intent ? inferFyStartYear(slipsWithMeta.map(m => ({ year: m.year, monthNum: m.monthNum })), wizard.intent) : null
           return (
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24 }}>
-              <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 6px' }}>I found {slipsWithMeta.length} salary slip{slipsWithMeta.length !== 1 ? 's' : ''}. Let me confirm the periods.</h2>
+              <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 6px' }}>Found {slipsWithMeta.length} salary slip{slipsWithMeta.length !== 1 ? 's' : ''} — confirm the months.</h2>
               {inferred !== null && (
                 <p style={{ fontSize: 13, color: C.muted, margin: '0 0 16px' }}>
-                  Building timeline for <strong>FY {inferred}-{inferred + 1}</strong> (Apr {inferred} – Mar {inferred + 1}){wizard.intent === 'forecast' ? ' — FORECAST' : ''}.
+                  Building timeline for <strong>FY {inferred}-{inferred + 1}</strong> (Apr {inferred} – Mar {inferred + 1}){wizard.intent === 'forecast' ? ' — Forecast' : ''}.
                 </p>
               )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
                 {slipsWithMeta.map(s => {
                   const status = wizard.slipConfirmations[s.id]
                   return (
-                    <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', border: `1px solid ${C.border}`, borderRadius: 6, background: C.bg }}>
-                      <div>
-                        <p style={{ fontSize: 13, fontWeight: 600, color: C.text, margin: 0 }}>{monthLabel(s.monthKey)} · {s.raw.employerName || 'Employer'}</p>
-                        <p style={{ fontSize: 11, color: C.muted, margin: '2px 0 0' }}>Gross {fmt(s.raw.grossSalary || s.raw.basicSalary || 0)} · Net {fmt(s.raw.netSalary || 0)}</p>
+                    <div key={s.id} className="sal-slip-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', border: `1px solid ${C.border}`, borderRadius: 6, background: C.bg }}>
+                      <div style={{ minWidth: 0 }}>
+                        <p style={{ fontSize: 13, fontWeight: 600, color: C.text, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{monthLabel(s.monthKey)} · {s.raw.employerName || 'Employer'}</p>
+                        <p style={{ fontSize: 11, color: C.muted, margin: '2px 0 0' }}><span style={{ whiteSpace: 'nowrap' }}>Gross {fmt(s.raw.grossSalary || s.raw.basicSalary || 0)}</span> · <span style={{ whiteSpace: 'nowrap' }}>Net {fmt(s.raw.netSalary || 0)}</span></p>
                       </div>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button onClick={() => setWizard(prev => ({ ...prev, slipConfirmations: { ...prev.slipConfirmations, [s.id]: 'confirmed' } }))} style={{ padding: '6px 12px', background: status === 'confirmed' ? '#2A7A4A' : '#fff', color: status === 'confirmed' ? '#fff' : C.fg, border: `1px solid ${status === 'confirmed' ? '#2A7A4A' : C.border}`, borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>✓ Yes</button>
-                        <button onClick={() => setWizard(prev => ({ ...prev, slipConfirmations: { ...prev.slipConfirmations, [s.id]: 'edit' } }))} style={{ padding: '6px 12px', background: status === 'edit' ? '#E07B3A' : '#fff', color: status === 'edit' ? '#fff' : C.fg, border: `1px solid ${status === 'edit' ? '#E07B3A' : C.border}`, borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Edit</button>
+                      <div className="sal-slip-actions" style={{ display: 'flex', gap: 6 }}>
+                        <button className="sal-slip-grow" onClick={() => setWizard(prev => ({ ...prev, slipConfirmations: { ...prev.slipConfirmations, [s.id]: 'confirmed' } }))} style={{ padding: '6px 12px', background: status === 'confirmed' ? C.green : '#fff', color: status === 'confirmed' ? '#fff' : C.fg, border: `1px solid ${status === 'confirmed' ? C.green : C.border}`, borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>✓ Yes</button>
+                        <button className="sal-slip-grow" onClick={() => setWizard(prev => ({ ...prev, slipConfirmations: { ...prev.slipConfirmations, [s.id]: 'edit' } }))} style={{ padding: '6px 12px', background: status === 'edit' ? T.caution.text : '#fff', color: status === 'edit' ? '#fff' : C.fg, border: `1px solid ${status === 'edit' ? T.caution.text : C.border}`, borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Edit</button>
                         <button
                           onClick={async () => {
                             if (!(await confirmDialog({ message: `Delete ${monthLabel(s.monthKey)} salary slip? This can't be undone.`, confirmLabel: 'Delete', danger: true }))) return
@@ -1158,7 +1179,7 @@ export default function SalaryPageCompleteFinal() {
                 })}
               </div>
               {slipsWithMeta.some(s => wizard.slipConfirmations[s.id] === 'edit') && (
-                <p style={{ fontSize: 11, color: '#A14B12', margin: '0 0 12px' }}>Slips marked "Edit" can be corrected on the timeline after build (click the cell → Edit breakdown).</p>
+                <p style={{ fontSize: 11, color: T.caution.text, margin: '0 0 12px' }}>Slips marked "Edit" can be corrected later — tap the month, then Edit breakdown.</p>
               )}
               {slipsWithMeta.length > 0 && (
                 <div style={{ marginBottom: 12, textAlign: 'right' }}>
@@ -1187,7 +1208,7 @@ export default function SalaryPageCompleteFinal() {
                     setWizard(prev => ({ ...prev, periodMapping: mapping }))
                     setWizardStep(wizard.intent === 'forecast' ? 'forecast-changes' : 'confirm-pattern')
                   }}
-                  style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                  style={{ flex: 1, padding: '12px', background: C.fg, color: T.ivory, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
                 >Next →</button>
               </div>
             </div>
@@ -1319,8 +1340,8 @@ export default function SalaryPageCompleteFinal() {
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                                   <label style={{ fontSize: 11, color: C.muted }}>{isOneShot ? 'Amount' : 'How much?'}</label>
                                   <div style={{ display: 'flex', gap: 2 }}>
-                                    <button type="button" onClick={() => updateChange(idx, { amountMode: 'pct', amountAbs: 0 })} style={{ padding: '2px 6px', background: fc.amountMode === 'abs' ? '#fff' : C.fg, color: fc.amountMode === 'abs' ? C.fg : '#fff', border: `1px solid ${C.fg}`, borderRadius: 3, fontSize: 9, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>%</button>
-                                    <button type="button" onClick={() => updateChange(idx, { amountMode: 'abs', amountPct: 0 })} style={{ padding: '2px 6px', background: fc.amountMode === 'abs' ? C.fg : '#fff', color: fc.amountMode === 'abs' ? '#fff' : C.fg, border: `1px solid ${C.fg}`, borderRadius: 3, fontSize: 9, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>₹</button>
+                                    <button type="button" onClick={() => updateChange(idx, { amountMode: 'pct', amountAbs: 0 })} style={{ padding: '2px 6px', background: fc.amountMode === 'abs' ? '#fff' : C.fg, color: fc.amountMode === 'abs' ? C.fg : T.ivory, border: `1px solid ${C.fg}`, borderRadius: 3, fontSize: 9, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>%</button>
+                                    <button type="button" onClick={() => updateChange(idx, { amountMode: 'abs', amountPct: 0 })} style={{ padding: '2px 6px', background: fc.amountMode === 'abs' ? C.fg : '#fff', color: fc.amountMode === 'abs' ? T.ivory : C.fg, border: `1px solid ${C.fg}`, borderRadius: 3, fontSize: 9, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>₹</button>
                                   </div>
                                 </div>
                                 {fc.amountMode === 'abs' ? (
@@ -1370,7 +1391,7 @@ export default function SalaryPageCompleteFinal() {
                           <input type="file" accept=".pdf,.doc,.docx,image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) applyOfferLetter(idx, f); e.target.value = '' }} />
                         </label>
                         {offerStatus?.idx === idx && (
-                          <p style={{ fontSize: 10.5, margin: '6px 0 0', color: offerStatus.state === 'error' ? C.danger : offerStatus.state === 'done' ? '#2A7A4A' : C.muted }}>
+                          <p style={{ fontSize: 10.5, margin: '6px 0 0', color: offerStatus.state === 'error' ? C.danger : offerStatus.state === 'done' ? C.green : C.muted }}>
                             {offerStatus.state === 'loading' ? '⏳ ' : offerStatus.state === 'done' ? '✓ ' : '⚠ '}{offerStatus.msg}
                           </p>
                         )}
@@ -1378,7 +1399,7 @@ export default function SalaryPageCompleteFinal() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
                           <span style={{ fontSize: 11, color: C.muted }}>Withhold TDS under:</span>
                           {(['new', 'old'] as const).map(r => (
-                            <button key={r} type="button" onClick={() => updateChange(idx, { tdsRegime: r })} style={{ padding: '3px 10px', background: (fc.tdsRegime || 'new') === r ? C.fg : '#fff', color: (fc.tdsRegime || 'new') === r ? '#fff' : C.fg, border: `1px solid ${C.fg}`, borderRadius: 4, fontSize: 10.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                            <button key={r} type="button" onClick={() => updateChange(idx, { tdsRegime: r })} style={{ padding: '3px 10px', background: (fc.tdsRegime || 'new') === r ? C.fg : '#fff', color: (fc.tdsRegime || 'new') === r ? T.ivory : C.fg, border: `1px solid ${C.fg}`, borderRadius: 4, fontSize: 10.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                               {r === 'new' ? 'New regime' : 'Old regime'}
                             </button>
                           ))}
@@ -1398,7 +1419,7 @@ export default function SalaryPageCompleteFinal() {
 
               <div style={{ display: 'flex', gap: 12 }}>
                 <button onClick={() => setWizardStep('confirm-periods')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
-                <button onClick={() => { buildEmploymentsFromMapping(); setWizardStep('review') }} style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Build timeline →</button>
+                <button onClick={() => { buildEmploymentsFromMapping(); setWizardStep('review') }} style={{ flex: 1, padding: '12px', background: C.fg, color: T.ivory, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Build timeline →</button>
               </div>
             </div>
           )
@@ -1410,8 +1431,8 @@ export default function SalaryPageCompleteFinal() {
           const inferred = wizard.intent ? inferFyStartYear(slipsWithMeta.map(m => ({ year: m.year, monthNum: m.monthNum })), wizard.intent) : 0
           return (
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24 }}>
-              <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 8px' }}>Based on these slips, I'm building your timeline like this. Does it look right?</h2>
-              <p style={{ fontSize: 13, color: C.muted, margin: '0 0 16px' }}>FY {inferred}-{inferred + 1}{wizard.intent === 'forecast' ? ' — FORECAST' : ''}</p>
+              <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 8px' }}>Your timeline, built from these slips — does it look right?</h2>
+              <p style={{ fontSize: 13, color: C.muted, margin: '0 0 16px' }}>FY {inferred}-{inferred + 1}{wizard.intent === 'forecast' ? ' — Forecast' : ''}</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
                 {wizard.periodMapping.map((r, i) => {
                   const src = slipById.get(r.sourceSlipId)
@@ -1435,7 +1456,7 @@ export default function SalaryPageCompleteFinal() {
                       setWizardStep('bonuses')
                     }
                   }}
-                  style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                  style={{ flex: 1, padding: '12px', background: C.fg, color: T.ivory, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
                 >{wizard.intent === 'forecast' ? 'Build timeline →' : 'Looks right →'}</button>
               </div>
             </div>
@@ -1467,7 +1488,7 @@ export default function SalaryPageCompleteFinal() {
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24 }}>
               <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 8px' }}>Pick which slip applies to each month</h2>
               <p style={{ fontSize: 13, color: C.muted, margin: '0 0 16px' }}>Adjacent months with the same slip are merged into a range automatically.</p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6, marginBottom: 16 }}>
+              <div className="sal-remap" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6, marginBottom: 16 }}>
                 {allFY.map(mk => (
                   <div key={mk} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '6px 10px', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4 }}>
                     <span style={{ fontSize: 12, color: C.text, fontWeight: 600, minWidth: 70 }}>{monthLabel(mk)}</span>
@@ -1489,7 +1510,7 @@ export default function SalaryPageCompleteFinal() {
                       setWizardStep('bonuses')
                     }
                   }}
-                  style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                  style={{ flex: 1, padding: '12px', background: C.fg, color: T.ivory, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
                 >{wizard.intent === 'forecast' ? 'Build timeline →' : 'Next →'}</button>
               </div>
             </div>
@@ -1513,8 +1534,8 @@ export default function SalaryPageCompleteFinal() {
           return (
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24 }}>
               <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 8px' }}>Any bonuses or one-time payments?</h2>
-              <p style={{ fontSize: 13, color: C.muted, margin: '0 0 16px' }}>Tick the months. You can upload those specific slips from the timeline after build.</p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 6, marginBottom: 16 }}>
+              <p style={{ fontSize: 13, color: C.muted, margin: '0 0 16px' }}>Tick the months — you can add those slips later.</p>
+              <div className="sal-bonus" style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 6, marginBottom: 16 }}>
                 {allFY.map(mk => {
                   const on = wizard.bonusMonths.includes(mk)
                   return (
@@ -1529,8 +1550,8 @@ export default function SalaryPageCompleteFinal() {
                 <button
                   onClick={() => { setWizard(prev => ({ ...prev, bonusMonths: [] })); finishOrForecast() }}
                   style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}
-                >Skip — no bonuses</button>
-                <button onClick={finishOrForecast} style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                >No bonuses</button>
+                <button onClick={finishOrForecast} style={{ flex: 1, padding: '12px', background: C.fg, color: T.ivory, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                   Build timeline →
                 </button>
               </div>
@@ -1547,16 +1568,17 @@ export default function SalaryPageCompleteFinal() {
   // REVIEW STEP
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '20px 0' }}>
+      <style>{SAL_MOBILE_CSS}</style>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Salary</h1>
       <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>
         FY {fyStartYear}-{fyStartYear + 1} (Apr {fyStartYear} – Mar {fyStartYear + 1})
-        {wizard.intent === 'forecast' ? ' · FORECAST' : ''}
+        {wizard.intent === 'forecast' ? ' · Forecast' : ''}
       </p>
 
       {/* Preview Modal - Salary Breakup */}
       {previewMonth && previewEmploymentId && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(28,43,34,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 20 }}>
-          <div style={{ background: C.card, borderRadius: 10, padding: 30, maxWidth: 600, width: '95%', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', position: 'relative' }}>
+          <div className="sal-modal" style={{ background: C.card, borderRadius: 10, padding: 30, maxWidth: 600, width: '95%', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', position: 'relative' }}>
             <button onClick={() => setPreviewMonth(null)} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', fontSize: 28, color: C.muted, cursor: 'pointer', padding: 0 }}>×</button>
 
             {previewMonth && getMonthData(previewEmploymentId, previewMonth) && (() => {
@@ -1579,7 +1601,7 @@ export default function SalaryPageCompleteFinal() {
                             {isEditing ? (
                               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                                 <input type="number" value={overrideValue} onChange={ev => setOverrideValue(ev.target.value)} autoFocus style={{ width: 100, padding: '4px 8px', border: `1px solid ${C.fg}`, borderRadius: 4, fontSize: 12, fontFamily: 'inherit', color: C.text }} />
-                                <button onClick={saveOverride} style={{ padding: '4px 10px', background: C.fg, color: '#fff', border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
+                                <button onClick={saveOverride} style={{ padding: '4px 10px', background: C.fg, color: T.ivory, border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
                                 <button onClick={() => { setOverrideKey(null); setOverrideValue('') }} style={{ padding: '4px 8px', background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>×</button>
                               </div>
                             ) : (
@@ -1594,9 +1616,9 @@ export default function SalaryPageCompleteFinal() {
                                       title={`Frequency: ${freq}. Monthly carries forward to all months; others apply only when paid.`}
                                       style={{
                                         padding: '3px 6px',
-                                        background: freq === 'monthly' ? '#E8F2EC' : '#FFF1E0',
-                                        color: freq === 'monthly' ? '#2A7A4A' : '#A14B12',
-                                        border: `1px solid ${freq === 'monthly' ? '#B8D9C4' : '#F0C18A'}`,
+                                        background: freq === 'monthly' ? T.slip.fill : T.caution.fill,
+                                        color: freq === 'monthly' ? C.green : T.caution.text,
+                                        border: `1px solid ${freq === 'monthly' ? T.slip.border : T.caution.border}`,
                                         borderRadius: 3, fontSize: 10, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer',
                                       }}
                                     >
@@ -1610,7 +1632,7 @@ export default function SalaryPageCompleteFinal() {
                                       setOverrideKey({ empId: previewEmploymentId!, monthKey: previewMonth!, kind: 'earning', index: i })
                                       setOverrideValue(String(e.amount))
                                     }}
-                                    style={{ padding: '3px 8px', background: '#E07B3A', color: '#fff', border: 'none', borderRadius: 3, fontSize: 10, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'uppercase', letterSpacing: '0.03em' }}
+                                    style={{ padding: '3px 8px', background: T.caution.text, color: '#fff', border: 'none', borderRadius: 3, fontSize: 10, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'uppercase', letterSpacing: '0.03em' }}
                                   >
                                     Edit
                                   </button>
@@ -1621,7 +1643,7 @@ export default function SalaryPageCompleteFinal() {
                         )
                       })}
                       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: C.wl, fontWeight: 600, borderTop: `1px solid ${C.border}` }}>
-                        <span style={{ fontSize: 12, color: C.fg }}>Total Earnings</span>
+                        <span style={{ fontSize: 12, color: C.fg }}>Total earnings</span>
                         <span style={{ fontSize: 12, color: C.fg }}>{fmt(md.gross)}</span>
                       </div>
                     </div>
@@ -1640,7 +1662,7 @@ export default function SalaryPageCompleteFinal() {
                             {isEditing ? (
                               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                                 <input type="number" value={overrideValue} onChange={ev => setOverrideValue(ev.target.value)} autoFocus style={{ width: 100, padding: '4px 8px', border: `1px solid ${C.fg}`, borderRadius: 4, fontSize: 12, fontFamily: 'inherit', color: C.text }} />
-                                <button onClick={saveOverride} style={{ padding: '4px 10px', background: C.fg, color: '#fff', border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
+                                <button onClick={saveOverride} style={{ padding: '4px 10px', background: C.fg, color: T.ivory, border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
                                 <button onClick={() => { setOverrideKey(null); setOverrideValue('') }} style={{ padding: '4px 8px', background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>×</button>
                               </div>
                             ) : (
@@ -1652,7 +1674,7 @@ export default function SalaryPageCompleteFinal() {
                                       setOverrideKey({ empId: previewEmploymentId!, monthKey: previewMonth!, kind: 'deduction', index: i })
                                       setOverrideValue(String(d.amount))
                                     }}
-                                    style={{ padding: '3px 8px', background: '#E07B3A', color: '#fff', border: 'none', borderRadius: 3, fontSize: 10, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'uppercase', letterSpacing: '0.03em' }}
+                                    style={{ padding: '3px 8px', background: T.caution.text, color: '#fff', border: 'none', borderRadius: 3, fontSize: 10, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'uppercase', letterSpacing: '0.03em' }}
                                   >
                                     Edit
                                   </button>
@@ -1663,7 +1685,7 @@ export default function SalaryPageCompleteFinal() {
                         )
                       })}
                       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: '#FBF0F0', fontWeight: 600, borderTop: `1px solid ${C.border}` }}>
-                        <span style={{ fontSize: 12, color: C.danger }}>Total Deductions</span>
+                        <span style={{ fontSize: 12, color: C.danger }}>Total deductions</span>
                         <span style={{ fontSize: 12, color: C.danger }}>−{fmt(md.deductions)}</span>
                       </div>
                     </div>
@@ -1672,7 +1694,7 @@ export default function SalaryPageCompleteFinal() {
                   {/* Net Salary */}
                   <div style={{ marginTop: 20, padding: '14px', background: C.wl, borderRadius: 6, display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ fontSize: 14, fontWeight: 600, color: C.fg }}>Net Salary</span>
-                    <span style={{ fontSize: 16, fontWeight: 700, color: '#2A7A4A' }}>{fmt(md.net)}</span>
+                    <span style={{ fontSize: 16, fontWeight: 700, color: C.green }}>{fmt(md.net)}</span>
                   </div>
                 </>
               )
@@ -1687,7 +1709,7 @@ export default function SalaryPageCompleteFinal() {
               </button>
               <button
                 onClick={() => setPreviewMonth(null)}
-                style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                style={{ flex: 1, padding: '12px', background: C.fg, color: T.ivory, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
               >
                 Close
               </button>
@@ -1705,7 +1727,7 @@ export default function SalaryPageCompleteFinal() {
         </div>
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
           <p style={{ fontSize: 10, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Annual Net</p>
-          <p style={{ fontSize: 20, fontWeight: 700, color: '#2A7A4A', margin: 0 }}>{fmt(annualNet)}</p>
+          <p style={{ fontSize: 20, fontWeight: 700, color: C.green, margin: 0 }}>{fmt(annualNet)}</p>
         </div>
       </div>
 
@@ -1787,7 +1809,7 @@ export default function SalaryPageCompleteFinal() {
                           </select>
                         </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <div className="sal-manual" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                           {/* Earnings editor */}
                           <div>
                             <p style={{ fontSize: 10, fontWeight: 600, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase' }}>Earnings</p>
@@ -1817,10 +1839,10 @@ export default function SalaryPageCompleteFinal() {
                         <div style={{ marginTop: 10, padding: 10, background: C.wl, borderRadius: 6, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                           <div><p style={{ fontSize: 10, color: C.muted, margin: '0 0 2px', textTransform: 'uppercase' }}>Gross</p><p style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: 0 }}>{fmt(liveGross)}</p></div>
                           <div><p style={{ fontSize: 10, color: C.muted, margin: '0 0 2px', textTransform: 'uppercase' }}>Deductions</p><p style={{ fontSize: 13, fontWeight: 700, color: C.danger, margin: 0 }}>−{fmt(liveDed)}</p></div>
-                          <div><p style={{ fontSize: 10, color: C.muted, margin: '0 0 2px', textTransform: 'uppercase' }}>Net</p><p style={{ fontSize: 13, fontWeight: 700, color: '#2A7A4A', margin: 0 }}>{fmt(liveNet)}</p></div>
+                          <div><p style={{ fontSize: 10, color: C.muted, margin: '0 0 2px', textTransform: 'uppercase' }}>Net</p><p style={{ fontSize: 13, fontWeight: 700, color: C.green, margin: 0 }}>{fmt(liveNet)}</p></div>
                         </div>
 
-                        <button onClick={() => submitManualEntry(empIdForMonth(manualMonthKey))} style={{ marginTop: 10, width: '100%', padding: '10px 14px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Save breakdown</button>
+                        <button onClick={() => submitManualEntry(empIdForMonth(manualMonthKey))} style={{ marginTop: 10, width: '100%', padding: '10px 14px', background: C.fg, color: T.ivory, border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Save breakdown</button>
                       </div>
                     )
                   })()}
@@ -1830,17 +1852,17 @@ export default function SalaryPageCompleteFinal() {
 
               {/* Unified timeline grid — all months across employers */}
               <p style={{ fontSize: 11, fontWeight: 600, color: C.muted, margin: '0 0 12px', textTransform: 'uppercase' }}>Timeline · click to view/edit</p>
-              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8, marginBottom: 6 }}>
+              <div className="sal-timeline-grid" style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8, marginBottom: 6 }}>
                 {flatMonths.map(m => {
                   const isForecastCell = wizard.intent === 'forecast' && m.source === 'projected' && m.gross > 0
                   const bg = m.source === 'actual' ? C.fg
                     : m.source === 'edited' ? C.wm
                     : m.source === 'inferred' ? '#CFE0F0'
-                    : isForecastCell ? '#FFF6D6'
+                    : isForecastCell ? T.caution.fill
                     : C.border
                   const fg = m.source === 'actual' || m.source === 'edited' ? '#fff'
                     : m.source === 'inferred' ? '#1F4E7A'
-                    : isForecastCell ? '#7A5C00'
+                    : isForecastCell ? T.caution.text
                     : C.muted
                   const icon = isForecastCell ? '🔮'
                     : m.source === 'actual' ? '●'
@@ -1848,8 +1870,8 @@ export default function SalaryPageCompleteFinal() {
                     : m.source === 'inferred' ? '◆'
                     : '○'
                   const anomaly = anomalyByMonth.get(m.monthKey)
-                  const cellBorder = anomaly ? `2px solid #E07B3A`
-                    : isForecastCell ? `2px dashed #7A5C00`
+                  const cellBorder = anomaly ? `2px solid ${T.caution.text}`
+                    : isForecastCell ? `2px dashed ${T.caution.text}`
                     : m.source === 'inferred' ? `1px solid #7AA8D1`
                     : 'none'
                   return (
@@ -1863,20 +1885,29 @@ export default function SalaryPageCompleteFinal() {
                       style={{ position: 'relative', background: bg, color: fg, border: cellBorder, borderRadius: 4, padding: '12px 4px', fontSize: 10, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}
                     >
                       {anomaly && (
-                        <span style={{ position: 'absolute', top: -6, right: -4, background: '#E07B3A', color: '#fff', borderRadius: '50%', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700 }}>!</span>
+                        <span style={{ position: 'absolute', top: -6, right: -4, background: T.caution.text, color: '#fff', borderRadius: '50%', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700 }}>!</span>
                       )}
                       <div style={{ fontSize: 9 }}>{monthLabel(m.monthKey).split(' ')[0]}</div>
                       <div style={{ fontSize: 11 }}>{icon}</div>
-                      <div style={{ fontSize: 8, opacity: 0.8 }}>{fmt(m.gross)}</div>
+                      <div style={{ fontSize: 10, opacity: 0.8 }}>{fmt(m.gross)}</div>
                     </button>
                   )
                 })}
               </div>
 
               {/* Employer band — one label per employer, spanning its months */}
-              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8, marginBottom: 14 }}>
+              <div className="sal-emp-band" style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8, marginBottom: 14 }}>
                 {employments.map(e => (
                   <div key={e.id} title={`${e.name} · ${monthLabel(e.fromMonth)} → ${monthLabel(e.toMonth)}`} style={{ gridColumn: `span ${e.months.length}`, textAlign: 'center', fontSize: 10, fontWeight: 700, color: C.fg, background: C.wl, border: `1px solid ${C.border}`, borderRadius: 4, padding: '5px 4px', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{e.name}</div>
+                ))}
+              </div>
+
+              {/* Mobile-only employer line — replaces the hidden band on narrow screens (band → emp-line). */}
+              <div className="sal-emp-line" style={{ marginBottom: 14 }}>
+                {employments.map(e => (
+                  <div key={e.id} style={{ fontSize: 11, color: T.nav, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                    {e.name} · {monthLabel(e.fromMonth).split(' ')[0]}–{monthLabel(e.toMonth).split(' ')[0]}
+                  </div>
                 ))}
               </div>
 
@@ -1886,9 +1917,9 @@ export default function SalaryPageCompleteFinal() {
                 <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: C.wm, marginRight: 4, verticalAlign: 'middle' }} /><strong style={{ color: C.fg }}>✎</strong> Edited (you changed it)</span>
                 <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#CFE0F0', border: '1px solid #7AA8D1', marginRight: 4, verticalAlign: 'middle' }} /><strong style={{ color: '#1F4E7A' }}>◆</strong> Inferred (from another slip)</span>
                 {wizard.intent === 'forecast' && (
-                  <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#FFF6D6', border: '2px dashed #7A5C00', marginRight: 4, verticalAlign: 'middle' }} />🔮 Forecast</span>
+                  <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: T.caution.fill, border: `2px dashed ${T.caution.text}`, marginRight: 4, verticalAlign: 'middle' }} />🔮 Forecast</span>
                 )}
-                <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: '#E07B3A', marginRight: 4, verticalAlign: 'middle' }} />! Anomaly</span>
+                <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: T.caution.text, marginRight: 4, verticalAlign: 'middle' }} />! Anomaly</span>
               </div>
 
               {/* Employer subtotals */}
@@ -1899,7 +1930,7 @@ export default function SalaryPageCompleteFinal() {
                   return (
                     <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 11.5, padding: '7px 10px', background: C.wl, borderRadius: 6, marginBottom: 6 }}>
                       <span style={{ color: C.text, fontWeight: 600 }}>{e.name} <span style={{ color: C.muted, fontWeight: 400 }}>({monthLabel(e.fromMonth)} – {monthLabel(e.toMonth)})</span></span>
-                      <span style={{ color: C.fg, fontWeight: 700 }}>{fmt(g)} <span style={{ color: C.muted, fontWeight: 400 }}>gross</span> · <span style={{ color: '#2A7A4A' }}>{fmt(n)}</span> <span style={{ color: C.muted, fontWeight: 400 }}>net</span></span>
+                      <span style={{ color: C.fg, fontWeight: 700 }}>{fmt(g)} <span style={{ color: C.muted, fontWeight: 400 }}>gross</span> · <span style={{ color: C.green }}>{fmt(n)}</span> <span style={{ color: C.muted, fontWeight: 400 }}>net</span></span>
                     </div>
                   )
                 })}
@@ -1928,16 +1959,16 @@ export default function SalaryPageCompleteFinal() {
                                 if (isOpen) { setPreviewMonth(null); setPreviewEmploymentId(null) }
                                 else { setPreviewMonth(m.monthKey); setPreviewEmploymentId(m.empId) }
                               }}
-                              style={{ width: '100%', padding: '10px 12px', background: isOpen ? C.wl : '#fff', border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                              className="sal-acc-head" style={{ width: '100%', padding: '10px 12px', background: isOpen ? C.wl : '#fff', border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                             >
-                              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                              <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
                                 <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{monthLabel(m.monthKey)}</span>
-                                <span style={{ fontSize: 10, color: C.muted }}>{m.empName}</span>
+                                <span style={{ fontSize: 10, color: C.muted, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.empName}</span>
                                 <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 3, background: m.source === 'actual' ? C.fg : m.source === 'edited' ? C.wm : C.border, color: m.source === 'projected' ? C.muted : '#fff' }}>{m.source}</span>
                               </div>
                               <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
                                 <span style={{ fontSize: 11, color: C.muted }}>Gross <strong style={{ color: C.fg }}>{fmt(m.gross)}</strong></span>
-                                <span style={{ fontSize: 11, color: C.muted }}>Net <strong style={{ color: '#2A7A4A' }}>{fmt(m.net)}</strong></span>
+                                <span style={{ fontSize: 11, color: C.muted }}>Net <strong style={{ color: C.green }}>{fmt(m.net)}</strong></span>
                                 <span style={{ fontSize: 13, color: C.fg }}>{isOpen ? '−' : '+'}</span>
                               </div>
                             </button>
@@ -2021,7 +2052,7 @@ export default function SalaryPageCompleteFinal() {
                 <span style={{ textAlign: 'right', fontWeight: 600, color: C.fg }}>{fmt(baselineAnnualGross)}</span>
                 <span style={{ textAlign: 'right', fontWeight: 600, color: C.fg }}>{fmt(baselineAnnualTDS)}</span>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', padding: '10px 12px', borderTop: `1px solid ${C.border}`, fontSize: 12, color: C.text, background: '#E8F2EC' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', padding: '10px 12px', borderTop: `1px solid ${C.border}`, fontSize: 12, color: C.text, background: T.slip.fill }}>
                 <span style={{ fontWeight: 600 }}>With {wizard.forecastChanges.length} change{wizard.forecastChanges.length > 1 ? 's' : ''}</span>
                 <span style={{ textAlign: 'right', fontWeight: 600, color: C.fg }}>{fmt(builtAnnualGross)}</span>
                 <span style={{ textAlign: 'right', fontWeight: 600, color: C.fg }}>{fmt(builtAnnualTDS)}</span>
@@ -2061,8 +2092,8 @@ export default function SalaryPageCompleteFinal() {
         if (actualCount < 3) warnings.push(`Only ${actualCount} month(s) of actual data — projections may be less accurate. Consider uploading more slips.`)
         if (warnings.length === 0) return null
         return (
-          <div style={{ background: '#FFF1E0', border: `1px solid #F0C18A`, borderRadius: 8, padding: 14, marginBottom: 16 }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: '#A14B12', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>⚠ Please verify</p>
+          <div style={{ background: T.caution.fill, border: `1px solid ${T.caution.border}`, borderRadius: 8, padding: 14, marginBottom: 16 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: T.caution.text, margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>⚠ Please verify</p>
             {warnings.map((w, i) => (
               <p key={i} style={{ fontSize: 12, color: C.text, margin: i === 0 ? 0 : '4px 0 0', lineHeight: 1.4 }}>• {w}</p>
             ))}
@@ -2089,7 +2120,7 @@ export default function SalaryPageCompleteFinal() {
 
         return (
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 16 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: C.fg, margin: '0 0 14px' }}>Salary Summary</h3>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: C.fg, margin: '0 0 14px' }}>Salary summary</h3>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
               <div style={{ padding: 12, background: C.bg, borderRadius: 6 }}>
@@ -2116,8 +2147,8 @@ export default function SalaryPageCompleteFinal() {
 
             <p style={{ fontSize: 12, color: C.muted, margin: 0, padding: 12, background: C.wl, borderRadius: 6 }}>
               {wizard.intent === 'forecast'
-                ? 'Your salary forecast is ready. Add your other income and deductions to see the tax impact of each scenario.'
-                : 'Your salary data is ready. Now add your other income and deductions to calculate your complete tax liability in Tax Summary.'}
+                ? "Forecast's ready. Add Other earnings and Tax breaks to see each scenario's impact."
+                : "Salary's ready. Add Other earnings and Tax breaks next — your answer is in Your Tax."}
             </p>
           </div>
         )
@@ -2126,7 +2157,7 @@ export default function SalaryPageCompleteFinal() {
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <button onClick={() => setWizardStep('intent-pick')} style={{ flex: 1, minWidth: 120, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Edit timeline</button>
         <button onClick={() => router.push('/dashboard/profile/documents')} style={{ flex: 1, minWidth: 120, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Upload more slips</button>
-        <button onClick={() => router.push('/dashboard/profile/other-income')} style={{ flex: 1, minWidth: 120, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Add Other earnings →</button>
+        <button onClick={() => router.push('/dashboard/profile/other-income')} style={{ flex: 1, minWidth: 120, padding: '12px', background: C.fg, color: T.ivory, border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Other earnings →</button>
       </div>
     </div>
   )
