@@ -107,7 +107,6 @@ function Sidebar() {
               fontWeight: pathname === '/dashboard' ? 600 : 500,
               transition: 'all 0.15s',
             }}>
-              <span style={{ fontSize: 15, width: 20, textAlign: 'center' }}>📊</span>
               Dashboard
             </Link>
             <div style={{ margin: '6px 16px', borderTop: `1px solid ${C.railLine}` }} />
@@ -136,7 +135,6 @@ function Sidebar() {
           fontWeight: isActive('/dashboard/tax') ? 600 : 500,
           transition: 'all 0.15s',
         }}>
-          <span style={{ fontSize: 15, width: 20, textAlign: 'center' }}>🎯</span>
           Your Tax
         </Link>
       </nav>

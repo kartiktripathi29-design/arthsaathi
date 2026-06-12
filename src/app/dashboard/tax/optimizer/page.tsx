@@ -8,8 +8,17 @@ import { slabBreakdown, type SeniorStatus } from '@/lib/tax-slabs'
 
 import { tokens as T } from '@/lib/tokens'
 
-const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, bg:T.paper, card:T.card, border:T.hairline, text:T.ink, muted:T.muted, danger:'#B94040' }
+const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, bg:T.paper, card:T.card, border:T.hairline, text:T.ink, muted:T.muted, green:T.green, ivory:T.ivory, tint:T.tint, slip:T.slip, caution:T.caution, danger:'#B94040' }
 const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`
+
+// Mobile-only layout overrides (≤767px). Desktop gets no rules here, so inline styles rule untouched.
+const OPT_MOBILE_CSS = `
+@media (max-width: 767px) {
+  .opt-slabs { grid-template-columns: 1fr !important; }
+  .opt-save { grid-template-columns: 1fr !important; }
+  .opt-row-sub { display: block !important; margin-left: 0 !important; }
+}
+`
 
 // Pick the most appropriate ITR form based on income mix + total income.
 // Rules of thumb for AY 2025-26:
@@ -380,7 +389,7 @@ export default function TaxOptimizerPage() {
         <p style={{ fontSize: 14, color: C.danger, margin: '0 0 8px' }}>Your Tax hit an error: {calcError}</p>
         <p style={{ fontSize: 12, color: C.muted, margin: '0 0 20px' }}>Your salary data is safe. Try clearing this page's stale state and recomputing.</p>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-          <button onClick={() => { setCalcError(null); router.push('/dashboard/profile/salary') }} style={{ padding: '10px 20px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Back to Salary</button>
+          <button onClick={() => { setCalcError(null); router.push('/dashboard/profile/salary') }} style={{ padding: '10px 20px', background: C.fg, color: C.ivory, border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Back to salary</button>
           <button onClick={() => location.reload()} style={{ padding: '10px 20px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Retry</button>
         </div>
       </div>
@@ -391,7 +400,7 @@ export default function TaxOptimizerPage() {
     return (
       <div style={{ maxWidth: 900, margin: '0 auto', padding: 40, textAlign: 'center' }}>
         <p style={{ fontSize: 14, color: C.danger, margin: 0 }}>Upload a salary slip first to see your tax calculation.</p>
-        <button onClick={() => router.push('/dashboard/profile/salary')} style={{ marginTop: 20, padding: '10px 20px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Go to Salary</button>
+        <button onClick={() => router.push('/dashboard/profile/salary')} style={{ marginTop: 20, padding: '10px 20px', background: C.fg, color: C.ivory, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Go to salary</button>
       </div>
     )
   }
@@ -405,7 +414,7 @@ export default function TaxOptimizerPage() {
         ) : (
           <span style={{ fontSize: strong ? 13 : 12, color: color || (strong ? C.fg : C.text), fontWeight: strong ? 700 : 400 }}>{label}</span>
         )}
-        {sub && <span style={{ fontSize: 10, color: C.muted, marginLeft: 8 }}>{sub}</span>}
+        {sub && <span className="opt-row-sub" style={{ fontSize: 10, color: C.muted, marginLeft: 8 }}>{sub}</span>}
       </div>
       <span style={{ fontSize: strong ? 13 : 12, color: color || C.fg, fontWeight: strong ? 700 : 600 }}>{value}</span>
     </div>
@@ -413,6 +422,7 @@ export default function TaxOptimizerPage() {
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '20px 0' }}>
+      <style>{OPT_MOBILE_CSS}</style>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Your Tax</h1>
       <p style={{ fontSize: 13, color: C.muted, margin: '0 0 16px' }}>Your tax picture for FY 2025-26</p>
 
@@ -482,9 +492,9 @@ export default function TaxOptimizerPage() {
         {/* Sanity warning — exemptions north of 40% of gross are almost always a data-entry error
             (e.g., PF withdrawal or gratuity entered while still employed). Flag it and link to fix. */}
         {calc.grossSalary > 0 && calc.totalExemptions > calc.grossSalary * 0.4 && (
-          <div style={{ marginTop: 8, padding: '10px 12px', background: '#FFF3DD', border: `1px solid ${C.wm}`, borderRadius: 4 }}>
-            <p style={{ fontSize: 11, color: '#856404', margin: 0, lineHeight: 1.5 }}>
-              ⚠️ <strong>Exemptions {fmt(calc.totalExemptions)} are {Math.round(calc.totalExemptions / calc.grossSalary * 100)}% of gross salary</strong> — unusually high. Common causes: <strong>PF withdrawal</strong> or <strong>Gratuity</strong> entered while still employed (these only apply on retirement / separation), or <strong>Driver/Car/Daily-allowance</strong> entered without the employer actually providing those perks. <Link href="/dashboard/profile/exemptions" style={{ color: '#856404', textDecoration: 'underline' }}>Review exemptions →</Link>
+          <div style={{ marginTop: 8, padding: '10px 12px', background: C.caution.fill, border: `1px solid ${C.wm}`, borderRadius: 4 }}>
+            <p style={{ fontSize: 11, color: C.caution.text, margin: 0, lineHeight: 1.5 }}>
+              ⚠️ <strong>Exemptions {fmt(calc.totalExemptions)} are {Math.round(calc.totalExemptions / calc.grossSalary * 100)}% of gross salary</strong> — unusually high. Common causes: <strong>PF withdrawal</strong> or <strong>Gratuity</strong> entered while still employed (these only apply on retirement / separation), or <strong>Driver/Car/Daily-allowance</strong> entered without the employer actually providing those perks. <Link href="/dashboard/profile/exemptions" style={{ color: C.caution.text, textDecoration: 'underline' }}>Review exemptions →</Link>
             </p>
           </div>
         )}
@@ -583,11 +593,11 @@ export default function TaxOptimizerPage() {
       )}
 
       {/* ── Slab-wise breakup — side-by-side comparison ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-      <div style={{ background: calc.recommendation === 'new' ? '#F0F9F7' : C.card, border: `2px solid ${calc.recommendation === 'new' ? C.fg : C.border}`, borderRadius: 8, padding: 16 }}>
+      <div className="opt-slabs" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+      <div style={{ background: calc.recommendation === 'new' ? C.tint : C.card, border: `2px solid ${calc.recommendation === 'new' ? C.fg : C.border}`, borderRadius: 8, padding: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
           <h3 style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>New regime · slab-wise</h3>
-          {calc.recommendation === 'new' && <span style={{ fontSize: 9, fontWeight: 700, background: C.fg, color: '#fff', padding: '3px 8px', borderRadius: 3 }}>Recommended</span>}
+          {calc.recommendation === 'new' && <span style={{ fontSize: 9, fontWeight: 700, background: C.fg, color: C.ivory, padding: '3px 8px', borderRadius: 3 }}>Recommended</span>}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', fontSize: 11.5 }}>
           <div style={{ padding: '6px 8px', background: C.bg, fontWeight: 700, color: C.muted, borderBottom: `1px solid ${C.border}` }}>Slab</div>
@@ -620,17 +630,17 @@ export default function TaxOptimizerPage() {
           {calc.tdsPaid > 0 && (
             <>
               <Row label="− TDS already deducted" value={fmt(calc.tdsPaid)} color={C.danger} />
-              <Row label={calc.newBalance >= 0 ? 'Balance tax payable' : 'Expected refund'} value={fmt(Math.abs(calc.newBalance))} strong color={calc.newBalance >= 0 ? C.fg : '#2A7A4A'} />
+              <Row label={calc.newBalance >= 0 ? 'Balance tax payable' : 'Expected refund'} value={fmt(Math.abs(calc.newBalance))} strong color={calc.newBalance >= 0 ? C.fg : C.green} />
             </>
           )}
         </div>
       </div>
 
       {/* ── Slab-wise breakup — Old regime ── */}
-      <div style={{ background: calc.recommendation === 'old' ? '#F0F9F7' : C.card, border: `2px solid ${calc.recommendation === 'old' ? C.fg : C.border}`, borderRadius: 8, padding: 16 }}>
+      <div style={{ background: calc.recommendation === 'old' ? C.tint : C.card, border: `2px solid ${calc.recommendation === 'old' ? C.fg : C.border}`, borderRadius: 8, padding: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
           <h3 style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Old regime · slab-wise</h3>
-          {calc.recommendation === 'old' && <span style={{ fontSize: 9, fontWeight: 700, background: C.fg, color: '#fff', padding: '3px 8px', borderRadius: 3 }}>Recommended</span>}
+          {calc.recommendation === 'old' && <span style={{ fontSize: 9, fontWeight: 700, background: C.fg, color: C.ivory, padding: '3px 8px', borderRadius: 3 }}>Recommended</span>}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', fontSize: 11.5 }}>
           <div style={{ padding: '6px 8px', background: C.bg, fontWeight: 700, color: C.muted, borderBottom: `1px solid ${C.border}` }}>Slab</div>
@@ -663,7 +673,7 @@ export default function TaxOptimizerPage() {
           {calc.tdsPaid > 0 && (
             <>
               <Row label="− TDS already deducted" value={fmt(calc.tdsPaid)} color={C.danger} />
-              <Row label={calc.oldBalance >= 0 ? 'Balance tax payable' : 'Expected refund'} value={fmt(Math.abs(calc.oldBalance))} strong color={calc.oldBalance >= 0 ? C.fg : '#2A7A4A'} />
+              <Row label={calc.oldBalance >= 0 ? 'Balance tax payable' : 'Expected refund'} value={fmt(Math.abs(calc.oldBalance))} strong color={calc.oldBalance >= 0 ? C.fg : C.green} />
             </>
           )}
         </div>
@@ -692,11 +702,11 @@ export default function TaxOptimizerPage() {
 
       {/* ── Where you can save more ── */}
       <div style={{ background: C.wl, border: `1px solid ${C.wm}`, borderRadius: 8, padding: 20, marginBottom: 24 }}>
-        <h3 style={{ fontSize: 13, fontWeight: 600, color: C.fg, margin: '0 0 16px' }}>Where You Can Save More</h3>
+        <h3 style={{ fontSize: 13, fontWeight: 600, color: C.fg, margin: '0 0 16px' }}>Where you can save more</h3>
 
         {!calc.hraFilled && calc.grossSalary > 0 && (
-          <div style={{ padding: '12px', background: '#FFF3DD', border: `1px solid ${C.wm}`, borderRadius: 6, marginBottom: 12 }}>
-            <p style={{ fontSize: 11, color: '#856404', margin: 0, fontWeight: 500 }}>💡 You haven't entered rent details. If you pay rent, fill <Link href="/dashboard/profile/exemptions" style={{ color: '#856404', textDecoration: 'underline' }}>Allowances</Link> to claim HRA and save more.</p>
+          <div style={{ padding: '12px', background: C.caution.fill, border: `1px solid ${C.wm}`, borderRadius: 6, marginBottom: 12 }}>
+            <p style={{ fontSize: 11, color: C.caution.text, margin: 0, fontWeight: 500 }}>💡 You haven't entered rent details. If you pay rent, fill <Link href="/dashboard/profile/exemptions" style={{ color: C.caution.text, textDecoration: 'underline' }}>Allowances</Link> to claim HRA and save more.</p>
           </div>
         )}
 
@@ -711,13 +721,13 @@ export default function TaxOptimizerPage() {
           ].filter(s => Math.max(0, s.limit - s.used) > 0)
           if (saveItems.length === 0) {
             return (
-              <div style={{ padding: '12px', background: '#F0F9F4', border: '1px solid #CFE6D8', borderRadius: 6 }}>
-                <p style={{ fontSize: 11.5, color: '#2A7A4A', margin: 0, fontWeight: 500 }}>✓ You&apos;ve used all the major deduction limits (80C, 80D, NPS, home-loan interest). Nothing more to claim here.</p>
+              <div style={{ padding: '12px', background: C.slip.fill, border: `1px solid ${C.slip.border}`, borderRadius: 6 }}>
+                <p style={{ fontSize: 11.5, color: C.green, margin: 0, fontWeight: 500 }}>✓ You&apos;ve used all the major deduction limits (80C, 80D, NPS, home-loan interest). Nothing more to claim here.</p>
               </div>
             )
           }
           return (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="opt-save" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           {saveItems.map(s => {
             const gap = Math.max(0, s.limit - s.used)
             const slabRate = 0.30   // assume 30% marginal slab for upper-middle salary
@@ -737,8 +747,8 @@ export default function TaxOptimizerPage() {
       </div>
 
       <div style={{ display: 'flex', gap: 12 }}>
-        <button onClick={() => router.push('/dashboard/profile/deductions')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Edit Deductions</button>
-        <button onClick={() => router.push('/dashboard/profile/salary')} style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Done · Back to Salary</button>
+        <button onClick={() => router.push('/dashboard/profile/deductions')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Edit deductions</button>
+        <button onClick={() => router.push('/dashboard/profile/salary')} style={{ flex: 1, padding: '12px', background: C.fg, color: C.ivory, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Done · Back to salary</button>
       </div>
     </div>
   )
