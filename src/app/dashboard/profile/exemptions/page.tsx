@@ -318,10 +318,15 @@ export default function ExemptionsPage() {
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 16, overflow: 'hidden' }}>
         <button onClick={() => toggle('hra')} style={{ width: '100%', padding: '14px 16px', background: expanded.includes('hra') ? C.wl : '#fff', border: 'none', borderBottom: expanded.includes('hra') ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ textAlign: 'left' }}>
-            <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>Do you get House Rent Allowance?</p>
-            <p style={{ fontSize: 10.5, color: C.muted, margin: 0 }}>HRA · u/s 10(13A) · Min of: actual HRA · rent − 10% basic · 50% (metro) / 40% basic · Old regime only</p>
+            <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>House rent (HRA)</p>
+            <p style={{ fontSize: 10.5, color: C.muted, margin: 0 }}>Rent you pay — usually the biggest one</p>
           </div>
-          <span style={{ fontSize: 14, color: C.fg }}>{expanded.includes('hra') ? '−' : '+'}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' as const, color: hraAnnualExemption > 0 ? C.green : C.marigold }}>
+              {hraAnnualExemption > 0 ? `${fmt(hraAnnualExemption)} ✓` : '₹ —'}
+            </span>
+            <span style={{ fontSize: 14, color: C.fg }}>{expanded.includes('hra') ? '−' : '+'}</span>
+          </div>
         </button>
         {expanded.includes('hra') && (
           <div style={{ padding: '14px 16px', background: '#fff' }}>
@@ -332,7 +337,7 @@ export default function ExemptionsPage() {
               <div style={{ padding: '8px 10px', background: '#FAFAF8', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 12, color: C.text, fontWeight: 600 }}>
                 {hraAnnualReceived > 0
                   ? <>{fmt(hraAnnualReceived)}/year <span style={{ fontSize: 10.5, color: C.muted, fontWeight: 400, marginLeft: 6 }}>(from your timeline)</span></>
-                  : <>{fmt(s.hraReceived)}/month <span style={{ fontSize: 10.5, color: C.muted, fontWeight: 400, marginLeft: 6 }}>(auto-filled from slip)</span></>}
+                  : <>{fmt(s.hraReceived)}/month <span style={{ fontSize: 10.5, color: C.muted, fontWeight: 400, marginLeft: 6 }}>{s.hraReceived > 0 ? '(auto-filled from slip)' : '(none found on your slip — add it if your slip shows HRA)'}</span></>}
               </div>
               {hraReceivedVaried && (
                 <p style={{ fontSize: 10.5, color: C.muted, margin: '6px 0 0', lineHeight: 1.5 }}>
@@ -427,6 +432,7 @@ export default function ExemptionsPage() {
                 <p style={{ fontSize: 11, color: '#856404', margin: 0 }}>💡 Enter monthly rent to claim HRA exemption.</p>
               </div>
             )}
+            <p style={{ fontSize: 10, color: C.faint, margin: '10px 0 0', lineHeight: 1.45 }}>HRA · u/s 10(13A) · Min of: actual HRA · rent − 10% basic · 50% (metro) / 40% basic · Old regime only</p>
           </div>
         )}
       </div>
