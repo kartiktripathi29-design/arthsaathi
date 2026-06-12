@@ -21,7 +21,11 @@ export default function LandingPage() {
 
   const runCheck = () => {
     calcQuickSaving(salary)
-    document.getElementById('live-demo')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    const target = document.getElementById('demo-reveal')
+    if (target) {
+      const y = target.getBoundingClientRect().top + window.scrollY - 84  // sticky nav + breathing room
+      window.scrollTo({ top: y, behavior: 'smooth' })
+    }
   }
 
   return (

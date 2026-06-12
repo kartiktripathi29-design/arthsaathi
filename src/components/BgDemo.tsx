@@ -79,7 +79,7 @@ export default function BgDemo({ monthly }: { monthly?: number | null }) {
       </div>
 
       <div style={s.content}>
-        <div className="demo-regime" style={{ marginBottom: 6 }}>
+        <div id="demo-reveal" className="demo-regime" style={{ marginBottom: 6 }}>
           <div style={{ background: T.tint, borderRadius: 10, padding: '14px 16px' }}>
             <div style={{ fontSize: 10, fontWeight: 600, color: T.teal, letterSpacing: '0.04em', marginBottom: 6 }}>New regime</div>
             <div style={{ fontSize: 26, fontWeight: 800, color: flash ? T.marigold : T.teal, letterSpacing: '-0.02em' }}>₹{Math.round(displayNew).toLocaleString('en-IN')}</div>
