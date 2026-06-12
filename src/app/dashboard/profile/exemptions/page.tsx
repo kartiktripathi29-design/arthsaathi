@@ -6,7 +6,7 @@ import { getSalaryFacts } from '@/lib/salary-facts'
 
 import { tokens as T } from '@/lib/tokens'
 
-const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, bg:T.paper, card:T.card, border:T.hairline, text:T.ink, muted:T.muted, danger:'#B94040' }
+const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, bg:T.paper, card:T.card, border:T.hairline, text:T.ink, muted:T.muted, faint:T.faint, green:T.green, marigold:T.marigold, danger:'#B94040' }
 const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`
 
 interface ExemptionsState {
@@ -33,7 +33,7 @@ const DEFAULT: ExemptionsState = {
 // Defining it inside the parent caused React to unmount/remount the <input> on every
 // keystroke, which made each keystroke lose focus.
 function SimpleSection({
-  open, value, q, sub, claimed, capLabel, onToggle, onChange, belowField,
+  open, value, q, sub, claimed, capLabel, onToggle, onChange, belowField, footnote,
 }: {
   open: boolean
   value: number
@@ -44,15 +44,21 @@ function SimpleSection({
   onToggle: () => void
   onChange: (v: number) => void
   belowField?: React.ReactNode
+  footnote?: React.ReactNode
 }) {
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 16, overflow: 'hidden' }}>
-      <button onClick={onToggle} style={{ width: '100%', padding: '14px 16px', background: open ? C.wl : '#fff', border: 'none', borderBottom: open ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <button onClick={onToggle} style={{ width: '100%', padding: '14px 16px', background: open ? C.wl : '#fff', border: 'none', borderBottom: open ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
         <div style={{ textAlign: 'left' }}>
           <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>{q}</p>
           <p style={{ fontSize: 10.5, color: C.muted, margin: 0 }}>{sub}</p>
         </div>
-        <span style={{ fontSize: 14, color: C.fg }}>{open ? '−' : '+'}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' as const, color: value > 0 ? C.green : C.marigold }}>
+            {value > 0 ? `${fmt(value)} ✓` : '₹ —'}
+          </span>
+          <span style={{ fontSize: 14, color: C.fg }}>{open ? '−' : '+'}</span>
+        </div>
       </button>
       {open && (
         <div style={{ padding: '14px 16px', background: '#fff' }}>
@@ -72,6 +78,9 @@ function SimpleSection({
             </div>
           )}
           {belowField}
+          {footnote && (
+            <p style={{ fontSize: 10, color: C.faint, margin: '10px 0 0', lineHeight: 1.45 }}>{footnote}</p>
+          )}
         </div>
       )}
     </div>
@@ -245,6 +254,9 @@ export default function ExemptionsPage() {
   // so we just display the user's entered amount and warn in the description.
   const totalOtherExempts = s.lta + s.driverSalary + s.carMaintenance + s.dailyAllowance + s.superannuation + s.pfWithdrawal + gratuityCapped
   const totalAnnualExempt = hraAnnualExemption + totalOtherExempts
+  // Aggregate state shown on each collapsed group bar (gratuity uses the capped figure for parity with its row).
+  const grpCarSum = s.driverSalary + s.carMaintenance + s.dailyAllowance
+  const grpRetireSum = s.superannuation + s.pfWithdrawal + gratuityCapped
 
   useEffect(() => {
     try {
@@ -431,8 +443,8 @@ export default function ExemptionsPage() {
           <SimpleSection
             open={expanded.includes('lta')}
             onToggle={() => toggle('lta')}
-            q="Did you travel and get Leave Travel Allowance?"
-            sub="LTA · u/s 10(5) · Actual economy fare only · 2 journeys per 4-yr block · old regime"
+            q="Travel allowance (LTA)"
+            sub="Trips within India, via your employer."
             value={s.lta}
             onChange={(v) => update('lta', v)}
             claimed={s.lta}
@@ -447,78 +459,121 @@ export default function ExemptionsPage() {
               </div>
               </>
             }
+            footnote="u/s 10(5) · actual economy fare only · 2 journeys per 4-yr block · old regime only"
           />
         )
       })()}
 
-      {/* Section 10 — Driver salary */}
-      <SimpleSection
-        open={expanded.includes('driver')}
-        onToggle={() => toggle('driver')}
-        q="Do you have a driver for an official-use car?"
-        sub="Driver salary · u/s 10(14)(i) · Reimbursed driver of an official-use car · old regime"
-        value={s.driverSalary}
-        onChange={(v) => update('driverSalary', v)}
-        claimed={s.driverSalary}
-        belowField={<DetectedHint monthly={detectedDriver} rule="Exempt only when reimbursed for a driver of an official-use car and actually paid to the driver. Confirm the eligible amount." onUse={() => update('driverSalary', detectedDriver * 12)} />}
-      />
+      {/* Group A — Company car & travel perks. The inner wrapper stays MOUNTED and is hidden
+          with the `hidden` attribute (CSS display:none), so amounts typed in a closed group keep
+          feeding the totals — never conditionally unmounted. */}
+      <div style={{ background: C.card, border: `1px dashed ${C.wm}`, borderRadius: 11, marginBottom: 16, overflow: 'hidden' }}>
+        <button onClick={() => toggle('grpCar')} style={{ width: '100%', padding: '14px 16px', background: '#fff', border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <div style={{ textAlign: 'left' }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>Company car & travel perks</p>
+            <p style={{ fontSize: 10.5, color: C.muted, margin: 0 }}>Driver · car running costs · daily allowance</p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {grpCarSum > 0
+              ? <span style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' as const, color: C.green }}>{fmt(grpCarSum)} ✓</span>
+              : <span style={{ fontSize: 11.5, color: C.faint }}>3 items</span>}
+            <span style={{ fontSize: 13, color: C.fg }}>{expanded.includes('grpCar') ? '▾' : '▸'}</span>
+          </div>
+        </button>
+        <div hidden={!expanded.includes('grpCar')} style={{ padding: '12px 12px 0' }}>
+          {/* Section 10 — Driver salary */}
+          <SimpleSection
+            open={expanded.includes('driver')}
+            onToggle={() => toggle('driver')}
+            q="Driver's salary"
+            sub="If your company car comes with a driver"
+            value={s.driverSalary}
+            onChange={(v) => update('driverSalary', v)}
+            claimed={s.driverSalary}
+            belowField={<DetectedHint monthly={detectedDriver} rule="Exempt only when reimbursed for a driver of an official-use car and actually paid to the driver. Confirm the eligible amount." onUse={() => update('driverSalary', detectedDriver * 12)} />}
+            footnote="u/s 10(14)(i) · reimbursed driver of an official-use car · old regime"
+          />
 
-      {/* Section 10 — Car maintenance */}
-      <SimpleSection
-        open={expanded.includes('car')}
-        onToggle={() => toggle('car')}
-        q="Do you claim car running costs?"
-        sub="Car maintenance · u/s 10(14)(i) · Official-use car running costs — fuel, repairs · old regime"
-        value={s.carMaintenance}
-        onChange={(v) => update('carMaintenance', v)}
-        claimed={s.carMaintenance}
-        belowField={<DetectedHint monthly={detectedFuel} rule="Exempt only for official-use car running/maintenance (fuel, repairs, insurance). Confirm the eligible amount." onUse={() => update('carMaintenance', detectedFuel * 12)} />}
-      />
+          {/* Section 10 — Car maintenance */}
+          <SimpleSection
+            open={expanded.includes('car')}
+            onToggle={() => toggle('car')}
+            q="Car running costs"
+            sub="Fuel & maintenance your employer covers"
+            value={s.carMaintenance}
+            onChange={(v) => update('carMaintenance', v)}
+            claimed={s.carMaintenance}
+            belowField={<DetectedHint monthly={detectedFuel} rule="Exempt only for official-use car running/maintenance (fuel, repairs, insurance). Confirm the eligible amount." onUse={() => update('carMaintenance', detectedFuel * 12)} />}
+            footnote="u/s 10(14)(i) · official-use car running costs — fuel, repairs · old regime"
+          />
 
-      {/* Section 10 — Daily allowance on tour */}
-      <SimpleSection
-        open={expanded.includes('da')}
-        onToggle={() => toggle('da')}
-        q="Do you get a daily allowance when travelling for work?"
-        sub="Daily allowance · u/s 10(14)(ii) · Per-day allowance on official tour · old regime"
-        value={s.dailyAllowance}
-        onChange={(v) => update('dailyAllowance', v)}
-        claimed={s.dailyAllowance}
-      />
+          {/* Section 10 — Daily allowance on tour */}
+          <SimpleSection
+            open={expanded.includes('da')}
+            onToggle={() => toggle('da')}
+            q="Daily allowance on tours"
+            sub="For days you travel for work."
+            value={s.dailyAllowance}
+            onChange={(v) => update('dailyAllowance', v)}
+            claimed={s.dailyAllowance}
+            footnote="u/s 10(14)(ii) · per-day allowance on official tour · old regime"
+          />
+        </div>
+      </div>
 
-      {/* Section 10 — Superannuation */}
-      <SimpleSection
-        open={expanded.includes('superann')}
-        onToggle={() => toggle('superann')}
-        q="Did your employer contribute to a superannuation fund?"
-        sub="Employer contribution · exempt up to 15% of (basic + DA)"
-        value={s.superannuation}
-        onChange={(v) => update('superannuation', v)}
-        claimed={s.superannuation}
-      />
+      {/* Group B — Retirement & exit payouts. Inner wrapper stays MOUNTED, hidden via CSS only. */}
+      <div style={{ background: C.card, border: `1px dashed ${C.wm}`, borderRadius: 11, marginBottom: 16, overflow: 'hidden' }}>
+        <button onClick={() => toggle('grpRetire')} style={{ width: '100%', padding: '14px 16px', background: '#fff', border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <div style={{ textAlign: 'left' }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>Retirement & exit payouts</p>
+            <p style={{ fontSize: 10.5, color: C.muted, margin: 0 }}>Superannuation · PF withdrawal · gratuity</p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {grpRetireSum > 0
+              ? <span style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' as const, color: C.green }}>{fmt(grpRetireSum)} ✓</span>
+              : <span style={{ fontSize: 11.5, color: C.faint }}>3 items</span>}
+            <span style={{ fontSize: 13, color: C.fg }}>{expanded.includes('grpRetire') ? '▾' : '▸'}</span>
+          </div>
+        </button>
+        <div hidden={!expanded.includes('grpRetire')} style={{ padding: '12px 12px 0' }}>
+          {/* Section 10 — Superannuation */}
+          <SimpleSection
+            open={expanded.includes('superann')}
+            onToggle={() => toggle('superann')}
+            q="Superannuation"
+            sub="What your employer puts into a retirement fund"
+            value={s.superannuation}
+            onChange={(v) => update('superannuation', v)}
+            claimed={s.superannuation}
+            footnote="Employer contribution · exempt up to 15% of (basic + DA)"
+          />
 
-      {/* Section 10 — PF withdrawal */}
-      <SimpleSection
-        open={expanded.includes('pf')}
-        onToggle={() => toggle('pf')}
-        q="Did you withdraw your PF when leaving a job?"
-        sub="Tax-free after 5 yrs' service or on retirement"
-        value={s.pfWithdrawal}
-        onChange={(v) => update('pfWithdrawal', v)}
-        claimed={s.pfWithdrawal}
-      />
+          {/* Section 10 — PF withdrawal */}
+          <SimpleSection
+            open={expanded.includes('pf')}
+            onToggle={() => toggle('pf')}
+            q="PF withdrawal"
+            sub="Money you took out of your PF this year"
+            value={s.pfWithdrawal}
+            onChange={(v) => update('pfWithdrawal', v)}
+            claimed={s.pfWithdrawal}
+            footnote="Tax-free after 5 yrs' service or on retirement"
+          />
 
-      {/* Section 10 — Gratuity */}
-      <SimpleSection
-        open={expanded.includes('gratuity')}
-        onToggle={() => toggle('gratuity')}
-        q="Did you receive gratuity?"
-        sub="Gratuity · u/s 10(10) · On retirement · ½-month basic × years · cap ₹10L (non-govt)"
-        value={s.gratuity}
-        onChange={(v) => update('gratuity', v)}
-        claimed={gratuityCapped}
-        capLabel="₹10,00,000 (non-govt)"
-      />
+          {/* Section 10 — Gratuity */}
+          <SimpleSection
+            open={expanded.includes('gratuity')}
+            onToggle={() => toggle('gratuity')}
+            q="Gratuity"
+            sub="Exit payout — tax-free up to ₹10L"
+            value={s.gratuity}
+            onChange={(v) => update('gratuity', v)}
+            claimed={gratuityCapped}
+            capLabel="₹10,00,000 (non-govt)"
+            footnote="u/s 10(10) · on retirement · ½-month basic × years · cap ₹10L (non-govt)"
+          />
+        </div>
+      </div>
 
       {/* Total */}
       <div style={{ background: '#F0F9F7', border: `1px solid #D1E8E4`, borderRadius: 8, padding: 16, marginBottom: 24 }}>
