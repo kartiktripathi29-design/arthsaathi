@@ -1,82 +1,11 @@
 'use client'
 import Link from 'next/link'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import BgDemo from '@/components/BgDemo'
 import Logo from '@/components/Logo'
+import { ThemeToggle, type ThemeMode } from '@/components/ThemeToggle'
 import { tokens as T } from '@/lib/tokens'
 import { estimateAnnualTax } from '@/lib/tax-slabs'
-
-type ThemeMode = 'system' | 'light' | 'dark'
-
-// Single icon button in the nav that reveals a compact System / Light / Dark menu.
-// Token-only colors so it flips correctly in both modes; icon reflects the resolved state.
-// Mirrors the dashboard's appearance control, but as one unobtrusive icon (no pill ribbon).
-function ThemeToggle({ theme, setTheme, resolved }: { theme: ThemeMode; setTheme: (t: ThemeMode) => void; resolved: 'light' | 'dark' }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  // Close on any tap outside the control (same pattern as the dashboard top-bar account menu).
-  useEffect(() => {
-    if (!open) return
-    const onDocClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onDocClick)
-    return () => document.removeEventListener('mousedown', onDocClick)
-  }, [open])
-
-  const opts: { v: ThemeMode; label: string }[] = [
-    { v: 'system', label: 'System' },
-    { v: 'light', label: 'Light' },
-    { v: 'dark', label: 'Dark' },
-  ]
-
-  return (
-    <div ref={ref} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-      <button onClick={() => setOpen(o => !o)} className="btn-ghost"
-        aria-label="Appearance" aria-haspopup="menu" aria-expanded={open}
-        style={{ width: 34, height: 34, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: 0, background: 'transparent', border: `1px solid ${T.hairline}`, borderRadius: 8, color: T.muted, cursor: 'pointer' }}>
-        {resolved === 'dark' ? (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-          </svg>
-        ) : (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="4" />
-            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
-          </svg>
-        )}
-      </button>
-      {open && (
-        <div role="menu" style={{
-          position: 'absolute', top: 'calc(100% + 8px)', right: 0, minWidth: 144,
-          background: T.card, border: `1px solid ${T.hairline}`, borderRadius: 10,
-          boxShadow: '0 6px 24px rgba(0,0,0,0.12)', padding: 6, zIndex: 80,
-        }}>
-          {opts.map(o => {
-            const active = theme === o.v
-            return (
-              <button key={o.v} role="menuitemradio" aria-checked={active}
-                onClick={() => { setTheme(o.v); setOpen(false) }}
-                style={{
-                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
-                  padding: '8px 10px', borderRadius: 7, border: 'none', cursor: 'pointer',
-                  fontFamily: 'inherit', fontSize: 13, textAlign: 'left',
-                  background: active ? T.tint : 'transparent',
-                  color: active ? T.teal : T.nav,
-                  fontWeight: active ? 700 : 500,
-                }}>
-                {o.label}
-                {active && <span style={{ color: T.teal }}>✓</span>}
-              </button>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
 
 export default function LandingPage() {
   const [salary, setSalary] = useState('')

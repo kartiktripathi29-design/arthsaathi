@@ -11,6 +11,7 @@ import { useAppStore, type AppUser } from '@/store/AppStore'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { tokens as T } from '@/lib/tokens'
 import Logo from '@/components/Logo'
+import { ThemeToggle, useArthvoTheme, useThemedBase } from '@/components/ThemeToggle'
 
 const C = { green: T.teal, ink: T.ink, sub: T.muted, line: T.hairline }
 const CONFIGURED = !!process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -18,8 +19,10 @@ const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)
 const isValidPhone = (p: string) => /^[6-9]\d{9}$/.test(p)
 
 function Shell({ children }: { children: React.ReactNode }) {
+  const { theme, setTheme, resolved } = useArthvoTheme()
+  useThemedBase(resolved)
   return (
-    <div style={{ minHeight: '100vh', background: T.paper, fontFamily: '"Sora",-apple-system,sans-serif', display: 'flex', flexDirection: 'column' }}>
+    <div data-theme={resolved} suppressHydrationWarning style={{ minHeight: '100vh', background: T.paper, fontFamily: '"Sora",-apple-system,sans-serif', display: 'flex', flexDirection: 'column' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -29,12 +32,17 @@ function Shell({ children }: { children: React.ReactNode }) {
         .input { transition: border-color .15s, box-shadow .15s; }
         .input:focus { outline: none; border-color: var(--teal) !important; box-shadow: 0 0 0 3px rgba(14,77,71,.1); }
         .otp-input { text-align: center; letter-spacing: .5em; font-size: 18px; font-weight: 600; }
+        .btn-ghost { transition: background .15s; }
+        .btn-ghost:hover { background: var(--tint) !important; }
       `}</style>
       <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 52px', borderBottom: `1px solid ${T.hairline}` }}>
         <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 11 }}>
           <Logo variant="onLight" size={32} />
         </Link>
-        <div style={{ fontSize: 13, color: C.sub }}>New to ArthVo?{' '}<Link href="/signup" style={{ color: C.green, fontWeight: 600, textDecoration: 'none' }}>Sign up</Link></div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <ThemeToggle theme={theme} setTheme={setTheme} resolved={resolved} />
+          <div style={{ fontSize: 13, color: C.sub }}>New to ArthVo?{' '}<Link href="/signup" style={{ color: C.green, fontWeight: 600, textDecoration: 'none' }}>Sign up</Link></div>
+        </div>
       </nav>
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 24px' }}>
         <div style={{ width: '100%', maxWidth: 420 }}>
