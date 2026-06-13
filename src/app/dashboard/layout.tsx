@@ -7,6 +7,7 @@ import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { useUser } from '@/lib/useUser'
 import { tokens as T } from '@/lib/tokens'
 import Logo from '@/components/Logo'
+import { useThemedBase } from '@/components/ThemeToggle'
 
 const SUPABASE_CONFIGURED = !!process.env.NEXT_PUBLIC_SUPABASE_URL
 
@@ -431,6 +432,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     try { localStorage.setItem('av_theme', t) } catch {}
   }
   const resolved: 'light' | 'dark' = theme === 'system' ? (systemDark ? 'dark' : 'light') : theme
+
+  // Mirror the resolved theme onto <html> and paint the html/body base with --paper, so an
+  // overscroll/rubber-band past any dashboard page (Documents, Salary, Other earnings, Allowances,
+  // Deductions, Your Tax) shows themed paper instead of the default white. The dashboard track is a
+  // single ground (--paper) top-to-bottom, so one tone is correct here (no two-tone like the landing).
+  // Restored on unmount, so leaving the dashboard for the landing/auth pages hands <html> back clean.
+  useThemedBase(resolved)
 
   return (
     <AuthGate>
