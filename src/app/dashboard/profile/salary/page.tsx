@@ -1148,10 +1148,10 @@ export default function SalaryPageCompleteFinal() {
           const inferred = wizard.intent ? inferFyStartYear(slipsWithMeta.map(m => ({ year: m.year, monthNum: m.monthNum })), wizard.intent) : null
           return (
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24 }}>
-              <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 6px' }}>Found {slipsWithMeta.length} salary slip{slipsWithMeta.length !== 1 ? 's' : ''} — confirm the months.</h2>
+              <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: '0 0 6px' }}>Found {slipsWithMeta.length} salary slip{slipsWithMeta.length !== 1 ? 's' : ''} — <span style={{ whiteSpace: 'nowrap' }}>confirm the months.</span></h2>
               {inferred !== null && (
                 <p style={{ fontSize: 13, color: C.muted, margin: '0 0 16px' }}>
-                  Building timeline for <strong>FY {inferred}-{inferred + 1}</strong> (Apr {inferred} – Mar {inferred + 1}){wizard.intent === 'forecast' ? ' — Forecast' : ''}.
+                  Building timeline for <strong style={{ whiteSpace: 'nowrap' }}>FY {inferred}-{inferred + 1}</strong> <span style={{ whiteSpace: 'nowrap' }}>(Apr {inferred} – Mar {inferred + 1}){wizard.intent === 'forecast' ? ' — Forecast' : ''}.</span>
                 </p>
               )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
@@ -1263,10 +1263,23 @@ export default function SalaryPageCompleteFinal() {
               {/* Surface what we parsed from the slip + the FY window we're forecasting in.
                   If this is wrong, the user knows to fix it at the slip-upload step. */}
               {latestSlip && (
-                <div style={{ padding: '10px 12px', background: C.wl, border: `1px solid ${C.border}`, borderRadius: 6, marginBottom: 12, fontSize: 11.5, color: C.text, lineHeight: 1.55 }}>
-                  Latest slip: <strong>{monthLabel(latestSlip.monthKey)}</strong>. Forecast window:
-                  {' '}<strong>FY {inferred}-{inferred + 1}</strong> ({monthLabel(`${inferred}-04`)} → {monthLabel(`${inferred + 1}-03`)}).
-                  {allFY.length > 0 && <> Increments / bonuses can be applied from <strong>{monthLabel(allFY[0])}</strong> onwards.</>}
+                <div style={{ padding: '10px 12px', background: C.wl, border: `1px solid ${C.border}`, borderRadius: 6, marginBottom: 12, fontSize: 11.5, color: C.text, lineHeight: 1.5, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div>
+                    <span style={{ color: C.muted }}>Latest slip: </span>
+                    <strong style={{ whiteSpace: 'nowrap' }}>{monthLabel(latestSlip.monthKey)}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: C.muted }}>Forecast window: </span>
+                    <strong style={{ whiteSpace: 'nowrap' }}>FY {inferred}-{inferred + 1}</strong>{' '}
+                    <span style={{ whiteSpace: 'nowrap' }}>({monthLabel(`${inferred}-04`)} → {monthLabel(`${inferred + 1}-03`)})</span>
+                  </div>
+                  {allFY.length > 0 && (
+                    <div>
+                      <span style={{ color: C.muted }}>Changes can apply from </span>
+                      <strong style={{ whiteSpace: 'nowrap' }}>{monthLabel(allFY[0])}</strong>
+                      <span style={{ color: C.muted }}> onwards.</span>
+                    </div>
+                  )}
                 </div>
               )}
 

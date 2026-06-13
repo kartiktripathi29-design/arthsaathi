@@ -211,7 +211,7 @@ export default function OtherIncomePage() {
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '20px 0' }}>
       <style>{OI_MOBILE_CSS}</style>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Other earnings</h1>
-      <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>Income beyond salary: freelance, investments, trading, interest. (Optional — skip if salary-only)</p>
+      <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>Income beyond salary: freelance, investments, trading, interest. <span style={{ whiteSpace: 'nowrap' }}>(Optional — skip if salary-only)</span></p>
 
       {/* Banner */}
       <div style={{ background: C.wl, border: `1px solid ${C.wm}`, borderRadius: 8, padding: 16, marginBottom: 24 }}>
@@ -246,7 +246,7 @@ export default function OtherIncomePage() {
 
       {entries.length === 0 && !menuOpen ? (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24, textAlign: 'center', marginBottom: 24 }}>
-          <p style={{ fontSize: 14, color: C.muted, margin: '0 0 16px' }}>No other income added yet. (This is optional.)</p>
+          <p style={{ fontSize: 14, color: C.muted, margin: '0 0 16px' }}>No other income added yet. <span style={{ whiteSpace: 'nowrap' }}>(This is optional.)</span></p>
           <button onClick={() => setMenuOpen(true)} style={{ padding: '10px 20px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
             + Add income
           </button>
