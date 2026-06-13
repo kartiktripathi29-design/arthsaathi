@@ -7,7 +7,7 @@ import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { useUser } from '@/lib/useUser'
 import { tokens as T } from '@/lib/tokens'
 import Logo from '@/components/Logo'
-import { useThemedBase } from '@/components/ThemeToggle'
+import { ThemeToggle, useThemedBase } from '@/components/ThemeToggle'
 
 const SUPABASE_CONFIGURED = !!process.env.NEXT_PUBLIC_SUPABASE_URL
 
@@ -16,33 +16,7 @@ const C = { rail: T.taupe, railLine: T.taupeLine, cap: T.teal, accent: T.teal, n
 
 type ThemeMode = 'system' | 'light' | 'dark'
 
-// Three-way appearance pills (System / Light / Dark). Active pill: tint bg + teal text; inactive: nav.
-// Shared by the desktop sidebar footer and the mobile top-bar account dropdown — both drive setTheme.
-function AppearanceControl({ theme, setTheme }: { theme: ThemeMode; setTheme: (t: ThemeMode) => void }) {
-  const opts: { v: ThemeMode; label: string }[] = [
-    { v: 'system', label: 'System' },
-    { v: 'light', label: 'Light' },
-    { v: 'dark', label: 'Dark' },
-  ]
-  return (
-    <div style={{ display: 'flex', gap: 4 }}>
-      {opts.map(o => {
-        const active = theme === o.v
-        return (
-          <button key={o.v} onClick={() => setTheme(o.v)} style={{
-            flex: 1, padding: '5px 4px', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit',
-            border: `1px solid ${active ? T.teal : T.hairline}`,
-            background: active ? T.tint : 'transparent',
-            color: active ? T.teal : T.nav,
-            fontSize: 10.5, fontWeight: active ? 700 : 500,
-          }}>{o.label}</button>
-        )
-      })}
-    </div>
-  )
-}
-
-function Sidebar({ theme, setTheme }: { theme: ThemeMode; setTheme: (t: ThemeMode) => void }) {
+function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { user, logout } = useAppStore()
@@ -190,10 +164,6 @@ function Sidebar({ theme, setTheme }: { theme: ThemeMode; setTheme: (t: ThemeMod
             </div>
           </div>
         )}
-        <div style={{ fontSize: 10, color: T.nav, letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 700, padding: '2px 2px 6px' }}>Appearance</div>
-        <div style={{ marginBottom: 8 }}>
-          <AppearanceControl theme={theme} setTheme={setTheme} />
-        </div>
         <button onClick={handleSignOut} style={{
           width: '100%', padding: '7px 10px', background: 'transparent',
           border: `1px solid ${C.railLine}`, borderRadius: 5,
@@ -207,7 +177,7 @@ function Sidebar({ theme, setTheme }: { theme: ThemeMode; setTheme: (t: ThemeMod
   )
 }
 
-function TopBar({ theme, setTheme }: { theme: ThemeMode; setTheme: (t: ThemeMode) => void }) {
+function TopBar({ theme, setTheme, resolved }: { theme: ThemeMode; setTheme: (t: ThemeMode) => void; resolved: 'light' | 'dark' }) {
   const pathname = usePathname()
   const router = useRouter()
   const { user, logout } = useAppStore()
@@ -299,10 +269,6 @@ function TopBar({ theme, setTheme }: { theme: ThemeMode; setTheme: (t: ThemeMode
                 <div style={{ fontSize: 12, color: T.ink, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name}</div>
                 <div style={{ fontSize: 10, color: T.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(user as any).phone || (user as any).email || ''}</div>
               </div>
-              <div style={{ padding: '8px 10px', borderTop: `1px solid ${T.hairline}` }}>
-                <div style={{ fontSize: 9.5, color: T.muted, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 5 }}>Appearance</div>
-                <AppearanceControl theme={theme} setTheme={setTheme} />
-              </div>
               <button onClick={handleSignOut} style={{
                 width: '100%', textAlign: 'left', padding: '8px 10px', marginTop: 2,
                 background: 'transparent', border: 'none', borderTop: `1px solid ${T.hairline}`,
@@ -311,6 +277,9 @@ function TopBar({ theme, setTheme }: { theme: ThemeMode; setTheme: (t: ThemeMode
             </div>
           )}
         </div>
+        {/* Theme toggle — same single icon → System/Light/Dark menu used on the landing/auth pages.
+            Sits at the top-right on both desktop and mobile (replaces the old sidebar/dropdown pills). */}
+        <ThemeToggle theme={theme} setTheme={setTheme} resolved={resolved} />
       </div>
     </header>
   )
@@ -446,7 +415,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <AuthGate>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap');`}</style>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap');
+        .btn-ghost { transition: background .15s; }
+        .btn-ghost:hover { background: var(--tint) !important; }
+      `}</style>
       {/* Mobile overrides only — desktop (≥768px) gets no rules here, so inline styles rule untouched. */}
       <style>{`
         @media (max-width: 767px) {
@@ -461,10 +434,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }
       `}</style>
       <div data-theme={resolved} suppressHydrationWarning style={{ display: 'flex', minHeight: '100vh', background: C.bg, fontFamily: '"Sora",-apple-system,sans-serif' }}>
-        <Sidebar theme={theme} setTheme={setTheme} />
+        <Sidebar />
         <BottomTabBar />
         <div className="dash-main" style={{ marginLeft: 216, flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-          <TopBar theme={theme} setTheme={setTheme} />
+          <TopBar theme={theme} setTheme={setTheme} resolved={resolved} />
           <FamilySegment />
           <main style={{ flex: 1, padding: '28px 28px', maxWidth: 1100, width: '100%' }}>
             {children}
