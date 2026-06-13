@@ -103,6 +103,31 @@ export default function LandingPage() {
   }
   const resolved: 'light' | 'dark' = theme === 'system' ? (systemDark ? 'dark' : 'light') : theme
 
+  // Base background: the page's root div is themed, but html/body are not — so an overscroll/bounce
+  // past the content shows the default light body through. Mirror the page theme onto <html> (so the
+  // existing --paper token resolves per mode) and paint html/body with it, plus stop the bounce.
+  // Scoped to this route: everything is restored on unmount so other routes (e.g. the dashboard) are
+  // untouched. (var(--paper) only — no new color.)
+  useEffect(() => {
+    const html = document.documentElement
+    const body = document.body
+    const prev = {
+      theme: html.getAttribute('data-theme'),
+      htmlBg: html.style.background, htmlOver: html.style.overscrollBehavior,
+      bodyBg: body.style.background,
+    }
+    html.setAttribute('data-theme', resolved)
+    html.style.background = 'var(--paper)'
+    html.style.overscrollBehavior = 'none'
+    body.style.background = 'var(--paper)'
+    return () => {
+      if (prev.theme === null) html.removeAttribute('data-theme'); else html.setAttribute('data-theme', prev.theme)
+      html.style.background = prev.htmlBg
+      html.style.overscrollBehavior = prev.htmlOver
+      body.style.background = prev.bodyBg
+    }
+  }, [resolved])
+
   const calcQuickSaving = (s: string) => {
     const monthly = parseFloat(s.replace(/,/g, '')) || 0
     if (!monthly) { setTaxSaving(null); return }
