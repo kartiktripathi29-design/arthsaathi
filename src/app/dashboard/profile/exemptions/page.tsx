@@ -48,7 +48,7 @@ function SimpleSection({
 }) {
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 16, overflow: 'hidden' }}>
-      <button onClick={onToggle} style={{ width: '100%', padding: '14px 16px', background: open ? C.wl : '#fff', border: 'none', borderBottom: open ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+      <button onClick={onToggle} style={{ width: '100%', padding: '14px 16px', background: open ? C.wl : T.card, border: 'none', borderBottom: open ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
         <div style={{ textAlign: 'left' }}>
           <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>{q}</p>
           <p style={{ fontSize: 10.5, color: C.muted, margin: 0 }}>{sub}</p>
@@ -61,7 +61,7 @@ function SimpleSection({
         </div>
       </button>
       {open && (
-        <div style={{ padding: '14px 16px', background: '#fff' }}>
+        <div style={{ padding: '14px 16px', background: T.card }}>
           <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden', marginBottom: 10 }}>
             <span style={{ padding: '8px 10px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
             <input type="text" inputMode="numeric"
@@ -100,7 +100,7 @@ function DetectedHint({ monthly, rule, onUse }: { monthly: number; rule: string;
       </p>
       <p style={{ fontSize: 10.5, color: C.muted, margin: 0, lineHeight: 1.45 }}>{rule}</p>
       {onUse && (
-        <button onClick={onUse} style={{ marginTop: 6, padding: '4px 10px', background: C.fg, color: '#fff', border: 'none', borderRadius: 4, fontSize: 10.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+        <button onClick={onUse} style={{ marginTop: 6, padding: '4px 10px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 4, fontSize: 10.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
           Use {fmt(annual)}/year
         </button>
       )}
@@ -316,7 +316,7 @@ export default function ExemptionsPage() {
 
       {/* HRA — kept as the rich existing flow */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 16, overflow: 'hidden' }}>
-        <button onClick={() => toggle('hra')} style={{ width: '100%', padding: '14px 16px', background: expanded.includes('hra') ? C.wl : '#fff', border: 'none', borderBottom: expanded.includes('hra') ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <button onClick={() => toggle('hra')} style={{ width: '100%', padding: '14px 16px', background: expanded.includes('hra') ? C.wl : T.card, border: 'none', borderBottom: expanded.includes('hra') ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ textAlign: 'left' }}>
             <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>House rent (HRA)</p>
             <p style={{ fontSize: 10.5, color: C.muted, margin: 0 }}>Rent you pay — usually the biggest one</p>
@@ -329,7 +329,7 @@ export default function ExemptionsPage() {
           </div>
         </button>
         {expanded.includes('hra') && (
-          <div style={{ padding: '14px 16px', background: '#fff' }}>
+          <div style={{ padding: '14px 16px', background: T.card }}>
             <div style={{ marginBottom: 14 }}>
               <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 5, fontWeight: 500, textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>
                 HRA received {hraAnnualReceived > 0 ? '(annual)' : '(monthly)'}
@@ -400,7 +400,7 @@ export default function ExemptionsPage() {
                         {hraComp.breakdown.map((seg, i) => {
                           const least = Math.min(seg.hra, seg.rentMinus10, seg.cityPctBasic)
                           return (
-                            <div key={i} style={{ border: `1px solid ${C.border}`, borderRadius: 6, padding: 8, marginBottom: 8, background: '#fff' }}>
+                            <div key={i} style={{ border: `1px solid ${C.border}`, borderRadius: 6, padding: 8, marginBottom: 8, background: T.card }}>
                               <p style={{ fontSize: 11, fontWeight: 700, color: C.text, margin: '0 0 6px' }}>
                                 {fmtMonth(seg.fromMonth)}{seg.fromMonth !== seg.toMonth ? ` – ${fmtMonth(seg.toMonth)}` : ''} <span style={{ color: C.muted, fontWeight: 400 }}>· {seg.months} mo · basic {fmt(seg.basic)}/mo</span>
                               </p>
@@ -474,7 +474,7 @@ export default function ExemptionsPage() {
           with the `hidden` attribute (CSS display:none), so amounts typed in a closed group keep
           feeding the totals — never conditionally unmounted. */}
       <div style={{ background: C.card, border: `1px dashed ${C.wm}`, borderRadius: 11, marginBottom: 16, overflow: 'hidden' }}>
-        <button onClick={() => toggle('grpCar')} style={{ width: '100%', padding: '14px 16px', background: '#fff', border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+        <button onClick={() => toggle('grpCar')} style={{ width: '100%', padding: '14px 16px', background: T.card, border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
           <div style={{ textAlign: 'left' }}>
             <p style={{ fontSize: 13, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>Company car & travel perks</p>
             <p style={{ fontSize: 10.5, color: C.muted, margin: 0 }}>Driver · car running costs · daily allowance</p>
@@ -529,7 +529,7 @@ export default function ExemptionsPage() {
 
       {/* Group B — Retirement & exit payouts. Inner wrapper stays MOUNTED, hidden via CSS only. */}
       <div style={{ background: C.card, border: `1px dashed ${C.wm}`, borderRadius: 11, marginBottom: 16, overflow: 'hidden' }}>
-        <button onClick={() => toggle('grpRetire')} style={{ width: '100%', padding: '14px 16px', background: '#fff', border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+        <button onClick={() => toggle('grpRetire')} style={{ width: '100%', padding: '14px 16px', background: T.card, border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
           <div style={{ textAlign: 'left' }}>
             <p style={{ fontSize: 13, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>Retirement & exit payouts</p>
             <p style={{ fontSize: 10.5, color: C.muted, margin: 0 }}>Superannuation · PF withdrawal · gratuity</p>
@@ -592,7 +592,7 @@ export default function ExemptionsPage() {
       {/* Navigation */}
       <div style={{ display: 'flex', gap: 12 }}>
         <button onClick={() => router.push('/dashboard/profile/other-income')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>← Back</button>
-        <button onClick={() => router.push('/dashboard/profile/deductions')} style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Deductions →</button>
+        <button onClick={() => router.push('/dashboard/profile/deductions')} style={{ flex: 1, padding: '12px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Deductions →</button>
       </div>
     </div>
   )

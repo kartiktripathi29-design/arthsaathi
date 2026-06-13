@@ -347,7 +347,7 @@ export default function DocumentsPage() {
       <div className="doc-actions" style={{ display: 'flex', gap: 12 }}>
         <button onClick={handleProceed} disabled={!(salaryFiles.length > 0 || aisFile || form26File) || uploading} style={{
           flex: 1, padding: '12px', background: (salaryFiles.length > 0 || aisFile || form26File) && !uploading ? C.primary : C.sand,
-          color: (salaryFiles.length > 0 || aisFile || form26File) && !uploading ? C.ivory : C.faint, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600,
+          color: (salaryFiles.length > 0 || aisFile || form26File) && !uploading ? T.onTeal : C.faint, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600,
           cursor: (salaryFiles.length > 0 || aisFile || form26File) && !uploading ? 'pointer' : 'not-allowed', fontFamily: 'inherit',
         }}>
           {uploading ? (uploadProgress || 'Parsing…') : (salaryFiles.length > 1 ? `Proceed (${salaryFiles.length} slips)` : 'Proceed')}

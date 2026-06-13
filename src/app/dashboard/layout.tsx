@@ -13,7 +13,35 @@ const SUPABASE_CONFIGURED = !!process.env.NEXT_PUBLIC_SUPABASE_URL
 // Dashboard chrome palette (desktop): taupe rail + teal brand cap + sand header.
 const C = { rail: T.taupe, railLine: T.taupeLine, cap: T.teal, accent: T.teal, nav: T.nav, bg: T.paper }
 
-function Sidebar() {
+type ThemeMode = 'system' | 'light' | 'dark'
+
+// Three-way appearance pills (System / Light / Dark). Active pill: tint bg + teal text; inactive: nav.
+// Shared by the desktop sidebar footer and the mobile top-bar account dropdown — both drive setTheme.
+function AppearanceControl({ theme, setTheme }: { theme: ThemeMode; setTheme: (t: ThemeMode) => void }) {
+  const opts: { v: ThemeMode; label: string }[] = [
+    { v: 'system', label: 'System' },
+    { v: 'light', label: 'Light' },
+    { v: 'dark', label: 'Dark' },
+  ]
+  return (
+    <div style={{ display: 'flex', gap: 4 }}>
+      {opts.map(o => {
+        const active = theme === o.v
+        return (
+          <button key={o.v} onClick={() => setTheme(o.v)} style={{
+            flex: 1, padding: '5px 4px', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit',
+            border: `1px solid ${active ? T.teal : T.hairline}`,
+            background: active ? T.tint : 'transparent',
+            color: active ? T.teal : T.nav,
+            fontSize: 10.5, fontWeight: active ? 700 : 500,
+          }}>{o.label}</button>
+        )
+      })}
+    </div>
+  )
+}
+
+function Sidebar({ theme, setTheme }: { theme: ThemeMode; setTheme: (t: ThemeMode) => void }) {
   const pathname = usePathname()
   const router = useRouter()
   const { user, logout } = useAppStore()
@@ -88,7 +116,7 @@ function Sidebar() {
       fontFamily: '"Sora",-apple-system,sans-serif',
     }}>
       {/* Teal brand cap — logo reads in ivory on the teal block */}
-      <div style={{ padding: '18px 16px 14px', background: C.cap, display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ padding: '18px 16px 14px', background: T.cap, display: 'flex', alignItems: 'center', gap: 10 }}>
         <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
           <Logo variant="onTeal" size={28} />
         </Link>
@@ -149,7 +177,7 @@ function Sidebar() {
           }}>
             <div style={{
               width: 30, height: 30, borderRadius: '50%',
-              background: C.cap, color: T.ivory,
+              background: C.cap, color: T.onTeal,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 11, fontWeight: 700, flexShrink: 0,
             }}>{initials}</div>
@@ -159,6 +187,10 @@ function Sidebar() {
             </div>
           </div>
         )}
+        <div style={{ fontSize: 10, color: T.nav, letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 700, padding: '2px 2px 6px' }}>Appearance</div>
+        <div style={{ marginBottom: 8 }}>
+          <AppearanceControl theme={theme} setTheme={setTheme} />
+        </div>
         <button onClick={handleSignOut} style={{
           width: '100%', padding: '7px 10px', background: 'transparent',
           border: `1px solid ${C.railLine}`, borderRadius: 5,
@@ -172,7 +204,7 @@ function Sidebar() {
   )
 }
 
-function TopBar() {
+function TopBar({ theme, setTheme }: { theme: ThemeMode; setTheme: (t: ThemeMode) => void }) {
   const pathname = usePathname()
   const router = useRouter()
   const { user, logout } = useAppStore()
@@ -248,7 +280,7 @@ function TopBar() {
         <div className="dash-topchip" ref={chipRef} style={{ display: 'none', position: 'relative', alignItems: 'center' }}>
           <button onClick={() => setMenuOpen(o => !o)} aria-label="Account menu" style={{
             width: 28, height: 28, borderRadius: '50%',
-            background: T.teal, color: T.ivory, border: 'none',
+            background: T.teal, color: T.onTeal, border: 'none',
             fontSize: 11, fontWeight: 700, cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit',
           }}>{initials}</button>
@@ -261,6 +293,10 @@ function TopBar() {
               <div style={{ padding: '8px 10px' }}>
                 <div style={{ fontSize: 12, color: T.ink, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name}</div>
                 <div style={{ fontSize: 10, color: T.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(user as any).phone || (user as any).email || ''}</div>
+              </div>
+              <div style={{ padding: '8px 10px', borderTop: `1px solid ${T.hairline}` }}>
+                <div style={{ fontSize: 9.5, color: T.muted, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 5 }}>Appearance</div>
+                <AppearanceControl theme={theme} setTheme={setTheme} />
               </div>
               <button onClick={handleSignOut} style={{
                 width: '100%', textAlign: 'left', padding: '8px 10px', marginTop: 2,
@@ -334,7 +370,7 @@ function FamilySegment() {
             flex: 1, textAlign: 'center', textDecoration: 'none',
             fontSize: 13, fontWeight: 600, padding: '7px 0', borderRadius: 8,
             background: active ? T.teal : 'transparent',
-            color: active ? T.ivory : T.nav,
+            color: active ? T.onTeal : T.nav,
           }}>
             {pill.label}
           </Link>
@@ -375,6 +411,27 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  // Theme: 'system' follows prefers-color-scheme; 'light'/'dark' force. Synchronous initializers
+  // (localStorage + matchMedia, both window-guarded) resolve the right value on the first client
+  // paint — no light-then-dark flash. The matchMedia listener keeps system mode live.
+  const [theme, setThemeState] = useState<ThemeMode>(() =>
+    (typeof window !== 'undefined' && (localStorage.getItem('av_theme') as ThemeMode | null)) || 'system'
+  )
+  const [systemDark, setSystemDark] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
+  )
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const onChange = (e: MediaQueryListEvent) => setSystemDark(e.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+  const setTheme = (t: ThemeMode) => {
+    setThemeState(t)
+    try { localStorage.setItem('av_theme', t) } catch {}
+  }
+  const resolved: 'light' | 'dark' = theme === 'system' ? (systemDark ? 'dark' : 'light') : theme
+
   return (
     <AuthGate>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap');`}</style>
@@ -391,11 +448,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           .dash-topbadge { display: none !important; }
         }
       `}</style>
-      <div style={{ display: 'flex', minHeight: '100vh', background: C.bg, fontFamily: '"Sora",-apple-system,sans-serif' }}>
-        <Sidebar />
+      <div data-theme={resolved} suppressHydrationWarning style={{ display: 'flex', minHeight: '100vh', background: C.bg, fontFamily: '"Sora",-apple-system,sans-serif' }}>
+        <Sidebar theme={theme} setTheme={setTheme} />
         <BottomTabBar />
         <div className="dash-main" style={{ marginLeft: 216, flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <TopBar />
+          <TopBar theme={theme} setTheme={setTheme} />
           <FamilySegment />
           <main style={{ flex: 1, padding: '28px 28px', maxWidth: 1100, width: '100%' }}>
             {children}

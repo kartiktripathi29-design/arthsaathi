@@ -16,6 +16,7 @@
   --faint: #79827B;        /* meta text — meta ≥13px only, never body text */
   --cta-label: #111111;    /* black CTA label */
   --ivory: #F4EEE0;        /* text/marks on teal */
+  --on-teal: #F4EEE0;      /* label on teal fills — flips to dark ink in dark mode */
   --teal: #0E4D47;         /* brand accent — CTA / border / header rule / active-nav / winner outline */
   --green: #157A5B;        /* real positives only — refund / recommended / progress / Example / slip pill text */
   --hairline: #E7DEC9;     /* dividers */
@@ -43,6 +44,35 @@
   --text-muted: #95A5A6;
   --border: #E5E9ED;
   --surface: #F8FAFB;
+}
+
+/* ArthVo dark palette — D1 first draft (tuning round pending). Scoped to [data-theme="dark"],
+   which the dashboard layout sets on its flex root, so dark applies to the app track only.
+   ivory / --cta-label / --cap intentionally inherit their light values (same in both modes). */
+[data-theme="dark"] {
+  --paper: #141E1B;
+  --card: #1C2723;
+  --sand: #243029;
+  --taupe: #28251E;
+  --taupe-line: #3D372B;
+  --hairline: #2F3C36;
+  --ink: #ECE6D9;
+  --muted: #A9B3AB;
+  --nav: #9AA59D;
+  --faint: #6F7B73;
+  --teal: #3FA98D;
+  --on-teal: #10201B;
+  --tint: #1E332D;
+  --green: #4FBE93;
+  --marigold: #D9A23C;
+  /* slip set — "found-on-slip" pill */
+  --slip-t: #7BD0B0;
+  --slip-f: #1A2B26;
+  --slip-b: #2C4A40;
+  /* caution set — in-app amber caution */
+  --caut-t: #D9B25C;
+  --caut-f: #2A2415;
+  --caut-b: #4A3D1E;
 }
 
 * { box-sizing: border-box; }

@@ -1084,7 +1084,7 @@ export default function SalaryPageCompleteFinal() {
       <div style={{ maxWidth: 900, margin: '0 auto', padding: 20 }}>
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, textAlign: 'center' }}>
           <p style={{ fontSize: 14, color: C.muted, margin: '0 0 16px' }}>No salary data uploaded yet</p>
-          <button onClick={() => router.push('/dashboard/profile/documents')} style={{ padding: '10px 20px', background: C.fg, color: T.ivory, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Upload salary slip</button>
+          <button onClick={() => router.push('/dashboard/profile/documents')} style={{ padding: '10px 20px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Upload salary slip</button>
         </div>
       </div>
     )
@@ -1171,7 +1171,7 @@ export default function SalaryPageCompleteFinal() {
                             })
                           }}
                           title="Delete this slip"
-                          style={{ padding: '6px 10px', background: '#fff', color: C.danger, border: `1px solid ${C.danger}`, borderRadius: 4, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', lineHeight: 1 }}
+                          style={{ padding: '6px 10px', background: T.card, color: C.danger, border: `1px solid ${C.danger}`, borderRadius: 4, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', lineHeight: 1 }}
                         >×</button>
                       </div>
                     </div>
@@ -1208,7 +1208,7 @@ export default function SalaryPageCompleteFinal() {
                     setWizard(prev => ({ ...prev, periodMapping: mapping }))
                     setWizardStep(wizard.intent === 'forecast' ? 'forecast-changes' : 'confirm-pattern')
                   }}
-                  style={{ flex: 1, padding: '12px', background: C.fg, color: T.ivory, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                  style={{ flex: 1, padding: '12px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
                 >Next →</button>
               </div>
             </div>
@@ -1264,7 +1264,7 @@ export default function SalaryPageCompleteFinal() {
               {changes.map((fc, idx) => {
                 const isOneShot = fc.kind === 'bonus_timing' || fc.kind === 'other'
                 return (
-                  <div key={idx} style={{ marginBottom: 14, padding: 14, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 6 }}>
+                  <div key={idx} style={{ marginBottom: 14, padding: 14, background: T.card, border: `1px solid ${C.border}`, borderRadius: 6 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
                       <span style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Change #{idx + 1}</span>
                       <button onClick={() => removeChange(idx)} style={{ background: 'transparent', border: 'none', color: C.danger, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>× Remove</button>
@@ -1289,7 +1289,7 @@ export default function SalaryPageCompleteFinal() {
                         borderRadius: 4,
                         fontSize: 12,
                         fontFamily: 'inherit',
-                        background: '#fff',
+                        background: T.card,
                         color: C.text,
                         boxSizing: 'border-box',
                         appearance: 'none',
@@ -1340,8 +1340,8 @@ export default function SalaryPageCompleteFinal() {
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                                   <label style={{ fontSize: 11, color: C.muted }}>{isOneShot ? 'Amount' : 'How much?'}</label>
                                   <div style={{ display: 'flex', gap: 2 }}>
-                                    <button type="button" onClick={() => updateChange(idx, { amountMode: 'pct', amountAbs: 0 })} style={{ padding: '2px 6px', background: fc.amountMode === 'abs' ? '#fff' : C.fg, color: fc.amountMode === 'abs' ? C.fg : T.ivory, border: `1px solid ${C.fg}`, borderRadius: 3, fontSize: 9, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>%</button>
-                                    <button type="button" onClick={() => updateChange(idx, { amountMode: 'abs', amountPct: 0 })} style={{ padding: '2px 6px', background: fc.amountMode === 'abs' ? C.fg : '#fff', color: fc.amountMode === 'abs' ? T.ivory : C.fg, border: `1px solid ${C.fg}`, borderRadius: 3, fontSize: 9, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>₹</button>
+                                    <button type="button" onClick={() => updateChange(idx, { amountMode: 'pct', amountAbs: 0 })} style={{ padding: '2px 6px', background: fc.amountMode === 'abs' ? '#fff' : C.fg, color: fc.amountMode === 'abs' ? C.fg : T.onTeal, border: `1px solid ${C.fg}`, borderRadius: 3, fontSize: 9, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>%</button>
+                                    <button type="button" onClick={() => updateChange(idx, { amountMode: 'abs', amountPct: 0 })} style={{ padding: '2px 6px', background: fc.amountMode === 'abs' ? C.fg : '#fff', color: fc.amountMode === 'abs' ? T.onTeal : C.fg, border: `1px solid ${C.fg}`, borderRadius: 3, fontSize: 9, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>₹</button>
                                   </div>
                                 </div>
                                 {fc.amountMode === 'abs' ? (
@@ -1368,7 +1368,7 @@ export default function SalaryPageCompleteFinal() {
                             <select value={fc.retroFromMonth} onChange={e => updateChange(idx, { retroFromMonth: e.target.value })} style={{
                               width: '100%', height: 36, padding: '0 28px 0 10px',
                               border: `1px solid ${C.border}`, borderRadius: 4,
-                              fontSize: 12, fontFamily: 'inherit', background: '#fff', color: C.text,
+                              fontSize: 12, fontFamily: 'inherit', background: T.card, color: C.text,
                               boxSizing: 'border-box', appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none' as any,
                               lineHeight: '34px',
                               backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%237A8A7E'/></svg>")`,
@@ -1399,7 +1399,7 @@ export default function SalaryPageCompleteFinal() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
                           <span style={{ fontSize: 11, color: C.muted }}>Withhold TDS under:</span>
                           {(['new', 'old'] as const).map(r => (
-                            <button key={r} type="button" onClick={() => updateChange(idx, { tdsRegime: r })} style={{ padding: '3px 10px', background: (fc.tdsRegime || 'new') === r ? C.fg : '#fff', color: (fc.tdsRegime || 'new') === r ? T.ivory : C.fg, border: `1px solid ${C.fg}`, borderRadius: 4, fontSize: 10.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                            <button key={r} type="button" onClick={() => updateChange(idx, { tdsRegime: r })} style={{ padding: '3px 10px', background: (fc.tdsRegime || 'new') === r ? C.fg : '#fff', color: (fc.tdsRegime || 'new') === r ? T.onTeal : C.fg, border: `1px solid ${C.fg}`, borderRadius: 4, fontSize: 10.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                               {r === 'new' ? 'New regime' : 'Old regime'}
                             </button>
                           ))}
@@ -1419,7 +1419,7 @@ export default function SalaryPageCompleteFinal() {
 
               <div style={{ display: 'flex', gap: 12 }}>
                 <button onClick={() => setWizardStep('confirm-periods')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
-                <button onClick={() => { buildEmploymentsFromMapping(); setWizardStep('review') }} style={{ flex: 1, padding: '12px', background: C.fg, color: T.ivory, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Build timeline →</button>
+                <button onClick={() => { buildEmploymentsFromMapping(); setWizardStep('review') }} style={{ flex: 1, padding: '12px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Build timeline →</button>
               </div>
             </div>
           )
@@ -1456,7 +1456,7 @@ export default function SalaryPageCompleteFinal() {
                       setWizardStep('bonuses')
                     }
                   }}
-                  style={{ flex: 1, padding: '12px', background: C.fg, color: T.ivory, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                  style={{ flex: 1, padding: '12px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
                 >{wizard.intent === 'forecast' ? 'Build timeline →' : 'Looks right →'}</button>
               </div>
             </div>
@@ -1492,7 +1492,7 @@ export default function SalaryPageCompleteFinal() {
                 {allFY.map(mk => (
                   <div key={mk} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '6px 10px', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4 }}>
                     <span style={{ fontSize: 12, color: C.text, fontWeight: 600, minWidth: 70 }}>{monthLabel(mk)}</span>
-                    <select value={monthSlipOf(mk)} onChange={e => setMonthSlip(mk, e.target.value)} style={{ flex: 1, padding: '4px 6px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, fontFamily: 'inherit', background: '#fff', color: C.text }}>
+                    <select value={monthSlipOf(mk)} onChange={e => setMonthSlip(mk, e.target.value)} style={{ flex: 1, padding: '4px 6px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, fontFamily: 'inherit', background: T.card, color: C.text }}>
                       <option value="">— None —</option>
                       {slipsWithMeta.map(s => <option key={s.id} value={s.id}>{monthLabel(s.monthKey)}</option>)}
                     </select>
@@ -1510,7 +1510,7 @@ export default function SalaryPageCompleteFinal() {
                       setWizardStep('bonuses')
                     }
                   }}
-                  style={{ flex: 1, padding: '12px', background: C.fg, color: T.ivory, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                  style={{ flex: 1, padding: '12px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
                 >{wizard.intent === 'forecast' ? 'Build timeline →' : 'Next →'}</button>
               </div>
             </div>
@@ -1551,7 +1551,7 @@ export default function SalaryPageCompleteFinal() {
                   onClick={() => { setWizard(prev => ({ ...prev, bonusMonths: [] })); finishOrForecast() }}
                   style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}
                 >No bonuses</button>
-                <button onClick={finishOrForecast} style={{ flex: 1, padding: '12px', background: C.fg, color: T.ivory, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                <button onClick={finishOrForecast} style={{ flex: 1, padding: '12px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                   Build timeline →
                 </button>
               </div>
@@ -1601,7 +1601,7 @@ export default function SalaryPageCompleteFinal() {
                             {isEditing ? (
                               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                                 <input type="number" value={overrideValue} onChange={ev => setOverrideValue(ev.target.value)} autoFocus style={{ width: 100, padding: '4px 8px', border: `1px solid ${C.fg}`, borderRadius: 4, fontSize: 12, fontFamily: 'inherit', color: C.text }} />
-                                <button onClick={saveOverride} style={{ padding: '4px 10px', background: C.fg, color: T.ivory, border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
+                                <button onClick={saveOverride} style={{ padding: '4px 10px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
                                 <button onClick={() => { setOverrideKey(null); setOverrideValue('') }} style={{ padding: '4px 8px', background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>×</button>
                               </div>
                             ) : (
@@ -1662,7 +1662,7 @@ export default function SalaryPageCompleteFinal() {
                             {isEditing ? (
                               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                                 <input type="number" value={overrideValue} onChange={ev => setOverrideValue(ev.target.value)} autoFocus style={{ width: 100, padding: '4px 8px', border: `1px solid ${C.fg}`, borderRadius: 4, fontSize: 12, fontFamily: 'inherit', color: C.text }} />
-                                <button onClick={saveOverride} style={{ padding: '4px 10px', background: C.fg, color: T.ivory, border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
+                                <button onClick={saveOverride} style={{ padding: '4px 10px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
                                 <button onClick={() => { setOverrideKey(null); setOverrideValue('') }} style={{ padding: '4px 8px', background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>×</button>
                               </div>
                             ) : (
@@ -1709,7 +1709,7 @@ export default function SalaryPageCompleteFinal() {
               </button>
               <button
                 onClick={() => setPreviewMonth(null)}
-                style={{ flex: 1, padding: '12px', background: C.fg, color: T.ivory, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                style={{ flex: 1, padding: '12px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
               >
                 Close
               </button>
@@ -1752,7 +1752,7 @@ export default function SalaryPageCompleteFinal() {
                     value={monthUploadKey}
                     onChange={(e) => { setMonthUploadKey(e.target.value); setMonthUploadEmpId(empIdForMonth(e.target.value)); setMonthUploadError(null) }}
                     disabled={monthUploadBusy}
-                    style={{ padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontFamily: 'inherit', background: '#fff', color: C.text, minWidth: 200 }}
+                    style={{ padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontFamily: 'inherit', background: T.card, color: C.text, minWidth: 200 }}
                   >
                     <option value="">Select month…</option>
                     {flatMonths.map(m => (
@@ -1798,7 +1798,7 @@ export default function SalaryPageCompleteFinal() {
                           <select
                             value={manualMonthKey}
                             onChange={(e) => { setManualMonthKey(e.target.value); setManualError(null) }}
-                            style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontFamily: 'inherit', background: '#fff', color: C.text }}
+                            style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontFamily: 'inherit', background: T.card, color: C.text }}
                           >
                             <option value="">Select month…</option>
                             {flatMonths.map(m => (
@@ -1842,7 +1842,7 @@ export default function SalaryPageCompleteFinal() {
                           <div><p style={{ fontSize: 10, color: C.muted, margin: '0 0 2px', textTransform: 'uppercase' }}>Net</p><p style={{ fontSize: 13, fontWeight: 700, color: C.green, margin: 0 }}>{fmt(liveNet)}</p></div>
                         </div>
 
-                        <button onClick={() => submitManualEntry(empIdForMonth(manualMonthKey))} style={{ marginTop: 10, width: '100%', padding: '10px 14px', background: C.fg, color: T.ivory, border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Save breakdown</button>
+                        <button onClick={() => submitManualEntry(empIdForMonth(manualMonthKey))} style={{ marginTop: 10, width: '100%', padding: '10px 14px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Save breakdown</button>
                       </div>
                     )
                   })()}
@@ -2157,7 +2157,7 @@ export default function SalaryPageCompleteFinal() {
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <button onClick={() => setWizardStep('intent-pick')} style={{ flex: 1, minWidth: 120, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Edit timeline</button>
         <button onClick={() => router.push('/dashboard/profile/documents')} style={{ flex: 1, minWidth: 120, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Upload more slips</button>
-        <button onClick={() => router.push('/dashboard/profile/other-income')} style={{ flex: 1, minWidth: 120, padding: '12px', background: C.fg, color: T.ivory, border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Other earnings →</button>
+        <button onClick={() => router.push('/dashboard/profile/other-income')} style={{ flex: 1, minWidth: 120, padding: '12px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Other earnings →</button>
       </div>
     </div>
   )

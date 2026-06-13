@@ -234,7 +234,7 @@ export default function OtherIncomePage() {
           )}
           <button
             onClick={handleImportFromAis}
-            style={{ padding: '9px 16px', background: C.fg, color: C.ivory, border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+            style={{ padding: '9px 16px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
           >
             {hasAisImported ? 'Re-import from AIS' : 'Import from AIS'}
           </button>
@@ -247,7 +247,7 @@ export default function OtherIncomePage() {
       {entries.length === 0 && !menuOpen ? (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 24, textAlign: 'center', marginBottom: 24 }}>
           <p style={{ fontSize: 14, color: C.muted, margin: '0 0 16px' }}>No other income added yet. (This is optional.)</p>
-          <button onClick={() => setMenuOpen(true)} style={{ padding: '10px 20px', background: C.fg, color: C.ivory, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+          <button onClick={() => setMenuOpen(true)} style={{ padding: '10px 20px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
             + Add income
           </button>
         </div>
@@ -266,11 +266,11 @@ export default function OtherIncomePage() {
                   <p style={{ fontSize: 14, fontWeight: 700, color: C.fg, margin: 0 }}>{fmt(getTaxablePreview(entry))}</p>
                 </div>
                 <button onClick={() => setOpenForm(entry)} style={{ padding: '6px 12px', background: C.wl, color: C.fg, border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>Edit</button>
-                <button onClick={() => handleDelete(entry.id)} style={{ padding: '6px 12px', background: '#fff', color: C.danger, border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>Delete</button>
+                <button onClick={() => handleDelete(entry.id)} style={{ padding: '6px 12px', background: T.card, color: C.danger, border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>Delete</button>
               </div>
             </div>
           ))}
-          <button onClick={() => setMenuOpen(true)} style={{ width: '100%', padding: '12px', background: C.fg, color: C.ivory, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', marginBottom: 24 }}>
+          <button onClick={() => setMenuOpen(true)} style={{ width: '100%', padding: '12px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', marginBottom: 24 }}>
             + Add another
           </button>
         </>
@@ -281,7 +281,7 @@ export default function OtherIncomePage() {
           <p style={{ fontSize: 12, fontWeight: 700, color: C.muted, margin: '0 0 14px' }}>What kind of income?</p>
           <div className="oi-types" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
             {types.map(t => (
-              <button key={t.key} onClick={() => handleAdd(t.key)} style={{ padding: '14px', background: '#fff', border: `1px solid ${C.border}`, borderRadius: 6, textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }} onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = C.fg; (e.currentTarget as HTMLElement).style.background = C.wl }} onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = C.border; (e.currentTarget as HTMLElement).style.background = '#fff' }}>
+              <button key={t.key} onClick={() => handleAdd(t.key)} style={{ padding: '14px', background: T.card, border: `1px solid ${C.border}`, borderRadius: 6, textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }} onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = C.fg; (e.currentTarget as HTMLElement).style.background = C.wl }} onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = C.border; (e.currentTarget as HTMLElement).style.background = T.card }}>
                 <p style={{ fontSize: 14, fontWeight: 600, color: C.text, margin: '0 0 4px' }}>{t.label}</p>
                 <p style={{ fontSize: 11, color: C.muted, margin: 0, lineHeight: 1.4 }}>{t.desc}</p>
               </button>
@@ -335,7 +335,7 @@ export default function OtherIncomePage() {
 
               {openForm.type === 'equity' && (() => {
                 const rows: EquityRow[] = Array.isArray(openForm.rows) ? openForm.rows : []
-                const selStyle: React.CSSProperties = { flex: 1, padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit', background: '#fff', color: C.text }
+                const selStyle: React.CSSProperties = { flex: 1, padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit', background: T.card, color: C.text }
                 const numStyle: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }
                 const setRow = (i: number, patch: Partial<EquityRow>) => setOpenForm(f => f && ({ ...f, rows: (f.rows || []).map((r: EquityRow, j: number) => j === i ? { ...r, ...patch } : r) }))
                 const addRow = () => setOpenForm(f => f && ({ ...f, rows: [...(f.rows || []), { asset: 'listed_equity', ltcg: 0, stcg: 0 }] }))
@@ -368,7 +368,7 @@ export default function OtherIncomePage() {
                         </div>
                       </div>
                     ))}
-                    <button onClick={addRow} style={{ width: '100%', padding: '9px', background: '#fff', color: C.fg, border: `1px dashed ${C.wm}`, borderRadius: 6, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>+ Add asset</button>
+                    <button onClick={addRow} style={{ width: '100%', padding: '9px', background: T.card, color: C.fg, border: `1px dashed ${C.wm}`, borderRadius: 6, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>+ Add asset</button>
                   </div>
                 )
               })()}
@@ -424,7 +424,7 @@ export default function OtherIncomePage() {
 
             <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
               <button onClick={() => setOpenForm(null)} style={{ flex: 1, padding: '10px', background: C.card, color: C.muted, border: `1px solid ${C.border}`, borderRadius: 5, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
-              <button onClick={handleSave} style={{ flex: 1, padding: '10px', background: C.fg, color: C.ivory, border: 'none', borderRadius: 5, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
+              <button onClick={handleSave} style={{ flex: 1, padding: '10px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 5, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
             </div>
           </div>
         </div>
@@ -433,7 +433,7 @@ export default function OtherIncomePage() {
       {/* Navigation */}
       <div style={{ display: 'flex', gap: 12 }}>
         <button onClick={() => router.push('/dashboard/profile/salary')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
-        <button onClick={() => router.push('/dashboard/profile/exemptions')} style={{ flex: 1, padding: '12px', background: C.fg, color: C.ivory, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Allowances →</button>
+        <button onClick={() => router.push('/dashboard/profile/exemptions')} style={{ flex: 1, padding: '12px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Allowances →</button>
       </div>
     </div>
   )
