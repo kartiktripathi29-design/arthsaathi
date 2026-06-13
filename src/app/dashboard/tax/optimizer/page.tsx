@@ -89,6 +89,30 @@ function recommendITR(otherEntries: any[], totalIncome: number): { form: 'ITR-1'
 // Slab-wise calculator that returns a breakdown for display.
 // Slab math now lives in @/lib/tax-slabs (shared with the Salary forecast's TDS estimate).
 
+// The four-form ITR cheat-sheet — kept verbatim but tucked behind a tap so the verdict above stays
+// the clean, prominent thing. Collapsed by default.
+function ITRFormsReference() {
+  const [open, setOpen] = useState(false)
+  return (
+    <div>
+      <button onClick={() => setOpen(o => !o)} aria-expanded={open}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 0', background: 'transparent', border: 'none',
+          cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: C.fg }}>
+        <span style={{ display: 'inline-block', transition: 'transform .15s', transform: open ? 'rotate(90deg)' : 'none' }}>▸</span>
+        What about other ITR forms?
+      </button>
+      {open && (
+        <div style={{ padding: 10, background: C.bg, borderRadius: 4, fontSize: 11, color: C.muted, lineHeight: 1.5, marginTop: 6 }}>
+          <strong>ITR-1</strong> = salary + 1 house + interest, ≤ ₹50L, no capital gains beyond ₹1.25L LTCG;{' '}
+          <strong>ITR-2</strong> = capital gains, crypto, ESOPs, multiple houses, foreign assets, or income &gt; ₹50L;{' '}
+          <strong>ITR-3</strong> = freelance with actual expenses, business income, F&O;{' '}
+          <strong>ITR-4</strong> = presumptive freelance / small business u/s 44ADA / 44AD, ≤ ₹50L.
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function TaxOptimizerPage() {
   const router = useRouter()
   const [calc, setCalc] = useState<any>(null)
@@ -691,13 +715,7 @@ export default function TaxOptimizerPage() {
             <p key={i} style={{ fontSize: 12, color: C.text, margin: '4px 0', lineHeight: 1.5 }}>• {r}</p>
           ))}
         </div>
-        <div style={{ padding: 10, background: C.bg, borderRadius: 4, fontSize: 11, color: C.muted, lineHeight: 1.5 }}>
-          <strong style={{ color: C.fg }}>Quick reference:</strong>{' '}
-          <strong>ITR-1</strong> = salary + 1 house + interest, ≤ ₹50L, no capital gains beyond ₹1.25L LTCG;{' '}
-          <strong>ITR-2</strong> = capital gains, crypto, ESOPs, multiple houses, foreign assets, or income &gt; ₹50L;{' '}
-          <strong>ITR-3</strong> = freelance with actual expenses, business income, F&O;{' '}
-          <strong>ITR-4</strong> = presumptive freelance / small business u/s 44ADA / 44AD, ≤ ₹50L.
-        </div>
+        <ITRFormsReference />
       </div>
 
       {/* ── Where you can save more ── */}

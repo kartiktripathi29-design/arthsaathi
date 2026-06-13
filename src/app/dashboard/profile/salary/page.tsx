@@ -1452,8 +1452,8 @@ export default function SalaryPageCompleteFinal() {
                   const src = slipById.get(r.sourceSlipId)
                   return (
                     <div key={i} style={{ padding: '10px 12px', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12 }}>
-                      <span style={{ color: C.text, fontWeight: 600 }}>{monthLabel(r.fromMonth)} → {monthLabel(r.toMonth)}</span>
-                      <span style={{ color: C.muted }}> · Using {src ? monthLabel(src.monthKey) : '?'} slip · {fmt(src?.raw?.grossSalary || src?.raw?.basicSalary || 0)}</span>
+                      <div style={{ color: C.text, fontWeight: 600 }}>{monthLabel(r.fromMonth)} → {monthLabel(r.toMonth)}</div>
+                      <div style={{ color: C.muted, marginTop: 2 }}>Using {src ? monthLabel(src.monthKey) : '?'} slip · {fmt(src?.raw?.grossSalary || src?.raw?.basicSalary || 0)}</div>
                     </div>
                   )
                 })}
@@ -1559,13 +1559,15 @@ export default function SalaryPageCompleteFinal() {
                   )
                 })}
               </div>
-              <div style={{ display: 'flex', gap: 12 }}>
-                <button onClick={() => setWizardStep('confirm-pattern')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
-                <button
-                  onClick={() => { setWizard(prev => ({ ...prev, bonusMonths: [] })); finishOrForecast() }}
-                  style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}
-                >No bonuses</button>
-                <button onClick={finishOrForecast} style={{ flex: 1, padding: '12px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <button onClick={() => setWizardStep('confirm-pattern')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
+                  <button
+                    onClick={() => { setWizard(prev => ({ ...prev, bonusMonths: [] })); finishOrForecast() }}
+                    style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}
+                  >No bonuses</button>
+                </div>
+                <button onClick={finishOrForecast} style={{ width: '100%', padding: '12px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                   Build timeline →
                 </button>
               </div>
