@@ -1927,8 +1927,9 @@ export default function SalaryPageCompleteFinal() {
               {/* Mobile-only employer line — replaces the hidden band on narrow screens (band → emp-line). */}
               <div className="sal-emp-line" style={{ marginBottom: 14 }}>
                 {employments.map(e => (
-                  <div key={e.id} style={{ fontSize: 11, color: T.nav, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-                    {e.name} · {monthLabel(e.fromMonth).split(' ')[0]}–{monthLabel(e.toMonth).split(' ')[0]}
+                  <div key={e.id} style={{ display: 'flex', gap: 5, alignItems: 'baseline', fontSize: 11, color: T.nav }}>
+                    <span style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', minWidth: 0 }}>{e.name}</span>
+                    <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>· {monthLabel(e.fromMonth).split(' ')[0]}–{monthLabel(e.toMonth).split(' ')[0]}</span>
                   </div>
                 ))}
               </div>
@@ -1950,9 +1951,17 @@ export default function SalaryPageCompleteFinal() {
                   const g = e.months.reduce((s, m) => s + m.gross, 0)
                   const n = e.months.reduce((s, m) => s + m.net, 0)
                   return (
-                    <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 11.5, padding: '7px 10px', background: C.wl, borderRadius: 6, marginBottom: 6 }}>
-                      <span style={{ color: C.text, fontWeight: 600 }}>{e.name} <span style={{ color: C.muted, fontWeight: 400 }}>({monthLabel(e.fromMonth)} – {monthLabel(e.toMonth)})</span></span>
-                      <span style={{ color: C.fg, fontWeight: 700 }}>{fmt(g)} <span style={{ color: C.muted, fontWeight: 400 }}>gross</span> · <span style={{ color: C.green }}>{fmt(n)}</span> <span style={{ color: C.muted, fontWeight: 400 }}>net</span></span>
+                    <div key={e.id} style={{ padding: '8px 12px', background: C.wl, borderRadius: 6, marginBottom: 6 }}>
+                      {/* Company + period — grouped on their own line; the period stays intact as a unit */}
+                      <div style={{ fontSize: 11.5, marginBottom: 5 }}>
+                        <span style={{ color: C.text, fontWeight: 600 }}>{e.name}</span>{' '}
+                        <span style={{ color: C.muted, fontWeight: 400, whiteSpace: 'nowrap' }}>({monthLabel(e.fromMonth)} – {monthLabel(e.toMonth)})</span>
+                      </div>
+                      {/* Gross / Net — distinct labelled figures, each reads on its own, wraps cleanly */}
+                      <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 11.5 }}>
+                        <span style={{ whiteSpace: 'nowrap' }}><span style={{ color: C.fg, fontWeight: 700 }}>{fmt(g)}</span> <span style={{ color: C.muted, fontWeight: 400 }}>gross</span></span>
+                        <span style={{ whiteSpace: 'nowrap' }}><span style={{ color: C.green, fontWeight: 700 }}>{fmt(n)}</span> <span style={{ color: C.muted, fontWeight: 400 }}>net</span></span>
+                      </div>
                     </div>
                   )
                 })}
