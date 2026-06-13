@@ -107,6 +107,10 @@ export default function LandingPage() {
   // past the content shows the default light body through. Mirror the page theme onto <html> (so the
   // existing --paper token resolves per mode) and paint html/body with it. The rubber-band bounce is
   // kept (it signals page end) — the area it reveals is now themed paper, so no white shows.
+  //   • Mobile rubber-band reveals the canvas → the themed html/body background covers it.
+  //   • Desktop (Chrome/Safari) paints the elastic-overscroll stretch from the UA base background,
+  //     which follows `color-scheme` — so we also set color-scheme on <html> to match `resolved`,
+  //     otherwise the desktop stretch falls back to the light UA canvas (the white edge).
   // Scoped to this route: everything is restored on unmount so other routes (e.g. the dashboard) are
   // untouched. (var(--paper) only — no new color.)
   useEffect(() => {
@@ -114,14 +118,16 @@ export default function LandingPage() {
     const body = document.body
     const prev = {
       theme: html.getAttribute('data-theme'),
-      htmlBg: html.style.background,
+      htmlBg: html.style.background, htmlScheme: html.style.colorScheme,
       bodyBg: body.style.background,
     }
     html.setAttribute('data-theme', resolved)
+    html.style.colorScheme = resolved
     html.style.background = 'var(--paper)'
     body.style.background = 'var(--paper)'
     return () => {
       if (prev.theme === null) html.removeAttribute('data-theme'); else html.setAttribute('data-theme', prev.theme)
+      html.style.colorScheme = prev.htmlScheme
       html.style.background = prev.htmlBg
       body.style.background = prev.bodyBg
     }
