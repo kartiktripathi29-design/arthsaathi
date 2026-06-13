@@ -329,7 +329,7 @@ function BottomTabBar() {
     }}>
       {tabs.map(tab => (
         <Link key={tab.href} href={tab.href} style={{
-          flex: 1, textAlign: 'center', textDecoration: 'none',
+          flex: 1, minWidth: 0, textAlign: 'center', textDecoration: 'none',
           fontSize: 11, fontWeight: 600, padding: '10px 0 12px',
           color: tab.active ? T.teal : T.nav,
           borderTop: `2px solid ${tab.active ? T.teal : 'transparent'}`,
@@ -451,7 +451,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div data-theme={resolved} suppressHydrationWarning style={{ display: 'flex', minHeight: '100vh', background: C.bg, fontFamily: '"Sora",-apple-system,sans-serif' }}>
         <Sidebar theme={theme} setTheme={setTheme} />
         <BottomTabBar />
-        <div className="dash-main" style={{ marginLeft: 216, flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <div className="dash-main" style={{ marginLeft: 216, flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           <TopBar theme={theme} setTheme={setTheme} />
           <FamilySegment />
           <main style={{ flex: 1, padding: '28px 28px', maxWidth: 1100, width: '100%' }}>
