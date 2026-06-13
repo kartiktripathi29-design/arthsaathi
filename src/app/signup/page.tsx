@@ -36,13 +36,13 @@ function Shell({ children }: { children: React.ReactNode }) {
         .btn-ghost { transition: background .15s; }
         .btn-ghost:hover { background: var(--tint) !important; }
       `}</style>
-      <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 52px', borderBottom: `1px solid ${T.hairline}` }}>
-        <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 11 }}>
+      <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, padding: '18px 52px', borderBottom: `1px solid ${T.hairline}` }}>
+        <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 11, flexShrink: 0 }}>
           <Logo variant="onLight" size={32} />
         </Link>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <ThemeToggle theme={theme} setTheme={setTheme} resolved={resolved} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0 }}>
           <div style={{ fontSize: 13, color: T.muted }}>Already have an account?{' '}<Link href="/login" style={{ color: T.teal, fontWeight: 600, textDecoration: 'none' }}>Sign in</Link></div>
+          <ThemeToggle theme={theme} setTheme={setTheme} resolved={resolved} />
         </div>
       </nav>
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 24px' }}>

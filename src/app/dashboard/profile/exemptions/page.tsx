@@ -292,7 +292,7 @@ export default function ExemptionsPage() {
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '20px 0' }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Allowances</h1>
-      <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>Income that is completely tax-free — Old Regime only · Section 10</p>
+      <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>Income that is completely tax-free — <span style={{ whiteSpace: 'nowrap' }}>Old Regime only · Section 10</span></p>
 
       {salary && (salary.hra > 0 || detectedConveyance > 0) && (
         <div style={{ background: C.wl, border: `1px solid ${C.wm}`, borderRadius: 8, padding: 16, marginBottom: 20 }}>
@@ -585,7 +585,20 @@ export default function ExemptionsPage() {
       <div style={{ background: T.tint, border: `1px solid ${T.hairline}`, borderRadius: 8, padding: 16, marginBottom: 24 }}>
         <p style={{ fontSize: 11, color: C.muted, margin: '0 0 6px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>Total allowances claimed (annual)</p>
         <p style={{ fontSize: 18, fontWeight: 700, color: C.fg, margin: 0 }}>{fmt(totalAnnualExempt)}</p>
-        <p style={{ fontSize: 10.5, color: C.muted, margin: '6px 0 0' }}>HRA {fmt(hraAnnualExemption)} · LTA {fmt(s.lta)} · Driver {fmt(s.driverSalary)} · Car {fmt(s.carMaintenance)} · DA {fmt(s.dailyAllowance)} · Super-ann {fmt(s.superannuation)} · PF {fmt(s.pfWithdrawal)} · Gratuity {fmt(gratuityCapped)}</p>
+        <p style={{ fontSize: 10.5, color: C.muted, margin: '6px 0 0' }}>
+          {[
+            `HRA ${fmt(hraAnnualExemption)}`,
+            `LTA ${fmt(s.lta)}`,
+            `Driver ${fmt(s.driverSalary)}`,
+            `Car ${fmt(s.carMaintenance)}`,
+            `DA ${fmt(s.dailyAllowance)}`,
+            `Super-ann ${fmt(s.superannuation)}`,
+            `PF ${fmt(s.pfWithdrawal)}`,
+            `Gratuity ${fmt(gratuityCapped)}`,
+          ].map((t, i) => (
+            <span key={i}>{i > 0 ? ' · ' : ''}<span style={{ whiteSpace: 'nowrap' }}>{t}</span></span>
+          ))}
+        </p>
         <p style={{ fontSize: 10.5, color: C.muted, margin: '6px 0 0', fontStyle: 'italic' }}>These count only under Old Regime. New Regime disables Section 10 exemptions.</p>
       </div>
 

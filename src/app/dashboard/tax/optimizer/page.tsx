@@ -417,7 +417,7 @@ export default function TaxOptimizerPage() {
         <p style={{ fontSize: 14, color: C.danger, margin: '0 0 8px' }}>Your Tax hit an error: {calcError}</p>
         <p style={{ fontSize: 12, color: C.muted, margin: '0 0 20px' }}>Your salary data is safe. Try clearing this page's stale state and recomputing.</p>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-          <button onClick={() => { setCalcError(null); router.push('/dashboard/profile/salary') }} style={{ padding: '10px 20px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Back to salary</button>
+          <button onClick={() => { setCalcError(null); router.push('/dashboard/profile/salary') }} style={{ padding: '10px 20px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Back to salary</button>
           <button onClick={() => location.reload()} style={{ padding: '10px 20px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Retry</button>
         </div>
       </div>
@@ -770,7 +770,7 @@ export default function TaxOptimizerPage() {
 
       <div style={{ display: 'flex', gap: 12 }}>
         <button onClick={() => router.push('/dashboard/profile/deductions')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Edit deductions</button>
-        <button onClick={() => router.push('/dashboard/profile/salary')} style={{ flex: 1, padding: '12px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Done · Back to salary</button>
+        <button onClick={() => router.push('/dashboard/profile/salary')} style={{ flex: 1, padding: '12px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Done · Back to salary</button>
       </div>
     </div>
   )

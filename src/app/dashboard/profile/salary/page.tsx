@@ -1114,9 +1114,9 @@ export default function SalaryPageCompleteFinal() {
 
         {wizardStep === 'intent-pick' && (() => {
           const slipCount = slips.length
-          const intents: { id: Intent; title: string; desc: string }[] = [
-            { id: 'validate', title: 'My current year — how much tax do I owe?', desc: `Checks what you'll pay — or get back — using your ${slipCount} uploaded slip${slipCount === 1 ? '' : 's'} for this year.` },
-            { id: 'forecast', title: 'Plan ahead — what if my salary changes?', desc: 'Model an increment, bonus, or job switch — and see the tax impact.' },
+          const intents: { id: Intent; title: string; q: string; desc: string }[] = [
+            { id: 'validate', title: 'My current year', q: 'How much tax do I owe?', desc: `Checks what you'll pay — or get back — using your ${slipCount} uploaded slip${slipCount === 1 ? '' : 's'} for this year.` },
+            { id: 'forecast', title: 'Plan ahead', q: 'What if my salary changes?', desc: 'Model an increment, bonus, or job switch — and see the tax impact.' },
           ]
           const pickIntent = (id: Intent) => {
             setWizard(prev => ({ ...prev, intent: id, periodMapping: [], slipConfirmations: {} }))
@@ -1133,7 +1133,8 @@ export default function SalaryPageCompleteFinal() {
                     onClick={() => pickIntent(it.id)}
                     style={{ textAlign: 'left', padding: 16, background: wizard.intent === it.id ? C.wl : T.card, border: `1px solid ${wizard.intent === it.id ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit' }}
                   >
-                    <p style={{ fontSize: 14, fontWeight: 600, color: C.text, margin: '0 0 6px' }}>{it.title}</p>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>{it.title}</p>
+                    <p style={{ fontSize: 13, color: C.text, margin: '0 0 6px' }}>{it.q}</p>
                     <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>{it.desc}</p>
                   </button>
                 ))}

@@ -169,12 +169,12 @@ export default function DeductionsPage() {
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '20px 0' }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Deductions</h1>
-      <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>Tax-saving investments and expenses. (These only reduce tax in Old Regime)</p>
+      <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>Tax-saving investments and expenses. <span style={{ whiteSpace: 'nowrap' }}>(These only reduce tax in Old Regime)</span></p>
 
       {/* Context Banner */}
       <div style={{ background: C.wl, border: `1px solid ${C.wm}`, borderRadius: 8, padding: 16, marginBottom: 24 }}>
         <p style={{ fontSize: 12, color: C.text, margin: 0, lineHeight: 1.6 }}>
-          You've claimed <strong>{fmt(sec80C + ded.homeLoanInterest + ded.nps)}</strong> total. Only invest what makes financial sense — tax saving is a bonus, not the goal.
+          You've claimed <strong>{fmt(sec80C + ded.homeLoanInterest + ded.nps)}</strong> total. Only invest what makes financial sense — <span style={{ whiteSpace: 'nowrap' }}>tax saving is a bonus, not the goal.</span>
         </p>
       </div>
 
@@ -183,7 +183,7 @@ export default function DeductionsPage() {
         <button onClick={() => toggle('80c')} style={{ width: '100%', padding: '14px 16px', background: expanded.includes('80c') ? C.wl : T.card, border: 'none', borderBottom: expanded.includes('80c') ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ textAlign: 'left' }}>
             <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>Tax-saving investments</p>
-            <p style={{ fontSize: 10, color: C.muted, margin: 0 }}>PF, PPF, ELSS, LIC and the rest — one shared limit</p>
+            <p style={{ fontSize: 10, color: C.muted, margin: 0 }}>PF, PPF, ELSS, LIC and the rest — <span style={{ whiteSpace: 'nowrap' }}>one shared limit</span></p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <StatePill value={sec80C} />
@@ -521,7 +521,7 @@ export default function DeductionsPage() {
       {/* Tax Savings Preview */}
       {taxSavingsOld > 0 && (
         <div style={{ background: T.tint, border: `1px solid ${T.hairline}`, borderRadius: 8, padding: 16, marginBottom: 24 }}>
-          <p style={{ fontSize: 11, color: C.muted, margin: '0 0 6px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>Rough savings — old regime, before your real rate</p>
+          <p style={{ fontSize: 11, color: C.muted, margin: '0 0 6px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>Rough savings — old regime, <span style={{ whiteSpace: 'nowrap' }}>before your real rate</span></p>
           <p style={{ fontSize: 18, fontWeight: 700, color: C.fg, margin: 0 }}>~{fmt(taxSavingsOld)}</p>
           <p style={{ fontSize: 10, color: C.muted, margin: '6px 0 0' }}>These deductions don't count in New Regime. Your actual saving depends on your total income and which regime you choose.</p>
         </div>
