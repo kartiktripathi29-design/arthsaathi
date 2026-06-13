@@ -105,14 +105,17 @@ export default function LandingPage() {
 
   // Base background: the page's root div is themed, but html/body are not — so an overscroll/bounce
   // past the content shows the default light body through. Mirror the page theme onto <html> (so the
-  // existing --paper token resolves per mode) and paint html/body with it. The rubber-band bounce is
-  // kept (it signals page end) — the area it reveals is now themed paper, so no white shows.
-  //   • Mobile rubber-band reveals the canvas → the themed html/body background covers it.
-  //   • Desktop (Chrome/Safari) paints the elastic-overscroll stretch from the UA base background,
-  //     which follows `color-scheme` — so we also set color-scheme on <html> to match `resolved`,
-  //     otherwise the desktop stretch falls back to the light UA canvas (the white edge).
+  // existing tokens resolve per mode) and keep the rubber-band bounce (it signals page end).
+  //
+  // Two-tone rebound: the overscroll stretch is painted by the canvas, which only ever takes the
+  // root's single solid background-color (a gradient/fixed image can't fill it). So to make each end
+  // match the section it borders, we swap that color as the user crosses the page midpoint — top half
+  // → --paper (matches the header/hero), bottom half → the footer band's color (--ink in light,
+  // --paper in dark; same conditional the footer uses). You can only rubber-band at an end you've
+  // already scrolled to, and the swap sits behind opaque sections, so it's invisible mid-scroll and
+  // only shows in the rebound. color-scheme is mirrored too so native chrome follows the theme.
   // Scoped to this route: everything is restored on unmount so other routes (e.g. the dashboard) are
-  // untouched. (var(--paper) only — no new color.)
+  // untouched. (Existing tokens only — no new color.)
   useEffect(() => {
     const html = document.documentElement
     const body = document.body
@@ -123,9 +126,21 @@ export default function LandingPage() {
     }
     html.setAttribute('data-theme', resolved)
     html.style.colorScheme = resolved
-    html.style.background = 'var(--paper)'
     body.style.background = 'var(--paper)'
+
+    const topColor = 'var(--paper)'
+    const bottomColor = resolved === 'dark' ? 'var(--paper)' : 'var(--ink)'
+    const applyEdge = () => {
+      const max = html.scrollHeight - window.innerHeight
+      const pastMid = max > 0 && window.scrollY > max / 2
+      html.style.background = pastMid ? bottomColor : topColor
+    }
+    applyEdge()
+    window.addEventListener('scroll', applyEdge, { passive: true })
+    window.addEventListener('resize', applyEdge)
     return () => {
+      window.removeEventListener('scroll', applyEdge)
+      window.removeEventListener('resize', applyEdge)
       if (prev.theme === null) html.removeAttribute('data-theme'); else html.setAttribute('data-theme', prev.theme)
       html.style.colorScheme = prev.htmlScheme
       html.style.background = prev.htmlBg
