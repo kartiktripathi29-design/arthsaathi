@@ -43,6 +43,14 @@ The code is **banked** but not yet **eyes-validated** in dark mode. This is the 
 4. **Small leftovers** — the deferred polish items surfaced this session (e.g. tint-box borders mapped to `T.hairline` pending a dedicated `--tint-border`; any copy stragglers).
 5. **Carry-overs** — open items from prior sessions not yet closed (privacy findings, auth/cloud-sync follow-ups, BUG-8 persistence — see the respective `docs/` notes).
 
+## D1.6 (owed) — Dialog/Toaster theme scope
+`DialogHost` + `Toaster` are portaled from the ROOT layout (`app/layout.tsx`), outside the `[data-theme="dark"]` subtree (set on the dashboard flex root). Result: confirm dialogs, password dialogs, and toasts render in LIGHT mode even when the app is dark. Page-inline modals (salary preview, other-income form) are fine — they're inside `<main>` within the themed subtree. Latent: Dialog password input (line 112) sets `background: C.bg` but no `color` — moot while the dialog is light, would bite once dark-scoped.
+
+Fix has a tradeoff, decide deliberately (do NOT quick-patch):
+- Wrap `DialogHost`/`Toaster` in their own `data-theme` consumer → duplicates theme-resolution logic (localStorage + matchMedia), risks drift.
+- Move `data-theme` to `<html>`/root with theme state lifted → cleanest, themes everything once, BUT pulls the landing into dark scope, which violates the locked "landing stays light" principle UNLESS the landing wrapper is explicitly pinned `data-theme="light"`.
+- Likely best solved TOGETHER with the landing-dark work (one root-level theme-scope decision). Logged, not fixed.
+
 ## Key findings logged
 - **FY conflict** — the tax engine + slab lib assume **FY 2025-26** (and the optimizer copy says so), but the TopBar chrome advertises **FY 2026-27**. Biggest find of the session; it's a **Kartik decision** (which year is live), and it's a logic+copy change (engine work attached), not cosmetic — parked deliberately.
 - **Dormant AppStore slices** — `as_salary` / `as_other_income` are written by the AppStore context but **not** read by the page flow (which uses `av_salary_timeline` / `av_other_income`). Effectively dead for the current flow; flagged so no one trusts them as the source of truth.
