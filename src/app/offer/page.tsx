@@ -10,6 +10,7 @@ import { passwordDialog } from '@/components/Dialog'
 import { newRegimeAnnualTax } from '@/lib/tax-slabs'
 import { tokens as T } from '@/lib/tokens'
 import Logo from '@/components/Logo'
+import { ThemeToggle, useArthvoTheme, useThemedBase } from '@/components/ThemeToggle'
 
 interface OfferData {
   employeeName?: string; employerName?: string; designation?: string; joiningDate?: string
@@ -29,6 +30,9 @@ export default function OfferParserPage() {
   const [data, setData] = useState<OfferData | null>(null)
   const [error, setError] = useState('')
   const [dragOver, setDragOver] = useState(false)
+  // Same dark-mode setup as the landing / auth pages: shared av_theme, themed html/body base.
+  const { theme, setTheme, resolved } = useArthvoTheme()
+  useThemedBase(resolved)
 
   const handleFile = async (file: File) => {
     setStatus('parsing'); setError('')
@@ -82,20 +86,25 @@ export default function OfferParserPage() {
   const reset = () => { setData(null); setStatus('idle'); setError('') }
 
   return (
-    <div style={{ minHeight: '100vh', background: T.paper, fontFamily: '"Sora",-apple-system,sans-serif', display: 'flex', flexDirection: 'column' }}>
+    <div data-theme={resolved} suppressHydrationWarning style={{ minHeight: '100vh', background: T.paper, fontFamily: '"Sora",-apple-system,sans-serif', display: 'flex', flexDirection: 'column' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         .cta { transition: opacity .15s, transform .15s; }
         .cta:hover:not(:disabled) { opacity: .92; transform: translateY(-1px); }
+        .btn-ghost { transition: background .15s; }
+        .btn-ghost:hover { background: var(--tint) !important; }
       `}</style>
 
-      <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 52px', borderBottom: `1px solid ${T.hairline}` }}>
-        <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 11 }}>
+      <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, padding: '18px 52px', borderBottom: `1px solid ${T.hairline}` }}>
+        <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 11, flexShrink: 0 }}>
           <Logo variant="onLight" size={30} />
         </Link>
-        <div style={{ fontSize: 13, color: T.muted }}>
-          <Link href="/login" style={{ color: T.teal, fontWeight: 600, textDecoration: 'none' }}>Sign in</Link>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0 }}>
+          <div style={{ fontSize: 13, color: T.muted }}>
+            <Link href="/login" style={{ color: T.teal, fontWeight: 600, textDecoration: 'none' }}>Sign in</Link>
+          </div>
+          <ThemeToggle theme={theme} setTheme={setTheme} resolved={resolved} />
         </div>
       </nav>
 
