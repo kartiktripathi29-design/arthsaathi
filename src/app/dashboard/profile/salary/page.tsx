@@ -47,6 +47,7 @@ const SAL_MOBILE_CSS = `
   .sal-bonus { grid-template-columns: repeat(3, 1fr) !important; }
   .sal-manual { grid-template-columns: 1fr !important; }
   .sal-month-select { min-width: 0 !important; flex-basis: 100% !important; }
+  .sal-annual { grid-template-columns: 1fr !important; }
 }
 `
 
@@ -1733,7 +1734,7 @@ export default function SalaryPageCompleteFinal() {
 
       {/* Edit Modal */}
       {/* Annual Summary */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
+      <div className="sal-annual" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
           <p style={{ fontSize: 10, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Annual Gross</p>
           <p style={{ fontSize: 20, fontWeight: 700, color: C.fg, margin: 0 }}>{fmt(annualGross)}</p>
@@ -2137,7 +2138,7 @@ export default function SalaryPageCompleteFinal() {
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 16 }}>
             <h3 style={{ fontSize: 16, fontWeight: 700, color: C.fg, margin: '0 0 14px' }}>Salary summary</h3>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+            <div className="sal-annual" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
               <div style={{ padding: 12, background: C.bg, borderRadius: 6 }}>
                 <p style={{ fontSize: 10, color: C.muted, margin: '0 0 4px', textTransform: 'uppercase' }}>Annual Gross</p>
                 <p style={{ fontSize: 18, fontWeight: 700, color: C.fg, margin: 0 }}>{fmt(annualGross)}</p>
