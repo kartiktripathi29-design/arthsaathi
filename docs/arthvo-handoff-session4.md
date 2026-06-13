@@ -51,6 +51,9 @@ Fix has a tradeoff, decide deliberately (do NOT quick-patch):
 - Move `data-theme` to `<html>`/root with theme state lifted → cleanest, themes everything once, BUT pulls the landing into dark scope, which violates the locked "landing stays light" principle UNLESS the landing wrapper is explicitly pinned `data-theme="light"`.
 - Likely best solved TOGETHER with the landing-dark work (one root-level theme-scope decision). Logged, not fixed.
 
+## Salary timeline — horizontal scroll at narrow widths (owed, diagnose first)
+At ~400px (and likely worse at 360/320px real phones), the salary page shows horizontal scroll near the timeline. NOT dark-specific — a light-mode layout bug too. Cause unconfirmed: either (a) page-level overflow (a non-wrapping row, fixed-px element, or long ₹ string wider than viewport), or (b) the 4×3 timeline grid itself overflowing (cols+gaps exceed container, or a cell min-width that won't shrink). Diagnose BEFORE fixing: confirm whether the whole page scrolls or only the timeline strip; find the specific too-wide element in `src/app/dashboard/profile/salary/page.tsx`. Then one targeted fix (likely `min-width: 0` on a flex child, shrinkable cells, or a `nowrap` that should wrap). Rule out DevTools-emulation gutter artifact (a few px) vs real overflow (a visible chunk).
+
 ## Key findings logged
 - **FY conflict** — the tax engine + slab lib assume **FY 2025-26** (and the optimizer copy says so), but the TopBar chrome advertises **FY 2026-27**. Biggest find of the session; it's a **Kartik decision** (which year is live), and it's a logic+copy change (engine work attached), not cosmetic — parked deliberately.
 - **Dormant AppStore slices** — `as_salary` / `as_other_income` are written by the AppStore context but **not** read by the page flow (which uses `av_salary_timeline` / `av_other_income`). Effectively dead for the current flow; flagged so no one trusts them as the source of truth.
