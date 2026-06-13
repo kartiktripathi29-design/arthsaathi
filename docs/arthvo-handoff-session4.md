@@ -51,6 +51,13 @@ Fix has a tradeoff, decide deliberately (do NOT quick-patch):
 - Move `data-theme` to `<html>`/root with theme state lifted → cleanest, themes everything once, BUT pulls the landing into dark scope, which violates the locked "landing stays light" principle UNLESS the landing wrapper is explicitly pinned `data-theme="light"`.
 - Likely best solved TOGETHER with the landing-dark work (one root-level theme-scope decision). Logged, not fixed.
 
+## Overscroll / scroll-background white in dark mode (owed — same root-scope cause as D1.6)
+Confirmed in dark mode: scrolling/overscrolling past content reveals WHITE behind the dark app. Cause: `--surface` (body/root background) is not overridden in the `[data-theme="dark"]` block, AND `data-theme` sits on the dashboard div, not `<html>`/root — so the root-level scroll/overscroll area can't inherit dark regardless. This is the SAME architectural root cause as D1.6 (portaled dialogs + toasts escape the theme scope because the scope is below root).
+
+[Confirm location: is the white BELOW content (pure body case) or in SIDE GUTTERS at narrow widths (may overlap the salary horizontal-scroll finding)?]
+
+Likely solved TOGETHER with D1.6 + landing-dark as one root-level theme-scope decision: lift `data-theme` to `<html>`/root, pin the landing wrapper `data-theme="light"`, override `--surface` in the dark block. One fix closes dialogs, toasts, and overscroll-white.
+
 ## Salary timeline — horizontal scroll at narrow widths (owed, diagnose first)
 At ~400px (and likely worse at 360/320px real phones), the salary page shows horizontal scroll near the timeline. NOT dark-specific — a light-mode layout bug too. Cause unconfirmed: either (a) page-level overflow (a non-wrapping row, fixed-px element, or long ₹ string wider than viewport), or (b) the 4×3 timeline grid itself overflowing (cols+gaps exceed container, or a cell min-width that won't shrink). Diagnose BEFORE fixing: confirm whether the whole page scrolls or only the timeline strip; find the specific too-wide element in `src/app/dashboard/profile/salary/page.tsx`. Then one targeted fix (likely `min-width: 0` on a flex child, shrinkable cells, or a `nowrap` that should wrap). Rule out DevTools-emulation gutter artifact (a few px) vs real overflow (a visible chunk).
 
