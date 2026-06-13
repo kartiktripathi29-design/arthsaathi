@@ -68,7 +68,7 @@ function SimpleSection({
               value={value > 0 ? value : ''}
               onChange={(e) => onChange(parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0)}
               placeholder="0"
-              style={{ flex: 1, border: 'none', outline: 'none', padding: '8px 10px', fontSize: 13, fontFamily: 'inherit', color: C.text }}
+              style={{ flex: 1, border: 'none', outline: 'none', padding: '8px 10px', fontSize: 13, fontFamily: 'inherit', color: C.text, background: 'transparent' }}
             />
           </div>
           {claimed > 0 && (
@@ -94,7 +94,7 @@ function DetectedHint({ monthly, rule, onUse }: { monthly: number; rule: string;
   if (!monthly || monthly <= 0) return null
   const annual = monthly * 12
   return (
-    <div style={{ marginTop: 10, padding: '10px 12px', background: '#EEF4FF', border: '1px solid #C9D9F2', borderRadius: 4 }}>
+    <div style={{ marginTop: 10, padding: '10px 12px', background: T.tint, border: `1px solid ${T.hairline}`, borderRadius: 4 }}>
       <p style={{ fontSize: 11, color: C.text, margin: '0 0 4px' }}>
         🔎 Detected in your slip: <strong>{fmt(monthly)}/month</strong> <span style={{ color: C.muted }}>(~{fmt(annual)}/year)</span>
       </p>
@@ -334,7 +334,7 @@ export default function ExemptionsPage() {
               <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 5, fontWeight: 500, textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>
                 HRA received {hraAnnualReceived > 0 ? '(annual)' : '(monthly)'}
               </label>
-              <div style={{ padding: '8px 10px', background: '#FAFAF8', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 12, color: C.text, fontWeight: 600 }}>
+              <div style={{ padding: '8px 10px', background: T.card, border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 12, color: C.text, fontWeight: 600 }}>
                 {hraAnnualReceived > 0
                   ? <>{fmt(hraAnnualReceived)}/year <span style={{ fontSize: 10.5, color: C.muted, fontWeight: 400, marginLeft: 6 }}>(from your timeline)</span></>
                   : <>{fmt(s.hraReceived)}/month <span style={{ fontSize: 10.5, color: C.muted, fontWeight: 400, marginLeft: 6 }}>{s.hraReceived > 0 ? '(auto-filled from slip)' : '(none found on your slip — add it if your slip shows HRA)'}</span></>}
@@ -361,7 +361,7 @@ export default function ExemptionsPage() {
                   value={s.rentPaid > 0 ? s.rentPaid : ''}
                   onChange={(e) => update('rentPaid', parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0)}
                   placeholder="0"
-                  style={{ flex: 1, border: 'none', outline: 'none', padding: '8px 10px', fontSize: 13, fontFamily: 'inherit', color: C.text }}
+                  style={{ flex: 1, border: 'none', outline: 'none', padding: '8px 10px', fontSize: 13, fontFamily: 'inherit', color: C.text, background: 'transparent' }}
                 />
               </div>
             </div>
@@ -374,13 +374,13 @@ export default function ExemptionsPage() {
                 </div>
               </div>
             </label>
-            <div style={{ padding: '8px 10px', background: '#FFF8E6', border: '1px solid #E8D9A8', borderRadius: 4, marginBottom: 12 }}>
-              <p style={{ fontSize: 10.5, color: '#7A5C00', margin: 0, lineHeight: 1.45 }}>
+            <div style={{ padding: '8px 10px', background: T.caution.fill, border: `1px solid ${T.caution.border}`, borderRadius: 4, marginBottom: 12 }}>
+              <p style={{ fontSize: 10.5, color: T.caution.text, margin: 0, lineHeight: 1.45 }}>
                 ⚠️ HRA exemption is <strong>not available under the new tax regime</strong>. This claim only applies if you opt for the old regime.
               </p>
             </div>
             {s.rentPaid > 0 ? (
-              <div style={{ padding: '12px 14px', background: '#F0F9F7', border: '1px solid #D1E8E4', borderRadius: 4 }}>
+              <div style={{ padding: '12px 14px', background: T.tint, border: `1px solid ${T.hairline}`, borderRadius: 4 }}>
                 <p style={{ fontSize: 10.5, color: C.muted, margin: '0 0 4px', fontWeight: 500, textTransform: 'uppercase' as const }}>Tax-free HRA exemption</p>
                 <p style={{ fontSize: 16, fontWeight: 700, color: C.fg, margin: 0 }}>{fmt(hraAnnualExemption)}/year{hraAnnualExemption > 0 ? ` · ~${fmt(hraMonthlyDisplay)}/month avg` : ''}</p>
                 {hraComp && (
@@ -404,16 +404,16 @@ export default function ExemptionsPage() {
                               <p style={{ fontSize: 11, fontWeight: 700, color: C.text, margin: '0 0 6px' }}>
                                 {fmtMonth(seg.fromMonth)}{seg.fromMonth !== seg.toMonth ? ` – ${fmtMonth(seg.toMonth)}` : ''} <span style={{ color: C.muted, fontWeight: 400 }}>· {seg.months} mo · basic {fmt(seg.basic)}/mo</span>
                               </p>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', fontSize: 11, borderRadius: 4, background: seg.hra === least ? '#E3F2EC' : 'transparent', fontWeight: seg.hra === least ? 700 : 400, color: seg.hra === least ? C.fg : C.text }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', fontSize: 11, borderRadius: 4, background: seg.hra === least ? T.slip.fill : 'transparent', fontWeight: seg.hra === least ? 700 : 400, color: seg.hra === least ? C.fg : C.text }}>
                                 <span>Actual HRA received</span><span>{fmt(seg.hra)}/mo</span>
                               </div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', fontSize: 11, borderRadius: 4, background: seg.rentMinus10 === least ? '#E3F2EC' : 'transparent', fontWeight: seg.rentMinus10 === least ? 700 : 400, color: seg.rentMinus10 === least ? C.fg : C.text }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', fontSize: 11, borderRadius: 4, background: seg.rentMinus10 === least ? T.slip.fill : 'transparent', fontWeight: seg.rentMinus10 === least ? 700 : 400, color: seg.rentMinus10 === least ? C.fg : C.text }}>
                                 <span>Rent − 10% of basic <span style={{ color: C.muted, fontWeight: 400 }}>({fmt(s.rentPaid)} − {fmt(Math.round(seg.basic * 0.1))})</span></span><span>{fmt(seg.rentMinus10)}/mo</span>
                               </div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', fontSize: 11, borderRadius: 4, background: seg.cityPctBasic === least ? '#E3F2EC' : 'transparent', fontWeight: seg.cityPctBasic === least ? 700 : 400, color: seg.cityPctBasic === least ? C.fg : C.text }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', fontSize: 11, borderRadius: 4, background: seg.cityPctBasic === least ? T.slip.fill : 'transparent', fontWeight: seg.cityPctBasic === least ? 700 : 400, color: seg.cityPctBasic === least ? C.fg : C.text }}>
                                 <span>{s.isMetro ? '50%' : '40%'} of basic</span><span>{fmt(seg.cityPctBasic)}/mo</span>
                               </div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 8px', marginTop: 4, borderTop: `1px dashed ${C.border}`, fontSize: 11, fontWeight: 700, color: '#2A7A4A' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 8px', marginTop: 4, borderTop: `1px dashed ${C.border}`, fontSize: 11, fontWeight: 700, color: C.green }}>
                                 <span>→ Exempt (least) × {seg.months}</span><span>{fmt(seg.monthlyExempt)} × {seg.months} = {fmt(seg.periodExempt)}</span>
                               </div>
                             </div>
@@ -428,8 +428,8 @@ export default function ExemptionsPage() {
                 )}
               </div>
             ) : (
-              <div style={{ padding: '10px 12px', background: '#FFF3DD', border: `1px solid ${C.wm}`, borderRadius: 4 }}>
-                <p style={{ fontSize: 11, color: '#856404', margin: 0 }}>💡 Enter monthly rent to claim HRA exemption.</p>
+              <div style={{ padding: '10px 12px', background: T.caution.fill, border: `1px solid ${C.wm}`, borderRadius: 4 }}>
+                <p style={{ fontSize: 11, color: T.caution.text, margin: 0 }}>💡 Enter monthly rent to claim HRA exemption.</p>
               </div>
             )}
             <p style={{ fontSize: 10, color: C.faint, margin: '10px 0 0', lineHeight: 1.45 }}>HRA · u/s 10(13A) · Min of: actual HRA · rent − 10% basic · 50% (metro) / 40% basic · Old regime only</p>
@@ -457,9 +457,9 @@ export default function ExemptionsPage() {
             belowField={
               <>
               <DetectedHint monthly={detectedLta} rule="LTA is exempt only for actual travel (economy fare · 2 journeys per 4-yr block). Enter the fare you'll actually claim — not the full allowance shown on the slip." />
-              <div style={{ marginTop: 10, padding: '10px 12px', background: '#F0F9F4', border: '1px solid #CFE6D8', borderRadius: 4 }}>
+              <div style={{ marginTop: 10, padding: '10px 12px', background: T.slip.fill, border: `1px solid ${T.slip.border}`, borderRadius: 4 }}>
                 <p style={{ fontSize: 10.5, color: C.muted, margin: 0, lineHeight: 1.5 }}>
-                  Current block <strong style={{ color: '#2A7A4A' }}>CY {blk.start}–{blk.end}</strong> · 2 journeys allowed.
+                  Current block <strong style={{ color: C.green }}>CY {blk.start}–{blk.end}</strong> · 2 journeys allowed.
                   {inCarryWindow && <> Carry-forward: one unused journey from CY {blk.prevStart}–{blk.prevEnd} can be your first journey this year.</>}
                 </p>
               </div>
@@ -582,7 +582,7 @@ export default function ExemptionsPage() {
       </div>
 
       {/* Total */}
-      <div style={{ background: '#F0F9F7', border: `1px solid #D1E8E4`, borderRadius: 8, padding: 16, marginBottom: 24 }}>
+      <div style={{ background: T.tint, border: `1px solid ${T.hairline}`, borderRadius: 8, padding: 16, marginBottom: 24 }}>
         <p style={{ fontSize: 11, color: C.muted, margin: '0 0 6px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>Total allowances claimed (annual)</p>
         <p style={{ fontSize: 18, fontWeight: 700, color: C.fg, margin: 0 }}>{fmt(totalAnnualExempt)}</p>
         <p style={{ fontSize: 10.5, color: C.muted, margin: '6px 0 0' }}>HRA {fmt(hraAnnualExemption)} · LTA {fmt(s.lta)} · Driver {fmt(s.driverSalary)} · Car {fmt(s.carMaintenance)} · DA {fmt(s.dailyAllowance)} · Super-ann {fmt(s.superannuation)} · PF {fmt(s.pfWithdrawal)} · Gratuity {fmt(gratuityCapped)}</p>

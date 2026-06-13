@@ -303,7 +303,7 @@ export default function OtherIncomePage() {
               {openForm.type !== 'equity' && (
                 <div>
                   <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>Source name</label>
-                  <input type="text" value={openForm.sourceName} onChange={(e) => setOpenForm({ ...openForm, sourceName: e.target.value })} placeholder="e.g. Freelance clients" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }} />
+                  <input type="text" value={openForm.sourceName} onChange={(e) => setOpenForm({ ...openForm, sourceName: e.target.value })} placeholder="e.g. Freelance clients" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit', background: T.card, color: C.text }} />
                 </div>
               )}
 
@@ -311,7 +311,7 @@ export default function OtherIncomePage() {
                 <>
                   <div>
                     <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>Gross receipts</label>
-                    <input type="text" inputMode="numeric" value={openForm.grossReceipts} onChange={(e) => setOpenForm({ ...openForm, grossReceipts: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }} />
+                    <input type="text" inputMode="numeric" value={openForm.grossReceipts} onChange={(e) => setOpenForm({ ...openForm, grossReceipts: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit', background: T.card, color: C.text }} />
                   </div>
                   <div>
                     <label style={{ fontSize: 12, fontWeight: 500, color: C.text, marginBottom: 6, display: 'block' }}>How do you want to declare?</label>
@@ -327,7 +327,7 @@ export default function OtherIncomePage() {
                   {openForm.declarationMethod === 'actual' && (
                     <div>
                       <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>Expenses</label>
-                      <input type="text" inputMode="numeric" value={openForm.expenses} onChange={(e) => setOpenForm({ ...openForm, expenses: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }} />
+                      <input type="text" inputMode="numeric" value={openForm.expenses} onChange={(e) => setOpenForm({ ...openForm, expenses: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit', background: T.card, color: C.text }} />
                     </div>
                   )}
                 </>
@@ -336,7 +336,7 @@ export default function OtherIncomePage() {
               {openForm.type === 'equity' && (() => {
                 const rows: EquityRow[] = Array.isArray(openForm.rows) ? openForm.rows : []
                 const selStyle: React.CSSProperties = { flex: 1, padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit', background: T.card, color: C.text }
-                const numStyle: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }
+                const numStyle: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit', background: T.card, color: C.text }
                 const setRow = (i: number, patch: Partial<EquityRow>) => setOpenForm(f => f && ({ ...f, rows: (f.rows || []).map((r: EquityRow, j: number) => j === i ? { ...r, ...patch } : r) }))
                 const addRow = () => setOpenForm(f => f && ({ ...f, rows: [...(f.rows || []), { asset: 'listed_equity', ltcg: 0, stcg: 0 }] }))
                 const removeRow = (i: number) => setOpenForm(f => f && ({ ...f, rows: (f.rows || []).filter((_: EquityRow, j: number) => j !== i) }))
@@ -377,12 +377,12 @@ export default function OtherIncomePage() {
                 <>
                   <div>
                     <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>Net gains from crypto trading</label>
-                    <input type="text" inputMode="numeric" value={openForm.cryptoGains} onChange={(e) => setOpenForm({ ...openForm, cryptoGains: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }} />
+                    <input type="text" inputMode="numeric" value={openForm.cryptoGains} onChange={(e) => setOpenForm({ ...openForm, cryptoGains: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit', background: T.card, color: C.text }} />
                     <p style={{ fontSize: 10, color: C.danger, margin: '4px 0 0' }}>Taxed at 30% flat. No loss set-off allowed.</p>
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>TDS already deducted (1% u/s 194S) — optional</label>
-                    <input type="text" inputMode="numeric" value={openForm.cryptoTDS > 0 ? openForm.cryptoTDS : ''} onChange={(e) => setOpenForm({ ...openForm, cryptoTDS: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }} />
+                    <input type="text" inputMode="numeric" value={openForm.cryptoTDS > 0 ? openForm.cryptoTDS : ''} onChange={(e) => setOpenForm({ ...openForm, cryptoTDS: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit', background: T.card, color: C.text }} />
                     <p style={{ fontSize: 10, color: C.muted, margin: '4px 0 0' }}>Exchanges deduct 1% of the <strong>transfer value</strong> (not gains). Copy the figure from your exchange statement — it&apos;s credited against your tax. Leave blank if unsure or if you upload your AIS/26AS.</p>
                   </div>
                 </>
@@ -391,15 +391,15 @@ export default function OtherIncomePage() {
               {openForm.type === 'fno' && (
                 <div>
                   <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>Net profit from F&O / Intraday</label>
-                  <input type="text" inputMode="numeric" value={openForm.fnoNetProfit} onChange={(e) => setOpenForm({ ...openForm, fnoNetProfit: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }} />
+                  <input type="text" inputMode="numeric" value={openForm.fnoNetProfit} onChange={(e) => setOpenForm({ ...openForm, fnoNetProfit: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit', background: T.card, color: C.text }} />
                 </div>
               )}
 
               {openForm.type === 'interest' && (
                 <>
-                  <div><label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>FD interest</label><input type="text" inputMode="numeric" value={openForm.fdInterest} onChange={(e) => setOpenForm({ ...openForm, fdInterest: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }} /></div>
-                  <div><label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>Savings account interest</label><input type="text" inputMode="numeric" value={openForm.savingsInterest} onChange={(e) => setOpenForm({ ...openForm, savingsInterest: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }} /><p style={{ fontSize: 10, color: C.muted, margin: '4px 0 0' }}>First ₹10,000 is tax-free (80TTA)</p></div>
-                  <div><label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>Dividends</label><input type="text" inputMode="numeric" value={openForm.dividends} onChange={(e) => setOpenForm({ ...openForm, dividends: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }} /></div>
+                  <div><label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>FD interest</label><input type="text" inputMode="numeric" value={openForm.fdInterest} onChange={(e) => setOpenForm({ ...openForm, fdInterest: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit', background: T.card, color: C.text }} /></div>
+                  <div><label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>Savings account interest</label><input type="text" inputMode="numeric" value={openForm.savingsInterest} onChange={(e) => setOpenForm({ ...openForm, savingsInterest: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit', background: T.card, color: C.text }} /><p style={{ fontSize: 10, color: C.muted, margin: '4px 0 0' }}>First ₹10,000 is tax-free (80TTA)</p></div>
+                  <div><label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, fontWeight: 500 }}>Dividends</label><input type="text" inputMode="numeric" value={openForm.dividends} onChange={(e) => setOpenForm({ ...openForm, dividends: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="₹0" style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit', background: T.card, color: C.text }} /></div>
                 </>
               )}
 
@@ -410,7 +410,7 @@ export default function OtherIncomePage() {
                     value={openForm.otherAmount > 0 ? openForm.otherAmount : ''}
                     onChange={(e) => setOpenForm({ ...openForm, otherAmount: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })}
                     placeholder="₹0"
-                    style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit' }}
+                    style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, fontFamily: 'inherit', background: T.card, color: C.text }}
                   />
                   <p style={{ fontSize: 10.5, color: C.muted, margin: '4px 0 0' }}>Single number — gets added to your total income at slab rate. Use this for royalties, casual income, gifts beyond the ₹50k limit, or anything that doesn't fit the other categories.</p>
                 </div>

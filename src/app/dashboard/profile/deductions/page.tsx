@@ -193,8 +193,8 @@ export default function DeductionsPage() {
         {expanded.includes('80c') && (
           <div style={{ padding: '14px 16px', background: T.card }}>
             {pfAutoApplied && (
-              <div style={{ marginBottom: 12, padding: '8px 10px', background: '#E8F2EC', border: '1px solid #B8D9C4', borderRadius: 4 }}>
-                <p style={{ fontSize: 11, color: '#1A5634', margin: 0, lineHeight: 1.5 }}>
+              <div style={{ marginBottom: 12, padding: '8px 10px', background: T.slip.fill, border: `1px solid ${T.slip.border}`, borderRadius: 4 }}>
+                <p style={{ fontSize: 11, color: C.green, margin: 0, lineHeight: 1.5 }}>
                   💡 Auto-filled <strong>Employee PF</strong> = {fmt(pfAutoApplied.annual)} (from your salary slip × 12). Adjust below if needed.
                 </p>
               </div>
@@ -213,11 +213,11 @@ export default function DeductionsPage() {
               ].map(({ key, label, hint }) => (
                 <div key={key}>
                   <label style={{ display: 'block', fontSize: 10.5, color: C.muted, marginBottom: 3, fontWeight: 500 }}>
-                    {label}{hint === 'auto' && <span style={{ marginLeft: 4, fontSize: 9.5, color: '#2A7A4A', fontWeight: 700 }}>· prefilled</span>}
+                    {label}{hint === 'auto' && <span style={{ marginLeft: 4, fontSize: 9.5, color: C.green, fontWeight: 700 }}>· prefilled</span>}
                   </label>
                   <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden' }}>
                     <span style={{ padding: '6px 6px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
-                    <input type="text" inputMode="numeric" value={(ded as any)[key] > 0 ? (ded as any)[key] : ''} onChange={(e) => setDed({ ...ded, [key]: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit' }} />
+                    <input type="text" inputMode="numeric" value={(ded as any)[key] > 0 ? (ded as any)[key] : ''} onChange={(e) => setDed({ ...ded, [key]: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit', background: 'transparent', color: C.text }} />
                   </div>
                 </div>
               ))}
@@ -249,7 +249,7 @@ export default function DeductionsPage() {
               <label style={{ display: 'block', fontSize: 11, color: C.text, marginBottom: 8, fontWeight: 600 }}>Self + Family</label>
               <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden', marginBottom: 10 }}>
                 <span style={{ padding: '6px 6px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
-                <input type="text" inputMode="numeric" value={ded.selfFamily > 0 ? ded.selfFamily : ''} onChange={(e) => setDed({ ...ded, selfFamily: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit' }} />
+                <input type="text" inputMode="numeric" value={ded.selfFamily > 0 ? ded.selfFamily : ''} onChange={(e) => setDed({ ...ded, selfFamily: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit', background: 'transparent', color: C.text }} />
               </div>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 11 }}>
                 <input type="checkbox" checked={ded.selfSenior} onChange={(e) => {
@@ -267,7 +267,7 @@ export default function DeductionsPage() {
               <label style={{ display: 'block', fontSize: 11, color: C.text, marginBottom: 8, fontWeight: 600 }}>Parents</label>
               <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden', marginBottom: 10 }}>
                 <span style={{ padding: '6px 6px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
-                <input type="text" inputMode="numeric" value={ded.parents > 0 ? ded.parents : ''} onChange={(e) => setDed({ ...ded, parents: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit' }} />
+                <input type="text" inputMode="numeric" value={ded.parents > 0 ? ded.parents : ''} onChange={(e) => setDed({ ...ded, parents: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit', background: 'transparent', color: C.text }} />
               </div>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 11 }}>
                 <input type="checkbox" checked={ded.parentsSenior} onChange={(e) => setDed({ ...ded, parentsSenior: e.target.checked })} /> <span>Parents are 60+? (₹50k limit instead of ₹25k)</span>
@@ -279,7 +279,7 @@ export default function DeductionsPage() {
                 <p style={{ fontSize: 10.5, color: C.muted, margin: '0 0 6px' }}>Out-of-pocket medical bills for senior parents who DON'T have health insurance. Combined with parents-premium under the ₹50k cap.</p>
                 <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden' }}>
                   <span style={{ padding: '6px 6px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
-                  <input type="text" inputMode="numeric" value={ded.parentsMedicalExp > 0 ? ded.parentsMedicalExp : ''} onChange={(e) => setDed({ ...ded, parentsMedicalExp: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit' }} />
+                  <input type="text" inputMode="numeric" value={ded.parentsMedicalExp > 0 ? ded.parentsMedicalExp : ''} onChange={(e) => setDed({ ...ded, parentsMedicalExp: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit', background: 'transparent', color: C.text }} />
                 </div>
               </div>
             )}
@@ -309,7 +309,7 @@ export default function DeductionsPage() {
             <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 6, fontWeight: 500 }}>Interest paid this year</label>
             <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden' }}>
               <span style={{ padding: '8px 8px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
-              <input type="text" inputMode="numeric" value={ded.homeLoanInterest > 0 ? ded.homeLoanInterest : ''} onChange={(e) => setDed({ ...ded, homeLoanInterest: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '8px 8px', fontSize: 13, fontFamily: 'inherit' }} />
+              <input type="text" inputMode="numeric" value={ded.homeLoanInterest > 0 ? ded.homeLoanInterest : ''} onChange={(e) => setDed({ ...ded, homeLoanInterest: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '8px 8px', fontSize: 13, fontFamily: 'inherit', background: 'transparent', color: C.text }} />
             </div>
             <div style={{ padding: '10px 12px', background: C.wl, borderRadius: 4, display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
               <span style={{ fontSize: 11, color: C.muted }}>Claimed (capped at ₹2L)</span>
@@ -337,7 +337,7 @@ export default function DeductionsPage() {
             <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 6, fontWeight: 500 }}>NPS contribution this year</label>
             <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden' }}>
               <span style={{ padding: '8px 8px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
-              <input type="text" inputMode="numeric" value={ded.nps > 0 ? ded.nps : ''} onChange={(e) => setDed({ ...ded, nps: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '8px 8px', fontSize: 13, fontFamily: 'inherit' }} />
+              <input type="text" inputMode="numeric" value={ded.nps > 0 ? ded.nps : ''} onChange={(e) => setDed({ ...ded, nps: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '8px 8px', fontSize: 13, fontFamily: 'inherit', background: 'transparent', color: C.text }} />
             </div>
             <div style={{ padding: '10px 12px', background: C.wl, borderRadius: 4, display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
               <span style={{ fontSize: 11, color: C.muted }}>Claimed (capped at ₹50k)</span>
@@ -368,7 +368,7 @@ export default function DeductionsPage() {
                 <p style={{ fontSize: 10.5, color: C.muted, margin: '0 0 6px' }}>FD interest is NOT eligible under 80TTA — that's taxable. Only savings-account interest.</p>
                 <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden' }}>
                   <span style={{ padding: '6px 6px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
-                  <input type="text" inputMode="numeric" value={ded.savingsInterest80TTA > 0 ? ded.savingsInterest80TTA : ''} onChange={(e) => setDed({ ...ded, savingsInterest80TTA: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit' }} />
+                  <input type="text" inputMode="numeric" value={ded.savingsInterest80TTA > 0 ? ded.savingsInterest80TTA : ''} onChange={(e) => setDed({ ...ded, savingsInterest80TTA: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit', background: 'transparent', color: C.text }} />
                 </div>
                 <p style={{ fontSize: 10.5, color: C.muted, marginTop: 8 }}>Tick "You/spouse is 60+" in the 80D section to switch to 80TTB (covers FD too).</p>
               </div>
@@ -378,7 +378,7 @@ export default function DeductionsPage() {
                 <p style={{ fontSize: 10.5, color: C.muted, margin: '0 0 6px' }}>Available because you ticked "You/spouse is 60+" above. Combined cap ₹50k across all deposit interest.</p>
                 <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden' }}>
                   <span style={{ padding: '6px 6px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
-                  <input type="text" inputMode="numeric" value={ded.interest80TTB > 0 ? ded.interest80TTB : ''} onChange={(e) => setDed({ ...ded, interest80TTB: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit' }} />
+                  <input type="text" inputMode="numeric" value={ded.interest80TTB > 0 ? ded.interest80TTB : ''} onChange={(e) => setDed({ ...ded, interest80TTB: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit', background: 'transparent', color: C.text }} />
                 </div>
               </div>
             )}
@@ -408,7 +408,7 @@ export default function DeductionsPage() {
             <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 6, fontWeight: 500 }}>Interest paid this FY on a higher-education loan (for self / spouse / children / ward you legally guardian)</label>
             <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden' }}>
               <span style={{ padding: '8px 8px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
-              <input type="text" inputMode="numeric" value={ded.eduLoanInterest80E > 0 ? ded.eduLoanInterest80E : ''} onChange={(e) => setDed({ ...ded, eduLoanInterest80E: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '8px 8px', fontSize: 13, fontFamily: 'inherit' }} />
+              <input type="text" inputMode="numeric" value={ded.eduLoanInterest80E > 0 ? ded.eduLoanInterest80E : ''} onChange={(e) => setDed({ ...ded, eduLoanInterest80E: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '8px 8px', fontSize: 13, fontFamily: 'inherit', background: 'transparent', color: C.text }} />
             </div>
             <div style={{ padding: '10px 12px', background: C.wl, borderRadius: 4, display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
               <span style={{ fontSize: 11, color: C.muted }}>Claimed (no cap)</span>
@@ -472,7 +472,7 @@ export default function DeductionsPage() {
                     value={row.amount > 0 ? row.amount : ''}
                     onChange={(e) => setDonationRows(prev => prev.map(r => r.id === row.id ? { ...r, amount: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 } : r))}
                     placeholder="Gross donation amount"
-                    style={{ flex: 1, border: 'none', outline: 'none', padding: '0 10px', fontSize: 13, fontFamily: 'inherit', height: '100%' }}
+                    style={{ flex: 1, border: 'none', outline: 'none', padding: '0 10px', fontSize: 13, fontFamily: 'inherit', height: '100%', background: 'transparent', color: C.text }}
                   />
                 </div>
                 <button
@@ -488,8 +488,8 @@ export default function DeductionsPage() {
               style={{ marginTop: 4, padding: '8px 12px', background: 'transparent', border: `1px dashed ${C.border}`, borderRadius: 4, color: C.fg, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}
             >+ Add donation</button>
 
-            <div style={{ padding: '8px 10px', background: '#FFF8E6', border: '1px solid #E8D9A8', borderRadius: 4, marginTop: 12 }}>
-              <p style={{ fontSize: 10.5, color: '#7A5C00', margin: 0, lineHeight: 1.45 }}>
+            <div style={{ padding: '8px 10px', background: T.caution.fill, border: `1px solid ${T.caution.border}`, borderRadius: 4, marginTop: 12 }}>
+              <p style={{ fontSize: 10.5, color: T.caution.text, margin: 0, lineHeight: 1.45 }}>
                 ⚠️ Cash donations above <strong>₹2,000</strong> are not eligible (must be via cheque/UPI/bank). 80G is <strong>not available under the new tax regime</strong>.
               </p>
             </div>
@@ -520,7 +520,7 @@ export default function DeductionsPage() {
 
       {/* Tax Savings Preview */}
       {taxSavingsOld > 0 && (
-        <div style={{ background: '#F0F9F7', border: `1px solid #D1E8E4`, borderRadius: 8, padding: 16, marginBottom: 24 }}>
+        <div style={{ background: T.tint, border: `1px solid ${T.hairline}`, borderRadius: 8, padding: 16, marginBottom: 24 }}>
           <p style={{ fontSize: 11, color: C.muted, margin: '0 0 6px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>Rough savings — old regime, before your real rate</p>
           <p style={{ fontSize: 18, fontWeight: 700, color: C.fg, margin: 0 }}>~{fmt(taxSavingsOld)}</p>
           <p style={{ fontSize: 10, color: C.muted, margin: '6px 0 0' }}>These deductions don't count in New Regime. Your actual saving depends on your total income and which regime you choose.</p>

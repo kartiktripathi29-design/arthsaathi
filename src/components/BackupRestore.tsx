@@ -91,7 +91,7 @@ export default function BackupRestore() {
     }
   }
 
-  const btnPrimary = { padding: '9px 14px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' } as const
+  const btnPrimary = { padding: '9px 14px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' } as const
   const btnGhost = { padding: '9px 14px', background: 'transparent', color: C.fg, border: `1px solid ${C.fg}`, borderRadius: 6, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' } as const
 
   const ManualButtons = ({ primary }: { primary: boolean }) => (
@@ -107,7 +107,7 @@ export default function BackupRestore() {
     return (
       <div style={{ background: C.goodBg, border: `1px solid ${C.goodBorder}`, borderRadius: 8, padding: 16 }}>
         <p style={{ fontSize: 13, fontWeight: 700, color: C.good, margin: '0 0 4px' }}>🔒 Your data is backed up automatically</p>
-        <p style={{ fontSize: 11.5, color: '#3A5A45', margin: '0 0 8px', lineHeight: 1.5 }}>
+        <p style={{ fontSize: 11.5, color: T.green, margin: '0 0 8px', lineHeight: 1.5 }}>
           It’s saved to your account, encrypted, and synced across your devices — clearing this browser or switching
           devices won’t lose anything. Your PAN and Aadhaar are masked and never stored in full.
         </p>
@@ -123,7 +123,7 @@ export default function BackupRestore() {
   }
 
   return (
-    <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
+    <div style={{ background: T.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
       <p style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: '0 0 4px' }}>Back up your data</p>
       <p style={{ fontSize: 11.5, color: C.muted, margin: '0 0 12px', lineHeight: 1.5 }}>
         {AUTO_BACKUP

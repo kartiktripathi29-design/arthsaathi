@@ -134,7 +134,7 @@ export function DialogHost() {
           <button
             autoFocus={isConfirm}
             onClick={() => finish(req.kind === 'password' ? pwd : true)}
-            style={{ ...btnBase, background: danger ? C.danger : C.fg, color: '#fff' }}
+            style={{ ...btnBase, background: danger ? C.danger : C.fg, color: danger ? T.ivory : T.onTeal }}
           >
             {req.opts.confirmLabel || (isConfirm ? 'Confirm' : 'Submit')}
           </button>

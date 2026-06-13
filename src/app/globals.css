@@ -3,6 +3,7 @@
 @tailwind utilities;
 
 :root {
+  color-scheme: light;     /* native form-control chrome (caret, selection, select popup) follows theme */
   /* ArthVo palette — canonical token set. Source: docs/arthvo-palette.md */
   --paper: #F8F2E7;        /* page background */
   --sand: #ECE3CE;         /* header band */
@@ -50,6 +51,7 @@
    which the dashboard layout sets on its flex root, so dark applies to the app track only.
    ivory / --cta-label / --cap intentionally inherit their light values (same in both modes). */
 [data-theme="dark"] {
+  color-scheme: dark;      /* flips native caret/selection/dropdown chrome to dark UA defaults */
   --paper: #141E1B;
   --card: #1C2723;
   --sand: #243029;

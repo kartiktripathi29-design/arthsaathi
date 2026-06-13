@@ -1117,7 +1117,7 @@ export default function SalaryPageCompleteFinal() {
                   <button
                     key={it.id}
                     onClick={() => pickIntent(it.id)}
-                    style={{ textAlign: 'left', padding: 16, background: wizard.intent === it.id ? C.wl : '#fff', border: `1px solid ${wizard.intent === it.id ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit' }}
+                    style={{ textAlign: 'left', padding: 16, background: wizard.intent === it.id ? C.wl : T.card, border: `1px solid ${wizard.intent === it.id ? C.fg : C.border}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit' }}
                   >
                     <p style={{ fontSize: 14, fontWeight: 600, color: C.text, margin: '0 0 6px' }}>{it.title}</p>
                     <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>{it.desc}</p>
@@ -1149,8 +1149,8 @@ export default function SalaryPageCompleteFinal() {
                         <p style={{ fontSize: 11, color: C.muted, margin: '2px 0 0' }}><span style={{ whiteSpace: 'nowrap' }}>Gross {fmt(s.raw.grossSalary || s.raw.basicSalary || 0)}</span> · <span style={{ whiteSpace: 'nowrap' }}>Net {fmt(s.raw.netSalary || 0)}</span></p>
                       </div>
                       <div className="sal-slip-actions" style={{ display: 'flex', gap: 6 }}>
-                        <button className="sal-slip-grow" onClick={() => setWizard(prev => ({ ...prev, slipConfirmations: { ...prev.slipConfirmations, [s.id]: 'confirmed' } }))} style={{ padding: '6px 12px', background: status === 'confirmed' ? C.green : '#fff', color: status === 'confirmed' ? '#fff' : C.fg, border: `1px solid ${status === 'confirmed' ? C.green : C.border}`, borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>✓ Yes</button>
-                        <button className="sal-slip-grow" onClick={() => setWizard(prev => ({ ...prev, slipConfirmations: { ...prev.slipConfirmations, [s.id]: 'edit' } }))} style={{ padding: '6px 12px', background: status === 'edit' ? T.caution.text : '#fff', color: status === 'edit' ? '#fff' : C.fg, border: `1px solid ${status === 'edit' ? T.caution.text : C.border}`, borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Edit</button>
+                        <button className="sal-slip-grow" onClick={() => setWizard(prev => ({ ...prev, slipConfirmations: { ...prev.slipConfirmations, [s.id]: 'confirmed' } }))} style={{ padding: '6px 12px', background: status === 'confirmed' ? C.green : T.card, color: status === 'confirmed' ? '#fff' : C.fg, border: `1px solid ${status === 'confirmed' ? C.green : C.border}`, borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>✓ Yes</button>
+                        <button className="sal-slip-grow" onClick={() => setWizard(prev => ({ ...prev, slipConfirmations: { ...prev.slipConfirmations, [s.id]: 'edit' } }))} style={{ padding: '6px 12px', background: status === 'edit' ? T.caution.text : T.card, color: status === 'edit' ? '#fff' : C.fg, border: `1px solid ${status === 'edit' ? T.caution.text : C.border}`, borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Edit</button>
                         <button
                           onClick={async () => {
                             if (!(await confirmDialog({ message: `Delete ${monthLabel(s.monthKey)} salary slip? This can't be undone.`, confirmLabel: 'Delete', danger: true }))) return
@@ -1272,7 +1272,7 @@ export default function SalaryPageCompleteFinal() {
 
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 10 }}>
                       {(['increment','job_switch','bonus_timing','other'] as const).map(k => (
-                        <button key={k} onClick={() => updateChange(idx, { kind: k })} style={{ padding: '8px', background: fc.kind === k ? C.wl : '#fff', border: `1px solid ${fc.kind === k ? C.fg : C.border}`, borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600, color: C.text, textAlign: 'center' }}>
+                        <button key={k} onClick={() => updateChange(idx, { kind: k })} style={{ padding: '8px', background: fc.kind === k ? C.wl : T.card, border: `1px solid ${fc.kind === k ? C.fg : C.border}`, borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600, color: C.text, textAlign: 'center' }}>
                           {kindLabel(k)}
                         </button>
                       ))}
@@ -1340,8 +1340,8 @@ export default function SalaryPageCompleteFinal() {
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                                   <label style={{ fontSize: 11, color: C.muted }}>{isOneShot ? 'Amount' : 'How much?'}</label>
                                   <div style={{ display: 'flex', gap: 2 }}>
-                                    <button type="button" onClick={() => updateChange(idx, { amountMode: 'pct', amountAbs: 0 })} style={{ padding: '2px 6px', background: fc.amountMode === 'abs' ? '#fff' : C.fg, color: fc.amountMode === 'abs' ? C.fg : T.onTeal, border: `1px solid ${C.fg}`, borderRadius: 3, fontSize: 9, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>%</button>
-                                    <button type="button" onClick={() => updateChange(idx, { amountMode: 'abs', amountPct: 0 })} style={{ padding: '2px 6px', background: fc.amountMode === 'abs' ? C.fg : '#fff', color: fc.amountMode === 'abs' ? T.onTeal : C.fg, border: `1px solid ${C.fg}`, borderRadius: 3, fontSize: 9, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>₹</button>
+                                    <button type="button" onClick={() => updateChange(idx, { amountMode: 'pct', amountAbs: 0 })} style={{ padding: '2px 6px', background: fc.amountMode === 'abs' ? T.card : C.fg, color: fc.amountMode === 'abs' ? C.fg : T.onTeal, border: `1px solid ${C.fg}`, borderRadius: 3, fontSize: 9, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>%</button>
+                                    <button type="button" onClick={() => updateChange(idx, { amountMode: 'abs', amountPct: 0 })} style={{ padding: '2px 6px', background: fc.amountMode === 'abs' ? C.fg : T.card, color: fc.amountMode === 'abs' ? T.onTeal : C.fg, border: `1px solid ${C.fg}`, borderRadius: 3, fontSize: 9, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>₹</button>
                                   </div>
                                 </div>
                                 {fc.amountMode === 'abs' ? (
@@ -1399,7 +1399,7 @@ export default function SalaryPageCompleteFinal() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
                           <span style={{ fontSize: 11, color: C.muted }}>Withhold TDS under:</span>
                           {(['new', 'old'] as const).map(r => (
-                            <button key={r} type="button" onClick={() => updateChange(idx, { tdsRegime: r })} style={{ padding: '3px 10px', background: (fc.tdsRegime || 'new') === r ? C.fg : '#fff', color: (fc.tdsRegime || 'new') === r ? T.onTeal : C.fg, border: `1px solid ${C.fg}`, borderRadius: 4, fontSize: 10.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                            <button key={r} type="button" onClick={() => updateChange(idx, { tdsRegime: r })} style={{ padding: '3px 10px', background: (fc.tdsRegime || 'new') === r ? C.fg : T.card, color: (fc.tdsRegime || 'new') === r ? T.onTeal : C.fg, border: `1px solid ${C.fg}`, borderRadius: 4, fontSize: 10.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                               {r === 'new' ? 'New regime' : 'Old regime'}
                             </button>
                           ))}
@@ -1539,7 +1539,7 @@ export default function SalaryPageCompleteFinal() {
                 {allFY.map(mk => {
                   const on = wizard.bonusMonths.includes(mk)
                   return (
-                    <button key={mk} onClick={() => toggle(mk)} style={{ padding: '8px 4px', background: on ? C.wm : '#fff', color: on ? '#fff' : C.text, border: `1px solid ${on ? C.wm : C.border}`, borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600 }}>
+                    <button key={mk} onClick={() => toggle(mk)} style={{ padding: '8px 4px', background: on ? C.wm : T.card, color: on ? '#fff' : C.text, border: `1px solid ${on ? C.wm : C.border}`, borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600 }}>
                       {monthLabel(mk).split(' ')[0]}
                     </button>
                   )
@@ -1600,7 +1600,7 @@ export default function SalaryPageCompleteFinal() {
                             <span style={{ fontSize: 12, color: C.text, flex: 1 }}>{e.label}</span>
                             {isEditing ? (
                               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                                <input type="number" value={overrideValue} onChange={ev => setOverrideValue(ev.target.value)} autoFocus style={{ width: 100, padding: '4px 8px', border: `1px solid ${C.fg}`, borderRadius: 4, fontSize: 12, fontFamily: 'inherit', color: C.text }} />
+                                <input type="number" value={overrideValue} onChange={ev => setOverrideValue(ev.target.value)} autoFocus style={{ width: 100, padding: '4px 8px', border: `1px solid ${C.fg}`, borderRadius: 4, fontSize: 12, fontFamily: 'inherit', color: C.text, background: T.card }} />
                                 <button onClick={saveOverride} style={{ padding: '4px 10px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
                                 <button onClick={() => { setOverrideKey(null); setOverrideValue('') }} style={{ padding: '4px 8px', background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>×</button>
                               </div>
@@ -1661,7 +1661,7 @@ export default function SalaryPageCompleteFinal() {
                             <span style={{ fontSize: 12, color: C.text, flex: 1 }}>{d.label}</span>
                             {isEditing ? (
                               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                                <input type="number" value={overrideValue} onChange={ev => setOverrideValue(ev.target.value)} autoFocus style={{ width: 100, padding: '4px 8px', border: `1px solid ${C.fg}`, borderRadius: 4, fontSize: 12, fontFamily: 'inherit', color: C.text }} />
+                                <input type="number" value={overrideValue} onChange={ev => setOverrideValue(ev.target.value)} autoFocus style={{ width: 100, padding: '4px 8px', border: `1px solid ${C.fg}`, borderRadius: 4, fontSize: 12, fontFamily: 'inherit', color: C.text, background: T.card }} />
                                 <button onClick={saveOverride} style={{ padding: '4px 10px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
                                 <button onClick={() => { setOverrideKey(null); setOverrideValue('') }} style={{ padding: '4px 8px', background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>×</button>
                               </div>
@@ -1815,8 +1815,8 @@ export default function SalaryPageCompleteFinal() {
                             <p style={{ fontSize: 10, fontWeight: 600, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase' }}>Earnings</p>
                             {manualEarnings.map((row, i) => (
                               <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 90px auto', gap: 4, marginBottom: 4 }}>
-                                <input type="text" placeholder="Label (e.g. HRA)" value={row.label} onChange={(e) => setManualEarnings(prev => prev.map((r, j) => j === i ? { ...r, label: e.target.value } : r))} style={{ padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, fontFamily: 'inherit', color: C.text }} />
-                                <input type="number" placeholder="Amount" value={row.amount} onChange={(e) => setManualEarnings(prev => prev.map((r, j) => j === i ? { ...r, amount: e.target.value } : r))} style={{ padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, fontFamily: 'inherit', color: C.text }} />
+                                <input type="text" placeholder="Label (e.g. HRA)" value={row.label} onChange={(e) => setManualEarnings(prev => prev.map((r, j) => j === i ? { ...r, label: e.target.value } : r))} style={{ padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, fontFamily: 'inherit', color: C.text, background: T.card }} />
+                                <input type="number" placeholder="Amount" value={row.amount} onChange={(e) => setManualEarnings(prev => prev.map((r, j) => j === i ? { ...r, amount: e.target.value } : r))} style={{ padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, fontFamily: 'inherit', color: C.text, background: T.card }} />
                                 <button onClick={() => setManualEarnings(prev => prev.filter((_, j) => j !== i))} title="Remove" style={{ padding: '0 8px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 14, color: C.muted, cursor: 'pointer', fontFamily: 'inherit' }}>×</button>
                               </div>
                             ))}
@@ -1827,8 +1827,8 @@ export default function SalaryPageCompleteFinal() {
                             <p style={{ fontSize: 10, fontWeight: 600, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase' }}>Deductions</p>
                             {manualDeductions.map((row, i) => (
                               <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 90px auto', gap: 4, marginBottom: 4 }}>
-                                <input type="text" placeholder="Label (e.g. PF)" value={row.label} onChange={(e) => setManualDeductions(prev => prev.map((r, j) => j === i ? { ...r, label: e.target.value } : r))} style={{ padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, fontFamily: 'inherit', color: C.text }} />
-                                <input type="number" placeholder="Amount" value={row.amount} onChange={(e) => setManualDeductions(prev => prev.map((r, j) => j === i ? { ...r, amount: e.target.value } : r))} style={{ padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, fontFamily: 'inherit', color: C.text }} />
+                                <input type="text" placeholder="Label (e.g. PF)" value={row.label} onChange={(e) => setManualDeductions(prev => prev.map((r, j) => j === i ? { ...r, label: e.target.value } : r))} style={{ padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, fontFamily: 'inherit', color: C.text, background: T.card }} />
+                                <input type="number" placeholder="Amount" value={row.amount} onChange={(e) => setManualDeductions(prev => prev.map((r, j) => j === i ? { ...r, amount: e.target.value } : r))} style={{ padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, fontFamily: 'inherit', color: C.text, background: T.card }} />
                                 <button onClick={() => setManualDeductions(prev => prev.filter((_, j) => j !== i))} title="Remove" style={{ padding: '0 8px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 14, color: C.muted, cursor: 'pointer', fontFamily: 'inherit' }}>×</button>
                               </div>
                             ))}
@@ -1860,7 +1860,8 @@ export default function SalaryPageCompleteFinal() {
                     : m.source === 'inferred' ? '#CFE0F0'
                     : isForecastCell ? T.caution.fill
                     : C.border
-                  const fg = m.source === 'actual' || m.source === 'edited' ? '#fff'
+                  const fg = m.source === 'actual' ? T.onTeal
+                    : m.source === 'edited' ? T.ink
                     : m.source === 'inferred' ? '#1F4E7A'
                     : isForecastCell ? T.caution.text
                     : C.muted
@@ -1940,7 +1941,7 @@ export default function SalaryPageCompleteFinal() {
               <div style={{ border: `1px solid ${C.border}`, borderRadius: 6, overflow: 'hidden' }}>
                 <button
                   onClick={() => setPreviewOpenEmpId(previewOpenEmpId === 'unified' ? null : 'unified')}
-                  style={{ width: '100%', padding: '10px 12px', background: previewOpenEmpId === 'unified' ? C.wl : '#fff', border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                  style={{ width: '100%', padding: '10px 12px', background: previewOpenEmpId === 'unified' ? C.wl : T.card, border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                 >
                   <span style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'uppercase' }}>Preview · all months</span>
                   <span style={{ fontSize: 13, color: C.fg }}>{previewOpenEmpId === 'unified' ? '−' : '+'}</span>
@@ -1959,12 +1960,12 @@ export default function SalaryPageCompleteFinal() {
                                 if (isOpen) { setPreviewMonth(null); setPreviewEmploymentId(null) }
                                 else { setPreviewMonth(m.monthKey); setPreviewEmploymentId(m.empId) }
                               }}
-                              className="sal-acc-head" style={{ width: '100%', padding: '10px 12px', background: isOpen ? C.wl : '#fff', border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                              className="sal-acc-head" style={{ width: '100%', padding: '10px 12px', background: isOpen ? C.wl : T.card, border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                             >
                               <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
                                 <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{monthLabel(m.monthKey)}</span>
                                 <span style={{ fontSize: 10, color: C.muted, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.empName}</span>
-                                <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 3, background: m.source === 'actual' ? C.fg : m.source === 'edited' ? C.wm : C.border, color: m.source === 'projected' ? C.muted : '#fff' }}>{m.source}</span>
+                                <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 3, background: m.source === 'actual' ? C.fg : m.source === 'edited' ? C.wm : C.border, color: m.source === 'actual' ? T.onTeal : m.source === 'projected' ? C.muted : T.ink }}>{m.source}</span>
                               </div>
                               <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
                                 <span style={{ fontSize: 11, color: C.muted }}>Gross <strong style={{ color: C.fg }}>{fmt(m.gross)}</strong></span>
