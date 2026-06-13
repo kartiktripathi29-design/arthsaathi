@@ -1,14 +1,107 @@
 'use client'
 import Link from 'next/link'
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import BgDemo from '@/components/BgDemo'
 import Logo from '@/components/Logo'
 import { tokens as T } from '@/lib/tokens'
 import { estimateAnnualTax } from '@/lib/tax-slabs'
 
+type ThemeMode = 'system' | 'light' | 'dark'
+
+// Single icon button in the nav that reveals a compact System / Light / Dark menu.
+// Token-only colors so it flips correctly in both modes; icon reflects the resolved state.
+// Mirrors the dashboard's appearance control, but as one unobtrusive icon (no pill ribbon).
+function ThemeToggle({ theme, setTheme, resolved }: { theme: ThemeMode; setTheme: (t: ThemeMode) => void; resolved: 'light' | 'dark' }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  // Close on any tap outside the control (same pattern as the dashboard top-bar account menu).
+  useEffect(() => {
+    if (!open) return
+    const onDocClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [open])
+
+  const opts: { v: ThemeMode; label: string }[] = [
+    { v: 'system', label: 'System' },
+    { v: 'light', label: 'Light' },
+    { v: 'dark', label: 'Dark' },
+  ]
+
+  return (
+    <div ref={ref} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+      <button onClick={() => setOpen(o => !o)} className="btn-ghost"
+        aria-label="Appearance" aria-haspopup="menu" aria-expanded={open}
+        style={{ width: 34, height: 34, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 0, background: 'transparent', border: `1px solid ${T.hairline}`, borderRadius: 8, color: T.muted, cursor: 'pointer' }}>
+        {resolved === 'dark' ? (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          </svg>
+        ) : (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+          </svg>
+        )}
+      </button>
+      {open && (
+        <div role="menu" style={{
+          position: 'absolute', top: 'calc(100% + 8px)', right: 0, minWidth: 144,
+          background: T.card, border: `1px solid ${T.hairline}`, borderRadius: 10,
+          boxShadow: '0 6px 24px rgba(0,0,0,0.12)', padding: 6, zIndex: 80,
+        }}>
+          {opts.map(o => {
+            const active = theme === o.v
+            return (
+              <button key={o.v} role="menuitemradio" aria-checked={active}
+                onClick={() => { setTheme(o.v); setOpen(false) }}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+                  padding: '8px 10px', borderRadius: 7, border: 'none', cursor: 'pointer',
+                  fontFamily: 'inherit', fontSize: 13, textAlign: 'left',
+                  background: active ? T.tint : 'transparent',
+                  color: active ? T.teal : T.nav,
+                  fontWeight: active ? 700 : 500,
+                }}>
+                {o.label}
+                {active && <span style={{ color: T.teal }}>✓</span>}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function LandingPage() {
   const [salary, setSalary] = useState('')
   const [taxSaving, setTaxSaving] = useState<{ monthly: number; newTax: number; oldTax: number } | null>(null)
+
+  // Theme: identical logic to dashboard/layout.tsx (same av_theme key, same default, same resolution),
+  // so a choice made here matches the dashboard and vice versa. 'system' follows prefers-color-scheme;
+  // 'light'/'dark' force. Synchronous, window-guarded initializers resolve the right value on first paint.
+  const [theme, setThemeState] = useState<ThemeMode>(() =>
+    (typeof window !== 'undefined' && (localStorage.getItem('av_theme') as ThemeMode | null)) || 'system'
+  )
+  const [systemDark, setSystemDark] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
+  )
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const onChange = (e: MediaQueryListEvent) => setSystemDark(e.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+  const setTheme = (t: ThemeMode) => {
+    setThemeState(t)
+    try { localStorage.setItem('av_theme', t) } catch {}
+  }
+  const resolved: 'light' | 'dark' = theme === 'system' ? (systemDark ? 'dark' : 'light') : theme
 
   const calcQuickSaving = (s: string) => {
     const monthly = parseFloat(s.replace(/,/g, '')) || 0
@@ -29,7 +122,7 @@ export default function LandingPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: T.paper, color: T.ink, fontFamily: '"Sora",-apple-system,sans-serif', overflowX: 'hidden' }}>
+    <div data-theme={resolved} suppressHydrationWarning style={{ minHeight: '100vh', background: T.paper, color: T.ink, fontFamily: '"Sora",-apple-system,sans-serif', overflowX: 'hidden' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800;900&display=swap');
         *{box-sizing:border-box;margin:0;padding:0}
@@ -60,16 +153,18 @@ export default function LandingPage() {
         @media (max-width:768px){ .nav-bar{padding:12px 20px} .hero-sec{padding:56px 20px 24px} .demo-wrap{padding:4px 16px 24px} .pain-sec{padding:32px 20px 24px} .hiw-sec{padding:56px 20px} .cta-sec{padding:56px 24px} .footer-bar{padding:16px 20px} }
         @media (max-width:560px){ .hiw-grid{grid-template-columns:1fr} .demo-slots{grid-template-columns:1fr} }
         @media (max-width:480px){ .demo-regime{grid-template-columns:1fr} .demo-topbar{flex-wrap:wrap;row-gap:4px} }
+        @media (max-width:430px){ .nav-actions{gap:6px} .nav-cta{padding-left:13px!important;padding-right:13px!important} }
       `}</style>
 
       {/* Sticky nav */}
-      <nav className="nav-bar" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:`1px solid ${T.hairline}`, position:'sticky', top:0, background:'rgba(248,242,231,0.95)', backdropFilter:'blur(8px)', zIndex:50 }}>
+      <nav className="nav-bar" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:`1px solid ${T.hairline}`, position:'sticky', top:0, background: resolved === 'dark' ? 'rgba(20,30,27,0.85)' : 'rgba(248,242,231,0.95)', backdropFilter:'blur(8px)', zIndex:50 }}>
         <Link href="/" style={{ textDecoration:'none', display:'flex', alignItems:'center', gap:11 }}>
           <Logo variant="onLight" size={32} />
         </Link>
-        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-          <Link href="/login" className="btn-ghost" style={{ padding:'8px 20px', background:'transparent', border:`1px solid ${T.hairline}`, borderRadius:8, color:T.muted, fontWeight:500, textDecoration:'none', fontSize:13 }}>Sign in</Link>
-          <Link href="/signup" className="btn-green" style={{ padding:'9px 22px', background:T.teal, color:T.ivory, borderRadius:8, fontWeight:700, textDecoration:'none', fontSize:13 }}>Sign up →</Link>
+        <div className="nav-actions" style={{ display:'flex', gap:8, alignItems:'center' }}>
+          <ThemeToggle theme={theme} setTheme={setTheme} resolved={resolved} />
+          <Link href="/login" className="btn-ghost nav-cta" style={{ padding:'8px 20px', background:'transparent', border:`1px solid ${T.hairline}`, borderRadius:8, color:T.muted, fontWeight:500, textDecoration:'none', fontSize:13, whiteSpace:'nowrap' as const }}>Sign in</Link>
+          <Link href="/signup" className="btn-green nav-cta" style={{ padding:'9px 22px', background:T.teal, color:T.ivory, borderRadius:8, fontWeight:700, textDecoration:'none', fontSize:13, whiteSpace:'nowrap' as const }}>Sign up →</Link>
         </div>
       </nav>
 
@@ -177,7 +272,7 @@ export default function LandingPage() {
       </div>
 
       {/* Final CTA — dark section: eyebrow/accents → green, headline → ivory, CTA button → green (teal would vanish on dark) */}
-      <div className="cta-sec" style={{ background:T.ink, textAlign:'center' }}>
+      <div className="cta-sec" style={{ background: resolved === 'dark' ? T.paper : T.ink, textAlign:'center' }}>
         <div style={{ fontSize:11, color:T.green, fontWeight:700, letterSpacing:'0.2em', marginBottom:16, textTransform:'uppercase' as const }}>
           One slip is all it takes
         </div>
@@ -204,7 +299,7 @@ export default function LandingPage() {
       </div>
 
       {/* Footer */}
-      <div className="footer-bar" style={{ textAlign:'center', background:T.ink, fontSize:11, color:'rgba(244,238,224,0.55)' }}>
+      <div className="footer-bar" style={{ textAlign:'center', background: resolved === 'dark' ? T.paper : T.ink, fontSize:11, color:'rgba(244,238,224,0.55)' }}>
         ArthVo helps you read your salary slip and compare tax regimes. Consult a CA for ITR filing. © 2026 ArthVo
         {' · '}
         <a href="/privacy" style={{ color:'rgba(244,238,224,0.7)', textDecoration:'underline' }}>Privacy</a>
