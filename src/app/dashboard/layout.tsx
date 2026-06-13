@@ -256,8 +256,10 @@ function TopBar({ theme, setTheme }: { theme: ThemeMode; setTheme: (t: ThemeMode
 
   return (
     <header style={{
-      height: 46, borderBottom: `2px solid ${T.teal}`, background: T.sand,
-      display: 'flex', alignItems: 'center', padding: '0 24px', gap: 10,
+      // Background bleeds up under the status bar; the safe-area top padding keeps the 46px content
+      // row clear of it. env() is 0 on desktop / non-notched, so this is a no-op there.
+      height: 'calc(46px + env(safe-area-inset-top))', borderBottom: `2px solid ${T.teal}`, background: T.sand,
+      display: 'flex', alignItems: 'center', padding: 'env(safe-area-inset-top) 24px 0', gap: 10,
       position: 'sticky', top: 0, zIndex: 40,
       fontFamily: '"Sora",-apple-system,sans-serif',
     }}>
