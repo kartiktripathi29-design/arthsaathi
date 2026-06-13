@@ -116,8 +116,10 @@ function Sidebar({ theme, setTheme }: { theme: ThemeMode; setTheme: (t: ThemeMod
       position: 'fixed', top: 0, left: 0, bottom: 0, zIndex: 50,
       fontFamily: '"Sora",-apple-system,sans-serif',
     }}>
-      {/* Teal brand cap — logo reads in ivory on the teal block */}
-      <div style={{ padding: '18px 16px 14px', background: T.cap, display: 'flex', alignItems: 'center', gap: 10 }}>
+      {/* Teal brand cap — logo reads in ivory on the teal block. Height mirrors the header bar exactly
+          (same 46px + safe-area-top math) so the cap's bottom edge lands on the header's green underline,
+          reading as one continuous top band. Sidebar is desktop-only, so this never affects mobile. */}
+      <div style={{ height: 'calc(46px + env(safe-area-inset-top))', padding: 'env(safe-area-inset-top) 16px 0', background: T.cap, display: 'flex', alignItems: 'center', gap: 10 }}>
         <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
           <Logo variant="onTeal" size={28} />
         </Link>
