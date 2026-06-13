@@ -102,11 +102,15 @@ function ITRFormsReference() {
         What about other ITR forms?
       </button>
       {open && (
-        <div style={{ padding: 10, background: C.bg, borderRadius: 4, fontSize: 11, color: C.muted, lineHeight: 1.5, marginTop: 6 }}>
-          <strong>ITR-1</strong> = salary + 1 house + interest, ≤ ₹50L, no capital gains beyond ₹1.25L LTCG;{' '}
-          <strong>ITR-2</strong> = capital gains, crypto, ESOPs, multiple houses, foreign assets, or income &gt; ₹50L;{' '}
-          <strong>ITR-3</strong> = freelance with actual expenses, business income, F&O;{' '}
-          <strong>ITR-4</strong> = presumptive freelance / small business u/s 44ADA / 44AD, ≤ ₹50L.
+        <div style={{ padding: 10, background: C.bg, borderRadius: 4, fontSize: 11, color: C.muted, lineHeight: 1.5, marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {[
+            { code: 'ITR-1', desc: 'salary + 1 house + interest, ≤ ₹50L, no capital gains beyond ₹1.25L LTCG' },
+            { code: 'ITR-2', desc: 'capital gains, crypto, ESOPs, multiple houses, foreign assets, or income > ₹50L' },
+            { code: 'ITR-3', desc: 'freelance with actual expenses, business income, F&O' },
+            { code: 'ITR-4', desc: 'presumptive freelance / small business u/s 44ADA / 44AD, ≤ ₹50L' },
+          ].map(f => (
+            <div key={f.code}><strong style={{ color: C.fg }}>{f.code}</strong> = {f.desc}</div>
+          ))}
         </div>
       )}
     </div>

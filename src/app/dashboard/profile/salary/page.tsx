@@ -1453,7 +1453,10 @@ export default function SalaryPageCompleteFinal() {
                   return (
                     <div key={i} style={{ padding: '10px 12px', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12 }}>
                       <div style={{ color: C.text, fontWeight: 600 }}>{monthLabel(r.fromMonth)} → {monthLabel(r.toMonth)}</div>
-                      <div style={{ color: C.muted, marginTop: 2 }}>Using {src ? monthLabel(src.monthKey) : '?'} slip · {fmt(src?.raw?.grossSalary || src?.raw?.basicSalary || 0)}</div>
+                      <div style={{ marginTop: 2 }}>
+                        <span style={{ color: C.muted }}>Using {src ? monthLabel(src.monthKey) : '?'} slip · </span>
+                        <span style={{ color: C.text, fontWeight: 700 }}>{fmt(src?.raw?.grossSalary || src?.raw?.basicSalary || 0)}</span>
+                      </div>
                     </div>
                   )
                 })}
