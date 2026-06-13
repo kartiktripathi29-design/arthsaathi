@@ -16,6 +16,18 @@ import { tokens as T } from '@/lib/tokens'
 
 const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, bg:T.paper, card:T.card, border:T.hairline, text:T.ink, muted:T.muted, green:T.green, danger:'#B94040' }
 const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`
+// Compact Indian-notation amount (K / L / Cr) for the at-a-glance timeline cell ONLY, so a long ₹
+// figure can't floor a 1fr grid track wider than its share. Full precision stays one tap away in the
+// per-month preview modal and the employer subtotals — never the sole place the exact number lives.
+const fmtGlance = (n:number) => {
+  const a = Math.abs(Math.round(n))
+  if (a === 0) return '₹0'
+  const trim = (x:number, d:number) => String(Number(x.toFixed(d)))   // drops trailing .0 / .x0
+  if (a >= 1e7) return `₹${trim(a / 1e7, 2)}Cr`
+  if (a >= 1e5) return `₹${trim(a / 1e5, 1)}L`
+  if (a >= 1e3) return `₹${trim(a / 1e3, 1)}K`
+  return `₹${a}`
+}
 
 // Mobile-only layout overrides (≤767px). Desktop gets no rules here, so the inline styles rule
 // untouched. Class hooks are added to the timeline grid, wizard rows, accordion headers, modal,
@@ -23,7 +35,7 @@ const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLoc
 const SAL_MOBILE_CSS = `
 .sal-emp-line { display: none; }
 @media (max-width: 767px) {
-  .sal-timeline-grid { grid-template-columns: repeat(4, 1fr) !important; row-gap: 6px; }
+  .sal-timeline-grid { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; row-gap: 6px; }
   .sal-emp-band { display: none !important; }
   .sal-emp-line { display: block !important; }
   .sal-slip-row { flex-direction: column !important; align-items: stretch !important; }
@@ -34,6 +46,7 @@ const SAL_MOBILE_CSS = `
   .sal-remap { grid-template-columns: 1fr !important; }
   .sal-bonus { grid-template-columns: repeat(3, 1fr) !important; }
   .sal-manual { grid-template-columns: 1fr !important; }
+  .sal-month-select { min-width: 0 !important; flex-basis: 100% !important; }
 }
 `
 
@@ -1749,6 +1762,7 @@ export default function SalaryPageCompleteFinal() {
                 <p style={{ fontSize: 11, fontWeight: 600, color: C.muted, margin: '0 0 8px', textTransform: 'uppercase' }}>Upload monthly slip</p>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <select
+                    className="sal-month-select"
                     value={monthUploadKey}
                     onChange={(e) => { setMonthUploadKey(e.target.value); setMonthUploadEmpId(empIdForMonth(e.target.value)); setMonthUploadError(null) }}
                     disabled={monthUploadBusy}
@@ -1852,7 +1866,7 @@ export default function SalaryPageCompleteFinal() {
 
               {/* Unified timeline grid — all months across employers */}
               <p style={{ fontSize: 11, fontWeight: 600, color: C.muted, margin: '0 0 12px', textTransform: 'uppercase' }}>Timeline · click to view/edit</p>
-              <div className="sal-timeline-grid" style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8, marginBottom: 6 }}>
+              <div className="sal-timeline-grid" style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 8, marginBottom: 6 }}>
                 {flatMonths.map(m => {
                   const isForecastCell = wizard.intent === 'forecast' && m.source === 'projected' && m.gross > 0
                   const bg = m.source === 'actual' ? C.fg
@@ -1883,14 +1897,14 @@ export default function SalaryPageCompleteFinal() {
                         || (isForecastCell ? 'Forecast — projected from your scenario'
                             : m.source === 'inferred' ? `Inferred from another slip's values for the same employer`
                             : undefined)}
-                      style={{ position: 'relative', background: bg, color: fg, border: cellBorder, borderRadius: 4, padding: '12px 4px', fontSize: 10, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}
+                      style={{ position: 'relative', background: bg, color: fg, border: cellBorder, borderRadius: 4, padding: '12px 4px', fontSize: 10, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 0, overflow: 'hidden' }}
                     >
                       {anomaly && (
                         <span style={{ position: 'absolute', top: -6, right: -4, background: T.caution.text, color: '#fff', borderRadius: '50%', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700 }}>!</span>
                       )}
                       <div style={{ fontSize: 9 }}>{monthLabel(m.monthKey).split(' ')[0]}</div>
                       <div style={{ fontSize: 11 }}>{icon}</div>
-                      <div style={{ fontSize: 10, opacity: 0.8 }}>{fmt(m.gross)}</div>
+                      <div style={{ fontSize: 10, opacity: 0.8 }}>{fmtGlance(m.gross)}</div>
                     </button>
                   )
                 })}
