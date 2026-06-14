@@ -1,10 +1,183 @@
-import { redirect } from 'next/navigation'
+'use client'
+// Dashboard — a visual, at-a-glance view of the user's tax picture. It renders from a compact
+// snapshot (av_tax_overview) that the "Your Tax" page persists when it computes, so the numbers here
+// always match Your Tax without re-deriving the tax engine. Users with no salary data are sent to the
+// upload flow; users with data but no computed tax see a CTA to finish Your Tax.
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { tokens as T } from '@/lib/tokens'
 
-// /dashboard has no content of its own — the real document-upload flow lives at
-// /dashboard/profile/documents. This page previously held a second upload UI, but the
-// dashboard layout's AuthGate redirected away from /dashboard within 150ms in every auth
-// state, so that UI was unreachable (and its parse flow never completed). Redirect here
-// instead. Unauthenticated users land on /documents and AuthGate sends them to /login.
+const C = { fg: T.teal, bg: T.paper, card: T.card, border: T.hairline, ink: T.ink, muted: T.muted, green: T.green, sand: T.sand, tint: T.tint, onTeal: T.onTeal, taupe: T.taupe, wheatLine: T.taupeLine }
+const fmt = (n: number) => `₹${Math.abs(Math.round(n || 0)).toLocaleString('en-IN')}`
+const INCOME_COLORS = [T.teal, T.green, T.taupe]
+
+function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  return <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: 18, ...style }}>{children}</div>
+}
+
+function Stat({ label, value, color, sub }: { label: string; value: string; color?: string; sub?: string }) {
+  return (
+    <div>
+      <p style={{ fontSize: 11, color: C.muted, margin: '0 0 4px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</p>
+      <p style={{ fontSize: 24, fontWeight: 800, color: color || C.fg, margin: 0, lineHeight: 1.1 }}>{value}</p>
+      {sub && <p style={{ fontSize: 11, color: C.muted, margin: '4px 0 0' }}>{sub}</p>}
+    </div>
+  )
+}
+
 export default function DashboardPage() {
-  redirect('/dashboard/profile/documents')
+  const router = useRouter()
+  const [ov, setOv] = useState<any>(null)
+  const [view, setView] = useState<'loading' | 'no-tax' | 'ready'>('loading')
+
+  useEffect(() => {
+    let hasSalary = false
+    try { const t = JSON.parse(localStorage.getItem('av_salary_timeline') || '[]'); hasSalary = Array.isArray(t) && t.length > 0 } catch {}
+    if (!hasSalary) { router.replace('/dashboard/profile/documents'); return }   // onboarding: no data → upload
+    let snap: any = null
+    try { snap = JSON.parse(localStorage.getItem('av_tax_overview') || 'null') } catch {}
+    if (!snap || typeof snap.totalTax !== 'number') { setView('no-tax'); return }
+    setOv(snap); setView('ready')
+  }, [router])
+
+  if (view === 'loading') return null
+
+  if (view === 'no-tax') {
+    return (
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '20px 0' }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Dashboard</h1>
+        <Card style={{ textAlign: 'center', padding: 40 }}>
+          <p style={{ fontSize: 14, color: C.ink, margin: '0 0 6px', fontWeight: 600 }}>Your dashboard is almost ready.</p>
+          <p style={{ fontSize: 13, color: C.muted, margin: '0 0 20px' }}>Open <strong>Your Tax</strong> once to compute your tax picture — then this page fills in with your numbers and charts.</p>
+          <button onClick={() => router.push('/dashboard/tax/optimizer')} style={{ padding: '12px 24px', background: C.fg, color: C.onTeal, border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Go to Your Tax →</button>
+        </Card>
+      </div>
+    )
+  }
+
+  const rec = ov.recommendation === 'new'
+  const refund = ov.balance < 0
+  const asOf = ov.computedAt ? new Date(ov.computedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : null
+
+  const incomeData = [
+    { name: 'Salary', value: Math.max(0, ov.grossSalary) },
+    { name: 'Other income', value: Math.max(0, ov.slabOtherIncome) },
+    { name: 'Capital gains / crypto', value: Math.max(0, ov.specialIncome) },
+  ].filter(d => d.value > 0)
+  const totalIncome = incomeData.reduce((s, d) => s + d.value, 0)
+
+  const regimeData = [
+    { name: 'New', tax: Math.round(ov.newTotal), me: rec ? 0 : 1 },   // me===0 → recommended (green)
+    { name: 'Old', tax: Math.round(ov.oldTotal), me: rec ? 1 : 0 },
+  ]
+  const billData = [
+    { name: 'Total tax', amount: Math.round(ov.totalTax) },
+    { name: 'TDS paid', amount: Math.round(ov.tdsPaid) },
+    { name: refund ? 'Refund due' : 'Balance', amount: Math.round(Math.abs(ov.balance)) },
+  ]
+
+  return (
+    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '20px 0' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 4px' }}>Dashboard</h1>
+        {asOf && <span style={{ fontSize: 11, color: C.muted }}>As of your last Your Tax visit · {asOf}</span>}
+      </div>
+      <p style={{ fontSize: 13, color: C.muted, margin: '0 0 16px' }}>Your tax picture for FY 2025-26 at a glance.</p>
+
+      {/* Verdict strip */}
+      <Card style={{ marginBottom: 16, border: `2px solid ${C.fg}` }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 28, alignItems: 'flex-start' }}>
+          <div style={{ flex: '1 1 180px' }}><Stat label="File under" value={rec ? 'New regime' : 'Old regime'} sub={`Saves ${fmt(ov.savings)} vs the ${rec ? 'old' : 'new'} regime`} /></div>
+          <div style={{ flex: '1 1 160px' }}><Stat label="Total tax" value={fmt(ov.totalTax)} /></div>
+          <div style={{ flex: '1 1 160px' }}><Stat label={refund ? 'Refund due' : 'Balance payable'} value={fmt(Math.abs(ov.balance))} color={refund ? C.green : C.fg} sub={`Tax ${fmt(ov.totalTax)} − TDS ${fmt(ov.tdsPaid)}`} /></div>
+          <div style={{ flex: '1 1 120px' }}><Stat label="File form" value={ov.itrForm} /></div>
+        </div>
+      </Card>
+
+      {/* Charts */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 16 }}>
+        {/* Income composition */}
+        <Card>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Income composition</h3>
+          <p style={{ fontSize: 11, color: C.muted, margin: '0 0 8px' }}>Total {fmt(totalIncome)}</p>
+          <div style={{ height: 220 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={incomeData} dataKey="value" nameKey="name" innerRadius={55} outerRadius={85} paddingAngle={2}>
+                  {incomeData.map((_, i) => <Cell key={i} fill={INCOME_COLORS[i % INCOME_COLORS.length]} />)}
+                </Pie>
+                <Tooltip formatter={(v: any) => fmt(Number(v))} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+            {incomeData.map((d, i) => (
+              <div key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: C.ink }}>
+                <span style={{ width: 10, height: 10, borderRadius: 2, background: INCOME_COLORS[i % INCOME_COLORS.length], flexShrink: 0 }} />
+                <span style={{ flex: 1 }}>{d.name}</span>
+                <span style={{ fontWeight: 600 }}>{fmt(d.value)}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {/* Regime comparison */}
+        <Card>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>New vs Old regime</h3>
+          <p style={{ fontSize: 11, color: C.muted, margin: '0 0 8px' }}>Total tax under each · lower is better</p>
+          <div style={{ height: 220 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={regimeData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                <XAxis dataKey="name" tick={{ fontSize: 12, fill: C.muted }} axisLine={{ stroke: C.border }} tickLine={false} />
+                <YAxis tickFormatter={(v: any) => `₹${Math.round(Number(v) / 1000)}k`} tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} width={48} />
+                <Tooltip formatter={(v: any) => fmt(Number(v))} />
+                <Bar dataKey="tax" radius={[6, 6, 0, 0]}>
+                  {regimeData.map((d, i) => <Cell key={i} fill={d.me === 0 ? C.green : C.taupe} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <p style={{ fontSize: 11, color: C.muted, margin: '6px 0 0' }}>The <strong style={{ color: C.green }}>{rec ? 'New' : 'Old'}</strong> regime is recommended — you save <strong style={{ color: C.fg }}>{fmt(ov.savings)}</strong>.</p>
+        </Card>
+
+        {/* Tax vs TDS vs balance */}
+        <Card>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>What's left to pay</h3>
+          <p style={{ fontSize: 11, color: C.muted, margin: '0 0 8px' }}>Total tax, TDS already paid, and the {refund ? 'refund' : 'balance'}</p>
+          <div style={{ height: 220 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={billData} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 0 }}>
+                <XAxis type="number" tickFormatter={(v: any) => `₹${Math.round(Number(v) / 1000)}k`} tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11.5, fill: C.ink }} axisLine={false} tickLine={false} width={84} />
+                <Tooltip formatter={(v: any) => fmt(Number(v))} />
+                <Bar dataKey="amount" radius={[0, 6, 6, 0]}>
+                  {billData.map((d, i) => <Cell key={i} fill={i === 0 ? C.fg : i === 1 ? C.taupe : (refund ? C.green : C.fg)} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+      </div>
+
+      {/* Quick links */}
+      <Card>
+        <h3 style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: '0 0 12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Jump back in</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
+          {[
+            { href: '/dashboard/tax/optimizer', label: 'Your Tax', desc: 'Full breakdown & ITR' },
+            { href: '/dashboard/profile/salary', label: 'Salary', desc: 'Edit your timeline' },
+            { href: '/dashboard/profile/exemptions', label: 'Allowances', desc: 'Claim Section 10' },
+            { href: '/dashboard/profile/deductions', label: 'Deductions', desc: 'Save more under 80C/80D' },
+          ].map(l => (
+            <Link key={l.href} href={l.href} style={{ display: 'block', padding: '12px 14px', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, textDecoration: 'none' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.fg }}>{l.label} →</div>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{l.desc}</div>
+            </Link>
+          ))}
+        </div>
+      </Card>
+    </div>
+  )
 }

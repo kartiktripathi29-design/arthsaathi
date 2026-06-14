@@ -482,6 +482,28 @@ export default function TaxOptimizerPage() {
     }
   }, [seniorStatus, parentsSenior])
 
+  // Persist a compact snapshot of the computed tax picture so the Dashboard can render the same
+  // numbers without re-deriving them (single source of truth, like av_salary_summary). Written
+  // whenever the calc updates.
+  useEffect(() => {
+    if (!calc) return
+    const rec = calc.recommendation === 'new'
+    try {
+      localStorage.setItem('av_tax_overview', JSON.stringify({
+        recommendation: calc.recommendation,
+        newTotal: calc.newTotal, oldTotal: calc.oldTotal, savings: calc.savings,
+        grossSalary: calc.grossSalary, netSalary: calc.netSalary,
+        slabOtherIncome: calc.slabOtherIncome, specialIncome: calc.specialIncome.total,
+        slabTax: rec ? calc.newBreak.total : calc.oldBreak.total,
+        specialTaxTotal: calc.specialTaxTotal,
+        totalTax: rec ? calc.newTotal : calc.oldTotal,
+        tdsPaid: calc.tdsPaid, balance: rec ? calc.newBalance : calc.oldBalance,
+        itrForm: calc.itrForm,
+        computedAt: Date.now(),
+      }))
+    } catch {}
+  }, [calc])
+
   if (calcError) {
     return (
       <div style={{ maxWidth: 900, margin: '0 auto', padding: 40, textAlign: 'center' }}>
@@ -917,7 +939,7 @@ export default function TaxOptimizerPage() {
 
       <div style={{ display: 'flex', gap: 12 }}>
         <button onClick={() => router.push('/dashboard/profile/deductions')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Edit deductions</button>
-        <button onClick={() => router.push('/dashboard/profile/salary')} style={{ flex: 1, padding: '12px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Done · Back to salary</button>
+        <button onClick={() => router.push('/dashboard')} style={{ flex: 1, padding: '12px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Done · View dashboard →</button>
       </div>
     </div>
   )
