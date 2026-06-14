@@ -391,6 +391,10 @@ export default function TaxOptimizerPage() {
 
       setCalc({
         grossSalary, netSalary, slabOtherIncome,
+        // How the salary figure was derived — drives the "how this is computed" summary on the
+        // Gross/Net rows. 'summary' = month-by-month from the reviewed timeline; 'slip-average' =
+        // avg(slip) × 12. salaryMonths = months of data behind the timeline summary.
+        salarySource: facts.source, salaryMonths: facts.hraBasis.length,
         // Special-rate (capital gains / crypto) income + tax
         specialIncome: { ltcg: ltcgEquityTotal, ltcgTaxable: ltcgEquityTaxable, ltcgUnlisted: ltcgUnlistedTotal, stcg: stcgEquityTotal, crypto: cryptoTotal, cgSlab: cgSlabIncome, total: specialIncomeTotal },
         specialRateTax, specialCess, specialTaxTotal,
@@ -469,7 +473,7 @@ export default function TaxOptimizerPage() {
         </button>
         {open && (
           <div style={{ padding: '0 0 10px 22px' }}>
-            <p style={{ fontSize: 11, color: C.muted, lineHeight: 1.6, margin: '0 0 6px' }}>{detail}</p>
+            <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.6, margin: '0 0 6px' }}>{detail}</div>
             {editHref && <Link href={editHref} style={{ fontSize: 11, color: C.fg, fontWeight: 600, textDecoration: 'underline' }}>{editLabel || 'Edit at source'} →</Link>}
           </div>
         )}
@@ -541,10 +545,45 @@ export default function TaxOptimizerPage() {
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 16 }}>
         <h3 style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Income & components</h3>
         <p style={{ fontSize: 11, color: C.muted, margin: '0 0 10px' }}>Tap any line to see how it’s worked out.</p>
-        <ExpRow id="gross" label="Gross salary" value={fmt(calc.grossSalary)} editHref="/dashboard/profile/salary" editLabel="Edit in Salary"
-          detail={<>Your annual gross pay, taken from the salary slips / offer letter on the Salary page (monthly gross × months in the year). Net salary of <strong>{fmt(calc.netSalary)}</strong> is what’s left after statutory deductions (PF, professional tax, TDS).</>} />
-        <ExpRow id="net" label="Net salary" value={fmt(calc.netSalary)} editHref="/dashboard/profile/salary" editLabel="Edit in Salary"
-          detail={<>Take-home pay — gross salary <strong>{fmt(calc.grossSalary)}</strong> minus statutory deductions (provident fund, professional tax and TDS) withheld by your employer.</>} />
+        <ExpRow id="gross" label="Gross salary" value={fmt(calc.grossSalary)} editHref="/dashboard/profile/salary" editLabel="View in Salary"
+          detail={(() => {
+            const monthly = Math.round(calc.grossSalary / 12)
+            const wrow = (l: React.ReactNode, v: string, opts?: { strong?: boolean; top?: boolean }) => (
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '3px 0', borderTop: opts?.top ? `1px solid ${C.border}` : undefined }}>
+                <span style={{ color: C.text }}>{l}</span><span style={{ color: C.fg, fontWeight: opts?.strong ? 700 : 500 }}>{v}</span>
+              </div>
+            )
+            return (
+              <>
+                {wrow('Average monthly gross', `≈ ${fmt(monthly)}`)}
+                {wrow('× 12 months', fmt(calc.grossSalary), { strong: true, top: true })}
+                <p style={{ margin: '6px 0 0', lineHeight: 1.55 }}>
+                  {calc.salarySource === 'summary'
+                    ? <>Summed month-by-month from your salary timeline{calc.salaryMonths ? ` (${calc.salaryMonths} month${calc.salaryMonths > 1 ? 's' : ''} of data)` : ''} — it already includes any mid-year raises, bonuses and job switches, so the monthly figure above is the average.</>
+                    : calc.salarySource === 'slip-average'
+                    ? <>Estimated as your average monthly gross × 12. Upload more months on the Salary page for a precise, month-by-month figure.</>
+                    : <>From the salary data on the Salary page.</>}
+                </p>
+              </>
+            )
+          })()} />
+        <ExpRow id="net" label="Net salary" value={fmt(calc.netSalary)} editHref="/dashboard/profile/salary" editLabel="View in Salary"
+          detail={(() => {
+            const ded = Math.max(0, calc.grossSalary - calc.netSalary)
+            const wrow = (l: React.ReactNode, v: string, opts?: { strong?: boolean; top?: boolean; danger?: boolean }) => (
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '3px 0', borderTop: opts?.top ? `1px solid ${C.border}` : undefined }}>
+                <span style={{ color: C.text }}>{l}</span><span style={{ color: opts?.danger ? C.danger : C.fg, fontWeight: opts?.strong ? 700 : 500 }}>{v}</span>
+              </div>
+            )
+            return (
+              <>
+                {wrow('Gross salary', fmt(calc.grossSalary))}
+                {wrow('− Statutory deductions (PF · PT · TDS)', `−${fmt(ded)}`, { danger: true })}
+                {wrow('= Net (take-home)', fmt(calc.netSalary), { strong: true, top: true })}
+                <p style={{ margin: '6px 0 0', lineHeight: 1.55 }}>Deductions your employer withholds before pay-out. The TDS portion is tax already paid — it’s credited against your final bill in the verdict above.</p>
+              </>
+            )
+          })()} />
         <ExpRow id="otherslab" label="Other income (slab-taxed)" value={fmt(calc.slabOtherIncome)} sub="freelance · F&O · interest · other" editHref="/dashboard/profile/other-income" editLabel="Edit in Other earnings"
           detail={<>Income taxed at your normal slab rate — freelance / consulting, F&amp;O / intraday, interest &amp; dividends, and any “other” income, plus debt-fund and unlisted-STCG gains that fall to slab. Open Other earnings to see each source.</>} />
         {calc.specialIncome.total > 0 && (
