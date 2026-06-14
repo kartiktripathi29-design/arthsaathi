@@ -34,11 +34,13 @@ function Shell({ children }: { children: React.ReactNode }) {
         .otp-input { text-align: center; letter-spacing: .5em; font-size: 18px; font-weight: 600; }
         .btn-ghost { transition: background .15s; }
         .btn-ghost:hover { background: var(--tint) !important; }
-        /* Mobile: desktop's 52px side padding overflowed the nav and pushed the theme toggle off-screen.
-           Tighten padding/gap; wrap as a last resort so the toggle is always visible (never scrolled). */
+        /* Mobile: desktop's 52px side padding overflowed the nav. The actions group is allowed to
+           SHRINK and the prompt text YIELDS (wraps to a second line) while the toggle keeps its size
+           and stays visible. Same robust rule as the sign-up page (not the fragile wrap-only version). */
         @media (max-width: 480px) {
-          .auth-nav { padding-left: 16px !important; padding-right: 16px !important; flex-wrap: wrap; row-gap: 8px; }
-          .auth-nav-actions { gap: 12px !important; }
+          .auth-nav { padding-left: 16px !important; padding-right: 16px !important; }
+          .auth-nav-actions { flex-shrink: 1 !important; min-width: 0; gap: 12px !important; }
+          .auth-nav-prompt { min-width: 0; line-height: 1.3; }
         }
       `}</style>
       <nav className="auth-nav" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, padding: '18px 52px', borderBottom: `1px solid ${T.hairline}` }}>
@@ -46,7 +48,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           <Logo variant="onLight" size={32} />
         </Link>
         <div className="auth-nav-actions" style={{ display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0 }}>
-          <div style={{ fontSize: 13, color: C.sub }}>New to ArthVo?{' '}<Link href="/signup" style={{ color: C.green, fontWeight: 600, textDecoration: 'none' }}>Sign up</Link></div>
+          <div className="auth-nav-prompt" style={{ fontSize: 13, color: C.sub }}>New to ArthVo?{' '}<Link href="/signup" style={{ color: C.green, fontWeight: 600, textDecoration: 'none' }}>Sign up</Link></div>
           <ThemeToggle theme={theme} setTheme={setTheme} resolved={resolved} />
         </div>
       </nav>
