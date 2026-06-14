@@ -272,6 +272,16 @@ type WizardStep =
   | 'bonuses'           // v7 Q4
   | 'review'
 
+// Compact signature of the raw slips — lets us tell whether a previously-built timeline still
+// matches the current slips before restoring it (so we never show a stale review).
+function slipsSignature(slips: any[]): string {
+  if (!Array.isArray(slips)) return ''
+  return slips
+    .map(s => `${s?.year || ''}-${String(s?.month || '').toLowerCase()}:${s?.grossSalary || 0}:${s?.netSalary || 0}`)
+    .sort()
+    .join('|')
+}
+
 export default function SalaryPageCompleteFinal() {
   const router = useRouter()
   const [slips, setSlips] = useState<any[]>([])
@@ -586,6 +596,32 @@ export default function SalaryPageCompleteFinal() {
     )
     toast(`Offer letter loaded — choose “Plan ahead / forecast” to add ${change.offer!.employerName} as a job switch.`, { icon: '📄', duration: 6000 })
   }, [slips, slipsWithMeta, fyStartYear])
+
+  // Land returning users on their already-built timeline instead of restarting the wizard. We restore
+  // the previously-built employments (persisted below) when they still match the current slips, and
+  // jump straight to the review. The "Edit timeline" button on the review re-opens the wizard. Skipped
+  // when a freshly-uploaded offer is pending (that entry should run through the wizard/offer flow).
+  const reviewRestoreDone = useRef(false)
+  useEffect(() => {
+    if (reviewRestoreDone.current || slips.length === 0 || employments.length > 0) return
+    let pendingOffer: string | null = null
+    try { pendingOffer = localStorage.getItem('av_pending_offer') } catch {}
+    if (pendingOffer) return
+    let saved: any = null
+    try { saved = JSON.parse(localStorage.getItem('av_salary_built') || 'null') } catch {}
+    if (!saved || !Array.isArray(saved.employments) || saved.employments.length === 0) return
+    if (saved.sig !== slipsSignature(slips)) return // slips changed → let the wizard rebuild
+    reviewRestoreDone.current = true
+    setEmployments(saved.employments)
+    if (typeof saved.fyStartYear === 'number') setFyStartYear(saved.fyStartYear)
+    setWizardStep('review')
+  }, [slips, employments.length])
+
+  // Persist the built timeline (+ a slips signature) so re-entry can restore the review above.
+  useEffect(() => {
+    if (employments.length === 0) return
+    try { localStorage.setItem('av_salary_built', JSON.stringify({ employments, fyStartYear, sig: slipsSignature(slips) })) } catch {}
+  }, [employments, fyStartYear, slips])
 
   // v7 build: turn the confirmed period mapping into a 12-month timeline. Single employment.
   const buildEmploymentsFromMapping = (changesOverride?: ForecastChange[]) => {
