@@ -35,12 +35,18 @@ function Shell({ children }: { children: React.ReactNode }) {
         .otp-input { text-align: center; letter-spacing: .5em; font-size: 18px; font-weight: 600; }
         .btn-ghost { transition: background .15s; }
         .btn-ghost:hover { background: var(--tint) !important; }
+        /* Mobile: desktop's 52px side padding overflowed the nav and pushed the theme toggle off-screen.
+           Tighten padding/gap; wrap as a last resort so the toggle is always visible (never scrolled). */
+        @media (max-width: 480px) {
+          .auth-nav { padding-left: 16px !important; padding-right: 16px !important; flex-wrap: wrap; row-gap: 8px; }
+          .auth-nav-actions { gap: 12px !important; }
+        }
       `}</style>
-      <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, padding: '18px 52px', borderBottom: `1px solid ${T.hairline}` }}>
+      <nav className="auth-nav" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, padding: '18px 52px', borderBottom: `1px solid ${T.hairline}` }}>
         <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 11, flexShrink: 0 }}>
           <Logo variant="onLight" size={32} />
         </Link>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0 }}>
+        <div className="auth-nav-actions" style={{ display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0 }}>
           <div style={{ fontSize: 13, color: T.muted }}>Already have an account?{' '}<Link href="/login" style={{ color: T.teal, fontWeight: 600, textDecoration: 'none' }}>Sign in</Link></div>
           <ThemeToggle theme={theme} setTheme={setTheme} resolved={resolved} />
         </div>
