@@ -202,8 +202,8 @@ export default function LandingPage() {
                 answer: 'ArthVo turns it into plain numbers.',
               },
               {
-                statement: 'HR gives you a deadline and a dropdown. You guess.',
-                body: 'Regime election, investment declarations — decided in a rush, once a year, with zero explanation.',
+                statement: 'You hand it to a tax consultant and hope.',
+                body: 'It gets filed, the fee gets paid — and it\'s still your money you can\'t explain.',
                 answer: 'Run the real numbers here before you commit.',
               },
             ].map((p, i) => (
@@ -233,7 +233,7 @@ export default function LandingPage() {
               { num:'01', title:'Add your salary slip', body:'ArthVo reads it for you — no manual typing.' },
               { num:'02', title:'It pulls your income', body:'Your salary and the earnings it can read from your documents.' },
               { num:'03', title:'See what you owe', body:'Old vs new regime, side by side, on your numbers.' },
-              { num:'04', title:'Know your next step', body:'Which regime fits and what to check — in plain English.' },
+              { num:'04', title:'Know what to do next.', body:'Which regime fits and what to check — in plain English.' },
             ].map((s, i) => (
               <div key={i} style={{ background:T.card, border:`1.5px solid ${T.hairline}`, borderRadius:14, padding:'24px 20px' }}>
                 <div style={{ fontSize:28, fontWeight:800, color:T.teal, letterSpacing:'0.02em', marginBottom:14 }}>{s.num}</div>
@@ -251,11 +251,11 @@ export default function LandingPage() {
           One slip is all it takes
         </div>
         <h2 style={{ fontSize:'clamp(32px,5vw,60px)', fontWeight:900, letterSpacing:'-0.04em', color:T.ivory, lineHeight:1.05, marginBottom:20 }}>
-          Know what you owe.<br />
-          <span style={{ color:T.green }}>And which regime <span style={{ whiteSpace:'nowrap' }}>is yours.</span></span>
+          Your tax. Your regime.<br />
+          <span style={{ color:T.green }}><span style={{ whiteSpace:'nowrap' }}>Settled.</span></span>
         </h2>
         <p style={{ fontSize:16, color:'rgba(244,238,224,0.75)', marginBottom:44, maxWidth:400, margin:'0 auto 44px', lineHeight:1.75 }}>
-          No credit card. No guesswork.
+          One slip. A few minutes. No sign-up to see it.
         </p>
         <div style={{ display:'flex', gap:12, justifyContent:'center', flexWrap:'wrap' as const }}>
           <Link href="/signup" className="btn-green"
