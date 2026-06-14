@@ -54,6 +54,7 @@ function SimpleSection({
       </button>
       {open && (
         <div style={{ padding: '14px 16px', background: '#fff' }}>
+          <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 5, fontWeight: 500 }}>Amount for the full year</label>
           <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden', marginBottom: 10 }}>
             <span style={{ padding: '8px 10px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
             <input type="text" inputMode="numeric"
@@ -62,6 +63,7 @@ function SimpleSection({
               placeholder="0"
               style={{ flex: 1, border: 'none', outline: 'none', padding: '8px 10px', fontSize: 13, fontFamily: 'inherit', color: C.text }}
             />
+            <span style={{ padding: '8px 10px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.muted, whiteSpace: 'nowrap' }}>/ year</span>
           </div>
           {claimed > 0 && (
             <div style={{ padding: '10px 12px', background: C.wl, borderRadius: 4, display: 'flex', justifyContent: 'space-between' }}>
