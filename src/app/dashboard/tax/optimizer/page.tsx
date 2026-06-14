@@ -124,6 +124,12 @@ export default function TaxOptimizerPage() {
   // Senior-citizen status — affects old-regime slabs + 80D + 80TTB. Persisted locally.
   const [seniorStatus, setSeniorStatus] = useState<SeniorStatus>('normal')
   const [parentsSenior, setParentsSenior] = useState(false)
+  // Presentation-only: the detailed calculation tables collapse by default so the verdict + headline
+  // numbers lead. None of these affect any computed figure.
+  const [showTaxableCalc, setShowTaxableCalc] = useState(false)
+  const [showCapGains, setShowCapGains] = useState(false)
+  const [showSlabwise, setShowSlabwise] = useState(false)
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
 
   // Senior status sync — the Deductions tab now stores the lossless three-way band in
   // av_deductions.selfSeniorStatus, shared with this page. Read that first as the source of truth;
@@ -448,6 +454,29 @@ export default function TaxOptimizerPage() {
     </div>
   )
 
+  // Income & components row that EXPANDS in place to explain how the figure is computed, instead of
+  // navigating away. An explicit "Edit at source" link inside the panel keeps navigation available.
+  const ExpRow = ({ id, label, value, sub, detail, editHref, editLabel }: { id: string; label: string; value: string; sub?: string; detail: React.ReactNode; editHref?: string; editLabel?: string }) => {
+    const open = !!expandedRows[id]
+    return (
+      <div style={{ borderBottom: `1px solid ${C.border}` }}>
+        <button onClick={() => setExpandedRows(p => ({ ...p, [id]: !p[id] }))} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '8px 0', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
+          <span style={{ fontSize: 12, color: C.text, fontWeight: 500 }}>
+            <span style={{ color: C.muted, marginRight: 6, fontSize: 10 }}>{open ? '▾' : '▸'}</span>{label}
+            {sub && <span className="opt-row-sub" style={{ fontSize: 10, color: C.muted, marginLeft: 8 }}>{sub}</span>}
+          </span>
+          <span style={{ fontSize: 12, color: C.fg, fontWeight: 600 }}>{value}</span>
+        </button>
+        {open && (
+          <div style={{ padding: '0 0 10px 22px' }}>
+            <p style={{ fontSize: 11, color: C.muted, lineHeight: 1.6, margin: '0 0 6px' }}>{detail}</p>
+            {editHref && <Link href={editHref} style={{ fontSize: 11, color: C.fg, fontWeight: 600, textDecoration: 'underline' }}>{editLabel || 'Edit at source'} →</Link>}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '20px 0' }}>
       <style>{OPT_MOBILE_CSS}</style>
@@ -487,6 +516,7 @@ export default function TaxOptimizerPage() {
             <p style={{ fontSize: 11, color: C.muted, margin: '0 0 4px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>File form</p>
             <p style={{ fontSize: 26, fontWeight: 800, color: C.fg, margin: 0, lineHeight: 1.1 }}>{calc.itrForm}</p>
             {calc.itrReasons[0] && <p style={{ fontSize: 11, color: C.muted, margin: '6px 0 0', lineHeight: 1.45 }}>{calc.itrReasons[0]}</p>}
+            <div style={{ marginTop: 4 }}><ITRFormsReference /></div>
           </div>
         </div>
       </div>
@@ -509,14 +539,20 @@ export default function TaxOptimizerPage() {
 
       {/* ── Income (linked to their respective heads) ── */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 16 }}>
-        <h3 style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: '0 0 12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Income & components</h3>
-        <Row label="Gross salary" value={fmt(calc.grossSalary)} href="/dashboard/profile/salary" />
-        <Row label="Net salary" value={fmt(calc.netSalary)} href="/dashboard/profile/salary" />
-        <Row label="Other income (slab-taxed)" value={fmt(calc.slabOtherIncome)} href="/dashboard/profile/other-income" sub="freelance · F&O · interest · other" />
+        <h3 style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Income & components</h3>
+        <p style={{ fontSize: 11, color: C.muted, margin: '0 0 10px' }}>Tap any line to see how it’s worked out.</p>
+        <ExpRow id="gross" label="Gross salary" value={fmt(calc.grossSalary)} editHref="/dashboard/profile/salary" editLabel="Edit in Salary"
+          detail={<>Your annual gross pay, taken from the salary slips / offer letter on the Salary page (monthly gross × months in the year). Net salary of <strong>{fmt(calc.netSalary)}</strong> is what’s left after statutory deductions (PF, professional tax, TDS).</>} />
+        <ExpRow id="net" label="Net salary" value={fmt(calc.netSalary)} editHref="/dashboard/profile/salary" editLabel="Edit in Salary"
+          detail={<>Take-home pay — gross salary <strong>{fmt(calc.grossSalary)}</strong> minus statutory deductions (provident fund, professional tax and TDS) withheld by your employer.</>} />
+        <ExpRow id="otherslab" label="Other income (slab-taxed)" value={fmt(calc.slabOtherIncome)} sub="freelance · F&O · interest · other" editHref="/dashboard/profile/other-income" editLabel="Edit in Other earnings"
+          detail={<>Income taxed at your normal slab rate — freelance / consulting, F&amp;O / intraday, interest &amp; dividends, and any “other” income, plus debt-fund and unlisted-STCG gains that fall to slab. Open Other earnings to see each source.</>} />
         {calc.specialIncome.total > 0 && (
-          <Row label="Capital gains / crypto (special rate)" value={fmt(calc.specialIncome.total)} href="/dashboard/profile/other-income" sub="taxed separately — not at slab" />
+          <ExpRow id="special" label="Capital gains / crypto (special rate)" value={fmt(calc.specialIncome.total)} sub="taxed separately — not at slab" editHref="/dashboard/profile/other-income" editLabel="Edit in Other earnings"
+            detail={<>Equity LTCG/STCG, unlisted-share LTCG and crypto are taxed at flat statutory rates — <strong>not</strong> your slab rate — so they’re kept out of the slab income below. See the “Capital gains &amp; crypto” breakdown for the rate on each.</>} />
         )}
-        <Row label="Total exemptions" value={fmt(calc.totalExemptions)} href="/dashboard/profile/exemptions" sub={`HRA ${fmt(calc.hraExempt)} · Other ${fmt(calc.otherExempts)}`} />
+        <ExpRow id="exemptions" label="Total exemptions" value={fmt(calc.totalExemptions)} sub={`HRA ${fmt(calc.hraExempt)} · Other ${fmt(calc.otherExempts)}`} editHref="/dashboard/profile/exemptions" editLabel="Edit in Allowances"
+          detail={<>HRA exemption <strong>{fmt(calc.hraExempt)}</strong> + other Section 10 exemptions (LTA, gratuity, etc.) <strong>{fmt(calc.otherExempts)}</strong>. These reduce taxable income under the <strong>old regime only</strong>.</>} />
         {/* Sanity warning — exemptions north of 40% of gross are almost always a data-entry error
             (e.g., PF withdrawal or gratuity entered while still employed). Flag it and link to fix. */}
         {calc.grossSalary > 0 && calc.totalExemptions > calc.grossSalary * 0.4 && (
@@ -526,11 +562,13 @@ export default function TaxOptimizerPage() {
             </p>
           </div>
         )}
-        <Row
+        <ExpRow
+          id="deductions"
           label="Total deductions"
           value={fmt(calc.totalDeductions)}
-          href="/dashboard/profile/deductions"
-          sub={[
+          editHref="/dashboard/profile/deductions"
+          editLabel="Edit in Deductions"
+          detail={<>Chapter VI-A deductions (old regime only): {[
             `80C ${fmt(calc.sec80C)}`,
             `80D ${fmt(calc.sec80D)}`,
             `24(b) ${fmt(calc.sec24b)}`,
@@ -539,15 +577,19 @@ export default function TaxOptimizerPage() {
             calc.sec80TTB > 0 ? `80TTB ${fmt(calc.sec80TTB)}` : null,
             calc.sec80E > 0 ? `80E ${fmt(calc.sec80E)}` : null,
             calc.sec80G > 0 ? `80G ${fmt(calc.sec80G)}` : null,
-          ].filter(Boolean).join(' · ')}
+          ].filter(Boolean).join(' · ')}.</>}
         />
 
       </div>
 
-      {/* ── How taxable income was computed ── */}
+      {/* ── How taxable income was computed (collapsed by default) ── */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 16 }}>
-        <h3 style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: '0 0 12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>How taxable income is computed</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 0, fontSize: 12 }}>
+        <button onClick={() => setShowTaxableCalc(v => !v)} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>How taxable income is computed</h3>
+          <span style={{ fontSize: 12, color: C.muted }}>{showTaxableCalc ? '− Hide' : '+ Show'}</span>
+        </button>
+        {showTaxableCalc && (<>
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 0, fontSize: 12, marginTop: 12 }}>
           <div style={{ padding: '6px 8px', background: C.wl, fontWeight: 700, color: C.fg, borderBottom: `1px solid ${C.border}` }}></div>
           <div style={{ padding: '6px 8px', background: C.wl, fontWeight: 700, color: C.fg, textAlign: 'right', borderBottom: `1px solid ${C.border}` }}>New regime</div>
           <div style={{ padding: '6px 8px', background: C.wl, fontWeight: 700, color: C.fg, textAlign: 'right', borderBottom: `1px solid ${C.border}` }}>Old regime</div>
@@ -586,13 +628,18 @@ export default function TaxOptimizerPage() {
         <p style={{ fontSize: 10.5, color: C.muted, margin: '10px 0 0', lineHeight: 1.5 }}>
           Capital gains and crypto are <strong>excluded</strong> from the slab income above — they are taxed at their own statutory rates (shown below) and added to the final bill in both regimes.
         </p>
+        </>)}
       </div>
 
-      {/* ── Capital gains & crypto — special-rate breakdown (both regimes) ── */}
+      {/* ── Capital gains & crypto — special-rate breakdown (collapsed by default) ── */}
       {calc.specialIncome.total > 0 && (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 16 }}>
-          <h3 style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Capital gains &amp; crypto · special rates</h3>
-          <p style={{ fontSize: 11, color: C.muted, margin: '0 0 10px' }}>Taxed at flat statutory rates, not slab. Same in both regimes.</p>
+          <button onClick={() => setShowCapGains(v => !v)} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Capital gains &amp; crypto · special rates</h3>
+            <span style={{ fontSize: 12, color: C.muted }}>{showCapGains ? '− Hide' : '+ Show'} · {fmt(calc.specialTaxTotal)} tax</span>
+          </button>
+          {showCapGains && (<>
+          <p style={{ fontSize: 11, color: C.muted, margin: '10px 0 10px' }}>Taxed at flat statutory rates, not slab. Same in both regimes.</p>
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', fontSize: 11.5 }}>
             <div style={{ padding: '6px 8px', background: C.bg, fontWeight: 700, color: C.muted, borderBottom: `1px solid ${C.border}` }}>Type</div>
             <div style={{ padding: '6px 8px', background: C.bg, fontWeight: 700, color: C.muted, textAlign: 'right', borderBottom: `1px solid ${C.border}` }}>Gains</div>
@@ -617,11 +664,18 @@ export default function TaxOptimizerPage() {
             <Row label="Health & Edu cess (4%)" value={fmt(calc.specialCess)} />
             <Row label="Total (added to both regimes)" value={fmt(calc.specialTaxTotal)} strong />
           </div>
+          </>)}
         </div>
       )}
 
-      {/* ── Slab-wise breakup — side-by-side comparison ── */}
-      <div className="opt-slabs" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+      {/* ── Slab-wise breakup — side-by-side comparison (collapsed by default) ── */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 16 }}>
+        <button onClick={() => setShowSlabwise(v => !v)} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Slab-wise breakup · both regimes</h3>
+          <span style={{ fontSize: 12, color: C.muted }}>{showSlabwise ? '− Hide' : '+ Show'} · New {fmt(calc.newTotal)} · Old {fmt(calc.oldTotal)}</span>
+        </button>
+        {showSlabwise && (
+        <div className="opt-slabs" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 12 }}>
       <div style={{ background: calc.recommendation === 'new' ? C.tint : C.card, border: `2px solid ${calc.recommendation === 'new' ? C.fg : C.border}`, borderRadius: 8, padding: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
           <h3 style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>New regime · slab-wise</h3>
@@ -707,19 +761,7 @@ export default function TaxOptimizerPage() {
         </div>
       </div>
       </div>
-
-      {/* ── Which ITR form to file ── */}
-      <div style={{ background: C.card, border: `2px solid ${C.fg}`, borderRadius: 8, padding: 20, marginBottom: 24 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
-          <h3 style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Which ITR form to file</h3>
-          <span style={{ fontSize: 22, fontWeight: 800, color: C.fg, letterSpacing: '0.02em' }}>{calc.itrForm}</span>
-        </div>
-        <div style={{ marginBottom: 10 }}>
-          {calc.itrReasons.map((r: string, i: number) => (
-            <p key={i} style={{ fontSize: 12, color: C.text, margin: '4px 0', lineHeight: 1.5 }}>• {r}</p>
-          ))}
-        </div>
-        <ITRFormsReference />
+      )}
       </div>
 
       {/* ── Where you can save more ── */}
@@ -755,11 +797,12 @@ export default function TaxOptimizerPage() {
             const slabRate = 0.30   // assume 30% marginal slab for upper-middle salary
             const yearlyTaxSaved = gap * slabRate
             return (
-              <div key={s.label} style={{ padding: '10px', background: T.card, borderRadius: 4, border: `1px solid ${C.border}` }}>
+              <Link key={s.label} href="/dashboard/profile/deductions" style={{ display: 'block', padding: '10px', background: T.card, borderRadius: 4, border: `1px solid ${C.border}`, textDecoration: 'none', color: 'inherit' }}>
                 <p style={{ fontSize: 10, color: C.muted, margin: '0 0 4px', fontWeight: 500 }}>{s.label}</p>
                 <p style={{ fontSize: 12, fontWeight: 600, color: C.fg, margin: 0 }}>{fmt(gap)} unused</p>
                 <p style={{ fontSize: 9, color: C.muted, margin: '4px 0 0' }}>Annual tax saved ~{fmt(yearlyTaxSaved)}</p>
-              </div>
+                <p style={{ fontSize: 10, color: C.fg, margin: '6px 0 0', fontWeight: 600 }}>Add at source →</p>
+              </Link>
             )
           })}
           </div>
