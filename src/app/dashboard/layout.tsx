@@ -439,7 +439,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="dash-main" style={{ marginLeft: 216, flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           <TopBar theme={theme} setTheme={setTheme} resolved={resolved} />
           <FamilySegment />
-          <main style={{ flex: 1, padding: '28px 28px', maxWidth: 1100, width: '100%' }}>
+          <main style={{ flex: 1, margin: '0 auto', padding: '28px 28px', maxWidth: 1100, width: '100%' }}>
             {children}
           </main>
         </div>
