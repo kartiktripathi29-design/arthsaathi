@@ -366,7 +366,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     if (SUPABASE_CONFIGURED) {
       if (loading) return
       if (!supaUser) { router.replace('/login'); return }
-      if (pathname === '/dashboard') router.replace('/dashboard/profile/documents')
+      // /dashboard now renders the real dashboard; the page itself sends users with no data to the
+      // upload flow, so no redirect here.
       return
     }
     // Mock mode (Supabase not configured): original localStorage-based gate.
@@ -374,8 +375,6 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       const stored = typeof window !== 'undefined' ? localStorage.getItem('as_user') : null
       if (!stored && !user) {
         router.replace('/login')
-      } else if (user && pathname === '/dashboard') {
-        router.replace('/dashboard/profile/documents')
       }
     }, 150)
     return () => clearTimeout(timer)
