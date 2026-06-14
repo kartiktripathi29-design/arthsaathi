@@ -117,6 +117,39 @@ function ITRFormsReference() {
   )
 }
 
+// Income & components row that EXPANDS in place to explain how the figure is computed, instead of
+// navigating away. An explicit, full-width "View/Edit at source" link inside the panel keeps
+// navigation available (large tap target so it works on touch). Module-level (a stable component) so
+// it isn't re-created on every parent render — that recreation remounts the subtree and can make the
+// link's click misfire.
+function ExpRow({ id, label, value, sub, detail, editHref, editLabel, expandedRows, setExpandedRows }: {
+  id: string; label: string; value: string; sub?: string; detail: React.ReactNode; editHref?: string; editLabel?: string;
+  expandedRows: Record<string, boolean>; setExpandedRows: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
+}) {
+  const open = !!expandedRows[id]
+  return (
+    <div style={{ borderBottom: `1px solid ${C.border}` }}>
+      <button onClick={() => setExpandedRows(p => ({ ...p, [id]: !p[id] }))} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '8px 0', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
+        <span style={{ fontSize: 12, color: C.text, fontWeight: 500 }}>
+          <span style={{ color: C.muted, marginRight: 6, fontSize: 10 }}>{open ? '▾' : '▸'}</span>{label}
+          {sub && <span className="opt-row-sub" style={{ fontSize: 10, color: C.muted, marginLeft: 8 }}>{sub}</span>}
+        </span>
+        <span style={{ fontSize: 12, color: C.fg, fontWeight: 600 }}>{value}</span>
+      </button>
+      {open && (
+        <div style={{ padding: '0 0 6px 22px' }}>
+          <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.6, margin: '0 0 4px' }}>{detail}</div>
+          {editHref && (
+            <Link href={editHref} prefetch={false} style={{ display: 'inline-block', padding: '8px 0', fontSize: 12, color: C.fg, fontWeight: 700, textDecoration: 'underline' }}>
+              {editLabel || 'Edit at source'} →
+            </Link>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function TaxOptimizerPage() {
   const router = useRouter()
   const [calc, setCalc] = useState<any>(null)
@@ -458,29 +491,6 @@ export default function TaxOptimizerPage() {
     </div>
   )
 
-  // Income & components row that EXPANDS in place to explain how the figure is computed, instead of
-  // navigating away. An explicit "Edit at source" link inside the panel keeps navigation available.
-  const ExpRow = ({ id, label, value, sub, detail, editHref, editLabel }: { id: string; label: string; value: string; sub?: string; detail: React.ReactNode; editHref?: string; editLabel?: string }) => {
-    const open = !!expandedRows[id]
-    return (
-      <div style={{ borderBottom: `1px solid ${C.border}` }}>
-        <button onClick={() => setExpandedRows(p => ({ ...p, [id]: !p[id] }))} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '8px 0', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
-          <span style={{ fontSize: 12, color: C.text, fontWeight: 500 }}>
-            <span style={{ color: C.muted, marginRight: 6, fontSize: 10 }}>{open ? '▾' : '▸'}</span>{label}
-            {sub && <span className="opt-row-sub" style={{ fontSize: 10, color: C.muted, marginLeft: 8 }}>{sub}</span>}
-          </span>
-          <span style={{ fontSize: 12, color: C.fg, fontWeight: 600 }}>{value}</span>
-        </button>
-        {open && (
-          <div style={{ padding: '0 0 10px 22px' }}>
-            <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.6, margin: '0 0 6px' }}>{detail}</div>
-            {editHref && <Link href={editHref} style={{ fontSize: 11, color: C.fg, fontWeight: 600, textDecoration: 'underline' }}>{editLabel || 'Edit at source'} →</Link>}
-          </div>
-        )}
-      </div>
-    )
-  }
-
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '20px 0' }}>
       <style>{OPT_MOBILE_CSS}</style>
@@ -545,7 +555,7 @@ export default function TaxOptimizerPage() {
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 16 }}>
         <h3 style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Income & components</h3>
         <p style={{ fontSize: 11, color: C.muted, margin: '0 0 10px' }}>Tap any line to see how it’s worked out.</p>
-        <ExpRow id="gross" label="Gross salary" value={fmt(calc.grossSalary)} editHref="/dashboard/profile/salary" editLabel="View in Salary"
+        <ExpRow expandedRows={expandedRows} setExpandedRows={setExpandedRows} id="gross" label="Gross salary" value={fmt(calc.grossSalary)} editHref="/dashboard/profile/salary" editLabel="View in Salary"
           detail={(() => {
             const monthly = Math.round(calc.grossSalary / 12)
             const wrow = (l: React.ReactNode, v: string, opts?: { strong?: boolean; top?: boolean }) => (
@@ -567,7 +577,7 @@ export default function TaxOptimizerPage() {
               </>
             )
           })()} />
-        <ExpRow id="net" label="Net salary" value={fmt(calc.netSalary)} editHref="/dashboard/profile/salary" editLabel="View in Salary"
+        <ExpRow expandedRows={expandedRows} setExpandedRows={setExpandedRows} id="net" label="Net salary" value={fmt(calc.netSalary)} editHref="/dashboard/profile/salary" editLabel="View in Salary"
           detail={(() => {
             const ded = Math.max(0, calc.grossSalary - calc.netSalary)
             const wrow = (l: React.ReactNode, v: string, opts?: { strong?: boolean; top?: boolean; danger?: boolean }) => (
@@ -584,13 +594,13 @@ export default function TaxOptimizerPage() {
               </>
             )
           })()} />
-        <ExpRow id="otherslab" label="Other income (slab-taxed)" value={fmt(calc.slabOtherIncome)} sub="freelance · F&O · interest · other" editHref="/dashboard/profile/other-income" editLabel="Edit in Other earnings"
+        <ExpRow expandedRows={expandedRows} setExpandedRows={setExpandedRows} id="otherslab" label="Other income (slab-taxed)" value={fmt(calc.slabOtherIncome)} sub="freelance · F&O · interest · other" editHref="/dashboard/profile/other-income" editLabel="Edit in Other earnings"
           detail={<>Income taxed at your normal slab rate — freelance / consulting, F&amp;O / intraday, interest &amp; dividends, and any “other” income, plus debt-fund and unlisted-STCG gains that fall to slab. Open Other earnings to see each source.</>} />
         {calc.specialIncome.total > 0 && (
-          <ExpRow id="special" label="Capital gains / crypto (special rate)" value={fmt(calc.specialIncome.total)} sub="taxed separately — not at slab" editHref="/dashboard/profile/other-income" editLabel="Edit in Other earnings"
+          <ExpRow expandedRows={expandedRows} setExpandedRows={setExpandedRows} id="special" label="Capital gains / crypto (special rate)" value={fmt(calc.specialIncome.total)} sub="taxed separately — not at slab" editHref="/dashboard/profile/other-income" editLabel="Edit in Other earnings"
             detail={<>Equity LTCG/STCG, unlisted-share LTCG and crypto are taxed at flat statutory rates — <strong>not</strong> your slab rate — so they’re kept out of the slab income below. See the “Capital gains &amp; crypto” breakdown for the rate on each.</>} />
         )}
-        <ExpRow id="exemptions" label="Total exemptions" value={fmt(calc.totalExemptions)} sub={`HRA ${fmt(calc.hraExempt)} · Other ${fmt(calc.otherExempts)}`} editHref="/dashboard/profile/exemptions" editLabel="Edit in Allowances"
+        <ExpRow expandedRows={expandedRows} setExpandedRows={setExpandedRows} id="exemptions" label="Total exemptions" value={fmt(calc.totalExemptions)} sub={`HRA ${fmt(calc.hraExempt)} · Other ${fmt(calc.otherExempts)}`} editHref="/dashboard/profile/exemptions" editLabel="Edit in Allowances"
           detail={<>HRA exemption <strong>{fmt(calc.hraExempt)}</strong> + other Section 10 exemptions (LTA, gratuity, etc.) <strong>{fmt(calc.otherExempts)}</strong>. These reduce taxable income under the <strong>old regime only</strong>.</>} />
         {/* Sanity warning — exemptions north of 40% of gross are almost always a data-entry error
             (e.g., PF withdrawal or gratuity entered while still employed). Flag it and link to fix. */}
@@ -602,6 +612,7 @@ export default function TaxOptimizerPage() {
           </div>
         )}
         <ExpRow
+          expandedRows={expandedRows} setExpandedRows={setExpandedRows}
           id="deductions"
           label="Total deductions"
           value={fmt(calc.totalDeductions)}
