@@ -9,26 +9,20 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { useAppStore, type AppUser } from '@/store/AppStore'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+import { tokens as T } from '@/lib/tokens'
+import Logo from '@/components/Logo'
+import { ThemeToggle, useArthvoTheme, useThemedBase } from '@/components/ThemeToggle'
 
-const C = { green: '#059669', ink: '#1E293B', sub: '#64748B', line: '#CBD5E1' }
+const C = { green: T.teal, ink: T.ink, sub: T.muted, line: T.hairline }
 const CONFIGURED = !!process.env.NEXT_PUBLIC_SUPABASE_URL
 const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)
 const isValidPhone = (p: string) => /^[6-9]\d{9}$/.test(p)
 
-function Logo({ size = 32 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 120 120" fill="none">
-      <rect width="120" height="120" rx="16" fill={C.green} />
-      <polygon points="9,9 21,9 60,101 99,9 111,9 60,111" fill="#FFFFFF" />
-      <circle cx="90" cy="24" r="18" fill="#FFFFFF" />
-      <circle cx="90" cy="24" r="11" fill={C.green} />
-    </svg>
-  )
-}
-
 function Shell({ children }: { children: React.ReactNode }) {
+  const { theme, setTheme, resolved } = useArthvoTheme()
+  useThemedBase(resolved)
   return (
-    <div style={{ minHeight: '100vh', background: '#fff', fontFamily: '"Sora",-apple-system,sans-serif', display: 'flex', flexDirection: 'column' }}>
+    <div data-theme={resolved} suppressHydrationWarning style={{ minHeight: '100vh', background: T.paper, fontFamily: '"Sora",-apple-system,sans-serif', display: 'flex', flexDirection: 'column' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -36,25 +30,26 @@ function Shell({ children }: { children: React.ReactNode }) {
         .cta:hover:not(:disabled) { opacity: .92; transform: translateY(-1px); }
         .cta:disabled { opacity: .5; cursor: not-allowed; }
         .input { transition: border-color .15s, box-shadow .15s; }
-        .input:focus { outline: none; border-color: #059669 !important; box-shadow: 0 0 0 3px rgba(5,150,105,.1); }
+        .input:focus { outline: none; border-color: var(--teal) !important; box-shadow: 0 0 0 3px rgba(14,77,71,.1); }
         .otp-input { text-align: center; letter-spacing: .5em; font-size: 18px; font-weight: 600; }
+        .btn-ghost { transition: background .15s; }
+        .btn-ghost:hover { background: var(--tint) !important; }
       `}</style>
-      <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 52px', borderBottom: '1px solid #F0FDF4' }}>
-        <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 11 }}>
-          <Logo />
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 19, color: C.ink, letterSpacing: '-0.025em' }}>Arth<span style={{ color: C.green }}>Vo</span></div>
-            <div style={{ fontSize: 8, color: '#94A3B8', letterSpacing: '0.18em', marginTop: -1 }}>WEALTH EVOLVED</div>
-          </div>
+      <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, padding: '18px 52px', borderBottom: `1px solid ${T.hairline}` }}>
+        <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 11, flexShrink: 0 }}>
+          <Logo variant="onLight" size={32} />
         </Link>
-        <div style={{ fontSize: 13, color: C.sub }}>New to ArthVo?{' '}<Link href="/signup" style={{ color: C.green, fontWeight: 600, textDecoration: 'none' }}>Sign up</Link></div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0 }}>
+          <div style={{ fontSize: 13, color: C.sub }}>New to ArthVo?{' '}<Link href="/signup" style={{ color: C.green, fontWeight: 600, textDecoration: 'none' }}>Sign up</Link></div>
+          <ThemeToggle theme={theme} setTheme={setTheme} resolved={resolved} />
+        </div>
       </nav>
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 24px' }}>
         <div style={{ width: '100%', maxWidth: 420 }}>
           {children}
-          <p style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', marginTop: 10 }}>
+          <p style={{ fontSize: 12, color: T.faint, textAlign: 'center', marginTop: 10 }}>
             Just want to decode an offer letter?{' '}
-            <Link href="/offer" style={{ color: C.green, fontWeight: 600, textDecoration: 'none' }}>Try it free, no sign-up →</Link>
+            <Link href="/offer" style={{ color: C.green, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>Try it free, no sign-up →</Link>
           </p>
         </div>
       </div>
@@ -62,9 +57,9 @@ function Shell({ children }: { children: React.ReactNode }) {
   )
 }
 
-const label = { fontSize: 13, fontWeight: 500, color: '#334155', display: 'block', marginBottom: 6 } as const
+const label = { fontSize: 13, fontWeight: 500, color: T.ink, display: 'block', marginBottom: 6 } as const
 const field = { width: '100%', padding: '12px 14px', border: `1px solid ${C.line}`, borderRadius: 10, fontSize: 15, fontFamily: 'inherit' } as const
-const cta = { width: '100%', padding: '14px', background: C.green, color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', marginTop: 4 } as const
+const cta = { width: '100%', padding: '14px', background: C.green, color: T.ivory, border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', marginTop: 4 } as const
 
 function IdentifierToggle({ kind, setKind }: { kind: 'email' | 'phone'; setKind: (k: 'email' | 'phone') => void }) {
   return (
@@ -72,7 +67,7 @@ function IdentifierToggle({ kind, setKind }: { kind: 'email' | 'phone'; setKind:
       {(['email', 'phone'] as const).map(k => (
         <button key={k} type="button" onClick={() => setKind(k)}
           style={{ flex: 1, padding: '8px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-            border: `1px solid ${kind === k ? C.green : C.line}`, background: kind === k ? '#F0FDF4' : '#fff', color: kind === k ? C.green : C.sub }}>
+            border: `1px solid ${kind === k ? C.green : C.line}`, background: kind === k ? T.tint : T.card, color: kind === k ? C.green : C.sub }}>
           {k === 'email' ? 'Email' : 'Mobile'}
         </button>
       ))}
@@ -90,7 +85,7 @@ function IdentifierField({ kind, email, setEmail, phone, setPhone }: {
   return (
     <div><label style={label}>Mobile number</label>
       <div style={{ display: 'flex' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', background: '#F8FAFC', border: `1px solid ${C.line}`, borderRight: 'none', borderRadius: '10px 0 0 10px', fontSize: 14, color: '#334155', fontWeight: 500 }}>🇮🇳 +91</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', background: T.tint, border: `1px solid ${C.line}`, borderRight: 'none', borderRadius: '10px 0 0 10px', fontSize: 14, color: T.ink, fontWeight: 500 }}>🇮🇳 +91</div>
         <input type="tel" value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="10-digit mobile" className="input" maxLength={10} style={{ ...field, borderRadius: '0 10px 10px 0' }} />
       </div></div>
   )
@@ -191,7 +186,7 @@ function LoginForm() {
         </div>
         <button type="submit" disabled={loading || !idValid} className="cta" style={cta}>{loading ? 'Signing in…' : 'Sign in →'}</button>
       </form>
-      <p style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', marginTop: 18 }}>
+      <p style={{ fontSize: 12, color: T.faint, textAlign: 'center', marginTop: 18 }}>
         New to ArthVo?{' '}<Link href="/signup" style={{ color: C.green, fontWeight: 600, textDecoration: 'none' }}>Create an account →</Link>
       </p>
     </Shell>
@@ -225,7 +220,7 @@ function LoginForm() {
           <button type="submit" disabled={loading || newPw.length < 6} className="cta" style={cta}>{loading ? 'Saving…' : 'Set password & sign in →'}</button>
         </form>
       )}
-      <p style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', marginTop: 18 }}>
+      <p style={{ fontSize: 12, color: T.faint, textAlign: 'center', marginTop: 18 }}>
         <button onClick={() => setMode('login')} style={{ color: C.green, background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12 }}>← Back to sign in</button>
       </p>
     </Shell>
@@ -258,14 +253,14 @@ function MockLogin() {
       <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div><label style={label}>Mobile number</label>
           <div style={{ display: 'flex' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', background: '#F8FAFC', border: `1px solid ${C.line}`, borderRight: 'none', borderRadius: '10px 0 0 10px', fontSize: 14, color: '#334155', fontWeight: 500 }}>🇮🇳 +91</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', background: T.tint, border: `1px solid ${C.line}`, borderRight: 'none', borderRadius: '10px 0 0 10px', fontSize: 14, color: T.ink, fontWeight: 500 }}>🇮🇳 +91</div>
             <input type="tel" value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="10-digit mobile number" className="input" maxLength={10} style={{ ...field, borderRadius: '0 10px 10px 0' }} />
           </div></div>
         <div><label style={label}>Password</label>
           <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Your password" className="input" style={field} /></div>
         <button type="submit" disabled={loading} className="cta" style={cta}>{loading ? 'Signing in…' : 'Sign in →'}</button>
       </form>
-      <p style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', marginTop: 18 }}>
+      <p style={{ fontSize: 12, color: T.faint, textAlign: 'center', marginTop: 18 }}>
         Don&apos;t have an account?{' '}<Link href="/signup" style={{ color: C.green, fontWeight: 600, textDecoration: 'none' }}>Create one →</Link>
       </p>
     </Shell>
@@ -275,7 +270,7 @@ function MockLogin() {
 export default function LoginPage() {
   if (!CONFIGURED) return <MockLogin />
   return (
-    <Suspense fallback={<div style={{ minHeight: '100vh', background: '#fff' }} />}>
+    <Suspense fallback={<div style={{ minHeight: '100vh', background: T.paper }} />}>
       <LoginForm />
     </Suspense>
   )

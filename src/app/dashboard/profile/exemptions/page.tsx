@@ -4,7 +4,9 @@ import { useRouter } from 'next/navigation'
 import { computeAnnualHraExemption, type HraMonth } from '@/lib/salary-analytics'
 import { getSalaryFacts } from '@/lib/salary-facts'
 
-const C = { fg:'#3A4B41', wheat:'#E6CFA7', wl:'#F5ECD8', wm:'#D4B98A', bg:'#FDFAF6', card:'#fff', border:'#E4DDD1', text:'#1C2B22', muted:'#7A8A7E', danger:'#B94040' }
+import { tokens as T } from '@/lib/tokens'
+
+const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, bg:T.paper, card:T.card, border:T.hairline, text:T.ink, muted:T.muted, faint:T.faint, green:T.green, marigold:T.marigold, danger:'#B94040' }
 const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`
 
 interface ExemptionsState {
@@ -31,7 +33,7 @@ const DEFAULT: ExemptionsState = {
 // Defining it inside the parent caused React to unmount/remount the <input> on every
 // keystroke, which made each keystroke lose focus.
 function SimpleSection({
-  open, value, q, sub, claimed, capLabel, onToggle, onChange, belowField,
+  open, value, q, sub, claimed, capLabel, onToggle, onChange, belowField, footnote,
 }: {
   open: boolean
   value: number
@@ -42,25 +44,31 @@ function SimpleSection({
   onToggle: () => void
   onChange: (v: number) => void
   belowField?: React.ReactNode
+  footnote?: React.ReactNode
 }) {
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 16, overflow: 'hidden' }}>
-      <button onClick={onToggle} style={{ width: '100%', padding: '14px 16px', background: open ? C.wl : '#fff', border: 'none', borderBottom: open ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <button onClick={onToggle} style={{ width: '100%', padding: '14px 16px', background: open ? C.wl : T.card, border: 'none', borderBottom: open ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
         <div style={{ textAlign: 'left' }}>
           <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>{q}</p>
           <p style={{ fontSize: 10.5, color: C.muted, margin: 0 }}>{sub}</p>
         </div>
-        <span style={{ fontSize: 14, color: C.fg }}>{open ? '−' : '+'}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' as const, color: value > 0 ? C.green : C.marigold }}>
+            {value > 0 ? `${fmt(value)} ✓` : '₹ —'}
+          </span>
+          <span style={{ fontSize: 14, color: C.fg }}>{open ? '−' : '+'}</span>
+        </div>
       </button>
       {open && (
-        <div style={{ padding: '14px 16px', background: '#fff' }}>
+        <div style={{ padding: '14px 16px', background: T.card }}>
           <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden', marginBottom: 10 }}>
             <span style={{ padding: '8px 10px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
             <input type="text" inputMode="numeric"
               value={value > 0 ? value : ''}
               onChange={(e) => onChange(parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0)}
               placeholder="0"
-              style={{ flex: 1, border: 'none', outline: 'none', padding: '8px 10px', fontSize: 13, fontFamily: 'inherit', color: C.text }}
+              style={{ flex: 1, border: 'none', outline: 'none', padding: '8px 10px', fontSize: 13, fontFamily: 'inherit', color: C.text, background: 'transparent' }}
             />
           </div>
           {claimed > 0 && (
@@ -70,6 +78,9 @@ function SimpleSection({
             </div>
           )}
           {belowField}
+          {footnote && (
+            <p style={{ fontSize: 10, color: C.faint, margin: '10px 0 0', lineHeight: 1.45 }}>{footnote}</p>
+          )}
         </div>
       )}
     </div>
@@ -83,13 +94,13 @@ function DetectedHint({ monthly, rule, onUse }: { monthly: number; rule: string;
   if (!monthly || monthly <= 0) return null
   const annual = monthly * 12
   return (
-    <div style={{ marginTop: 10, padding: '10px 12px', background: '#EEF4FF', border: '1px solid #C9D9F2', borderRadius: 4 }}>
+    <div style={{ marginTop: 10, padding: '10px 12px', background: T.tint, border: `1px solid ${T.hairline}`, borderRadius: 4 }}>
       <p style={{ fontSize: 11, color: C.text, margin: '0 0 4px' }}>
         🔎 Detected in your slip: <strong>{fmt(monthly)}/month</strong> <span style={{ color: C.muted }}>(~{fmt(annual)}/year)</span>
       </p>
       <p style={{ fontSize: 10.5, color: C.muted, margin: 0, lineHeight: 1.45 }}>{rule}</p>
       {onUse && (
-        <button onClick={onUse} style={{ marginTop: 6, padding: '4px 10px', background: C.fg, color: '#fff', border: 'none', borderRadius: 4, fontSize: 10.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+        <button onClick={onUse} style={{ marginTop: 6, padding: '4px 10px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 4, fontSize: 10.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
           Use {fmt(annual)}/year
         </button>
       )}
@@ -243,6 +254,9 @@ export default function ExemptionsPage() {
   // so we just display the user's entered amount and warn in the description.
   const totalOtherExempts = s.lta + s.driverSalary + s.carMaintenance + s.dailyAllowance + s.superannuation + s.pfWithdrawal + gratuityCapped
   const totalAnnualExempt = hraAnnualExemption + totalOtherExempts
+  // Aggregate state shown on each collapsed group bar (gratuity uses the capped figure for parity with its row).
+  const grpCarSum = s.driverSalary + s.carMaintenance + s.dailyAllowance
+  const grpRetireSum = s.superannuation + s.pfWithdrawal + gratuityCapped
 
   useEffect(() => {
     try {
@@ -277,8 +291,8 @@ export default function ExemptionsPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '20px 0' }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Exemptions</h1>
-      <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>Section 10 — income that is completely tax-free (Old Regime only)</p>
+      <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Allowances</h1>
+      <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>Income that is completely tax-free — <span style={{ whiteSpace: 'nowrap' }}>Old Regime only · Section 10</span></p>
 
       {salary && (salary.hra > 0 || detectedConveyance > 0) && (
         <div style={{ background: C.wl, border: `1px solid ${C.wm}`, borderRadius: 8, padding: 16, marginBottom: 20 }}>
@@ -302,23 +316,28 @@ export default function ExemptionsPage() {
 
       {/* HRA — kept as the rich existing flow */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 16, overflow: 'hidden' }}>
-        <button onClick={() => toggle('hra')} style={{ width: '100%', padding: '14px 16px', background: expanded.includes('hra') ? C.wl : '#fff', border: 'none', borderBottom: expanded.includes('hra') ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <button onClick={() => toggle('hra')} style={{ width: '100%', padding: '14px 16px', background: expanded.includes('hra') ? C.wl : T.card, border: 'none', borderBottom: expanded.includes('hra') ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ textAlign: 'left' }}>
-            <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>House Rent Allowance (HRA) u/s 10(13A)</p>
-            <p style={{ fontSize: 10.5, color: C.muted, margin: 0 }}>Min of: actual HRA · rent − 10% basic · 50% (metro) / 40% basic · Old regime only</p>
+            <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>House rent (HRA)</p>
+            <p style={{ fontSize: 10.5, color: C.muted, margin: 0 }}>Rent you pay — usually the biggest one</p>
           </div>
-          <span style={{ fontSize: 14, color: C.fg }}>{expanded.includes('hra') ? '−' : '+'}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' as const, color: hraAnnualExemption > 0 ? C.green : C.marigold }}>
+              {hraAnnualExemption > 0 ? `${fmt(hraAnnualExemption)} ✓` : '₹ —'}
+            </span>
+            <span style={{ fontSize: 14, color: C.fg }}>{expanded.includes('hra') ? '−' : '+'}</span>
+          </div>
         </button>
         {expanded.includes('hra') && (
-          <div style={{ padding: '14px 16px', background: '#fff' }}>
+          <div style={{ padding: '14px 16px', background: T.card }}>
             <div style={{ marginBottom: 14 }}>
               <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 5, fontWeight: 500, textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>
                 HRA received {hraAnnualReceived > 0 ? '(annual)' : '(monthly)'}
               </label>
-              <div style={{ padding: '8px 10px', background: '#FAFAF8', border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 12, color: C.text, fontWeight: 600 }}>
+              <div style={{ padding: '8px 10px', background: T.card, border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 12, color: C.text, fontWeight: 600 }}>
                 {hraAnnualReceived > 0
                   ? <>{fmt(hraAnnualReceived)}/year <span style={{ fontSize: 10.5, color: C.muted, fontWeight: 400, marginLeft: 6 }}>(from your timeline)</span></>
-                  : <>{fmt(s.hraReceived)}/month <span style={{ fontSize: 10.5, color: C.muted, fontWeight: 400, marginLeft: 6 }}>(auto-filled from slip)</span></>}
+                  : <>{fmt(s.hraReceived)}/month <span style={{ fontSize: 10.5, color: C.muted, fontWeight: 400, marginLeft: 6 }}>{s.hraReceived > 0 ? '(auto-filled from slip)' : '(none found on your slip — add it if your slip shows HRA)'}</span></>}
               </div>
               {hraReceivedVaried && (
                 <p style={{ fontSize: 10.5, color: C.muted, margin: '6px 0 0', lineHeight: 1.5 }}>
@@ -342,7 +361,7 @@ export default function ExemptionsPage() {
                   value={s.rentPaid > 0 ? s.rentPaid : ''}
                   onChange={(e) => update('rentPaid', parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0)}
                   placeholder="0"
-                  style={{ flex: 1, border: 'none', outline: 'none', padding: '8px 10px', fontSize: 13, fontFamily: 'inherit', color: C.text }}
+                  style={{ flex: 1, border: 'none', outline: 'none', padding: '8px 10px', fontSize: 13, fontFamily: 'inherit', color: C.text, background: 'transparent' }}
                 />
               </div>
             </div>
@@ -355,13 +374,13 @@ export default function ExemptionsPage() {
                 </div>
               </div>
             </label>
-            <div style={{ padding: '8px 10px', background: '#FFF8E6', border: '1px solid #E8D9A8', borderRadius: 4, marginBottom: 12 }}>
-              <p style={{ fontSize: 10.5, color: '#7A5C00', margin: 0, lineHeight: 1.45 }}>
+            <div style={{ padding: '8px 10px', background: T.caution.fill, border: `1px solid ${T.caution.border}`, borderRadius: 4, marginBottom: 12 }}>
+              <p style={{ fontSize: 10.5, color: T.caution.text, margin: 0, lineHeight: 1.45 }}>
                 ⚠️ HRA exemption is <strong>not available under the new tax regime</strong>. This claim only applies if you opt for the old regime.
               </p>
             </div>
             {s.rentPaid > 0 ? (
-              <div style={{ padding: '12px 14px', background: '#F0F9F7', border: '1px solid #D1E8E4', borderRadius: 4 }}>
+              <div style={{ padding: '12px 14px', background: T.tint, border: `1px solid ${T.hairline}`, borderRadius: 4 }}>
                 <p style={{ fontSize: 10.5, color: C.muted, margin: '0 0 4px', fontWeight: 500, textTransform: 'uppercase' as const }}>Tax-free HRA exemption</p>
                 <p style={{ fontSize: 16, fontWeight: 700, color: C.fg, margin: 0 }}>{fmt(hraAnnualExemption)}/year{hraAnnualExemption > 0 ? ` · ~${fmt(hraMonthlyDisplay)}/month avg` : ''}</p>
                 {hraComp && (
@@ -381,20 +400,20 @@ export default function ExemptionsPage() {
                         {hraComp.breakdown.map((seg, i) => {
                           const least = Math.min(seg.hra, seg.rentMinus10, seg.cityPctBasic)
                           return (
-                            <div key={i} style={{ border: `1px solid ${C.border}`, borderRadius: 6, padding: 8, marginBottom: 8, background: '#fff' }}>
+                            <div key={i} style={{ border: `1px solid ${C.border}`, borderRadius: 6, padding: 8, marginBottom: 8, background: T.card }}>
                               <p style={{ fontSize: 11, fontWeight: 700, color: C.text, margin: '0 0 6px' }}>
                                 {fmtMonth(seg.fromMonth)}{seg.fromMonth !== seg.toMonth ? ` – ${fmtMonth(seg.toMonth)}` : ''} <span style={{ color: C.muted, fontWeight: 400 }}>· {seg.months} mo · basic {fmt(seg.basic)}/mo</span>
                               </p>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', fontSize: 11, borderRadius: 4, background: seg.hra === least ? '#E3F2EC' : 'transparent', fontWeight: seg.hra === least ? 700 : 400, color: seg.hra === least ? C.fg : C.text }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', fontSize: 11, borderRadius: 4, background: seg.hra === least ? T.slip.fill : 'transparent', fontWeight: seg.hra === least ? 700 : 400, color: seg.hra === least ? C.fg : C.text }}>
                                 <span>Actual HRA received</span><span>{fmt(seg.hra)}/mo</span>
                               </div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', fontSize: 11, borderRadius: 4, background: seg.rentMinus10 === least ? '#E3F2EC' : 'transparent', fontWeight: seg.rentMinus10 === least ? 700 : 400, color: seg.rentMinus10 === least ? C.fg : C.text }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', fontSize: 11, borderRadius: 4, background: seg.rentMinus10 === least ? T.slip.fill : 'transparent', fontWeight: seg.rentMinus10 === least ? 700 : 400, color: seg.rentMinus10 === least ? C.fg : C.text }}>
                                 <span>Rent − 10% of basic <span style={{ color: C.muted, fontWeight: 400 }}>({fmt(s.rentPaid)} − {fmt(Math.round(seg.basic * 0.1))})</span></span><span>{fmt(seg.rentMinus10)}/mo</span>
                               </div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', fontSize: 11, borderRadius: 4, background: seg.cityPctBasic === least ? '#E3F2EC' : 'transparent', fontWeight: seg.cityPctBasic === least ? 700 : 400, color: seg.cityPctBasic === least ? C.fg : C.text }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', fontSize: 11, borderRadius: 4, background: seg.cityPctBasic === least ? T.slip.fill : 'transparent', fontWeight: seg.cityPctBasic === least ? 700 : 400, color: seg.cityPctBasic === least ? C.fg : C.text }}>
                                 <span>{s.isMetro ? '50%' : '40%'} of basic</span><span>{fmt(seg.cityPctBasic)}/mo</span>
                               </div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 8px', marginTop: 4, borderTop: `1px dashed ${C.border}`, fontSize: 11, fontWeight: 700, color: '#2A7A4A' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 8px', marginTop: 4, borderTop: `1px dashed ${C.border}`, fontSize: 11, fontWeight: 700, color: C.green }}>
                                 <span>→ Exempt (least) × {seg.months}</span><span>{fmt(seg.monthlyExempt)} × {seg.months} = {fmt(seg.periodExempt)}</span>
                               </div>
                             </div>
@@ -409,10 +428,11 @@ export default function ExemptionsPage() {
                 )}
               </div>
             ) : (
-              <div style={{ padding: '10px 12px', background: '#FFF3DD', border: `1px solid ${C.wm}`, borderRadius: 4 }}>
-                <p style={{ fontSize: 11, color: '#856404', margin: 0 }}>💡 Enter monthly rent to claim HRA exemption.</p>
+              <div style={{ padding: '10px 12px', background: T.caution.fill, border: `1px solid ${C.wm}`, borderRadius: 4 }}>
+                <p style={{ fontSize: 11, color: T.caution.text, margin: 0 }}>💡 Enter monthly rent to claim HRA exemption.</p>
               </div>
             )}
+            <p style={{ fontSize: 10, color: C.faint, margin: '10px 0 0', lineHeight: 1.45 }}>HRA · u/s 10(13A) · Min of: actual HRA · rent − 10% basic · 50% (metro) / 40% basic · Old regime only</p>
           </div>
         )}
       </div>
@@ -429,107 +449,163 @@ export default function ExemptionsPage() {
           <SimpleSection
             open={expanded.includes('lta')}
             onToggle={() => toggle('lta')}
-            q="Leave Travel Allowance (LTA) u/s 10(5)"
-            sub="Actual economy fare only · 2 journeys per 4-yr block · old regime"
+            q="Travel allowance (LTA)"
+            sub="Trips within India, via your employer."
             value={s.lta}
             onChange={(v) => update('lta', v)}
             claimed={s.lta}
             belowField={
               <>
               <DetectedHint monthly={detectedLta} rule="LTA is exempt only for actual travel (economy fare · 2 journeys per 4-yr block). Enter the fare you'll actually claim — not the full allowance shown on the slip." />
-              <div style={{ marginTop: 10, padding: '10px 12px', background: '#F0F9F4', border: '1px solid #CFE6D8', borderRadius: 4 }}>
+              <div style={{ marginTop: 10, padding: '10px 12px', background: T.slip.fill, border: `1px solid ${T.slip.border}`, borderRadius: 4 }}>
                 <p style={{ fontSize: 10.5, color: C.muted, margin: 0, lineHeight: 1.5 }}>
-                  Current block <strong style={{ color: '#2A7A4A' }}>CY {blk.start}–{blk.end}</strong> · 2 journeys allowed.
+                  Current block <strong style={{ color: C.green }}>CY {blk.start}–{blk.end}</strong> · 2 journeys allowed.
                   {inCarryWindow && <> Carry-forward: one unused journey from CY {blk.prevStart}–{blk.prevEnd} can be your first journey this year.</>}
                 </p>
               </div>
               </>
             }
+            footnote="u/s 10(5) · actual economy fare only · 2 journeys per 4-yr block · old regime only"
           />
         )
       })()}
 
-      {/* Section 10 — Driver salary */}
-      <SimpleSection
-        open={expanded.includes('driver')}
-        onToggle={() => toggle('driver')}
-        q="Driver salary u/s 10(14)(i)"
-        sub="Reimbursed driver of an official-use car · old regime"
-        value={s.driverSalary}
-        onChange={(v) => update('driverSalary', v)}
-        claimed={s.driverSalary}
-        belowField={<DetectedHint monthly={detectedDriver} rule="Exempt only when reimbursed for a driver of an official-use car and actually paid to the driver. Confirm the eligible amount." onUse={() => update('driverSalary', detectedDriver * 12)} />}
-      />
+      {/* Group A — Company car & travel perks. The inner wrapper stays MOUNTED and is hidden
+          with the `hidden` attribute (CSS display:none), so amounts typed in a closed group keep
+          feeding the totals — never conditionally unmounted. */}
+      <div style={{ background: C.card, border: `1px dashed ${C.wm}`, borderRadius: 11, marginBottom: 16, overflow: 'hidden' }}>
+        <button onClick={() => toggle('grpCar')} style={{ width: '100%', padding: '14px 16px', background: T.card, border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <div style={{ textAlign: 'left' }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>Company car & travel perks</p>
+            <p style={{ fontSize: 10.5, color: C.muted, margin: 0 }}>Driver · car running costs · daily allowance</p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {grpCarSum > 0
+              ? <span style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' as const, color: C.green }}>{fmt(grpCarSum)} ✓</span>
+              : <span style={{ fontSize: 11.5, color: C.faint }}>3 items</span>}
+            <span style={{ fontSize: 13, color: C.fg }}>{expanded.includes('grpCar') ? '▾' : '▸'}</span>
+          </div>
+        </button>
+        <div hidden={!expanded.includes('grpCar')} style={{ padding: '12px 12px 0' }}>
+          {/* Section 10 — Driver salary */}
+          <SimpleSection
+            open={expanded.includes('driver')}
+            onToggle={() => toggle('driver')}
+            q="Driver's salary"
+            sub="If your company car comes with a driver"
+            value={s.driverSalary}
+            onChange={(v) => update('driverSalary', v)}
+            claimed={s.driverSalary}
+            belowField={<DetectedHint monthly={detectedDriver} rule="Exempt only when reimbursed for a driver of an official-use car and actually paid to the driver. Confirm the eligible amount." onUse={() => update('driverSalary', detectedDriver * 12)} />}
+            footnote="u/s 10(14)(i) · reimbursed driver of an official-use car · old regime"
+          />
 
-      {/* Section 10 — Car maintenance */}
-      <SimpleSection
-        open={expanded.includes('car')}
-        onToggle={() => toggle('car')}
-        q="Car maintenance u/s 10(14)(i)"
-        sub="Official-use car running costs — fuel, repairs · old regime"
-        value={s.carMaintenance}
-        onChange={(v) => update('carMaintenance', v)}
-        claimed={s.carMaintenance}
-        belowField={<DetectedHint monthly={detectedFuel} rule="Exempt only for official-use car running/maintenance (fuel, repairs, insurance). Confirm the eligible amount." onUse={() => update('carMaintenance', detectedFuel * 12)} />}
-      />
+          {/* Section 10 — Car maintenance */}
+          <SimpleSection
+            open={expanded.includes('car')}
+            onToggle={() => toggle('car')}
+            q="Car running costs"
+            sub="Fuel & maintenance your employer covers"
+            value={s.carMaintenance}
+            onChange={(v) => update('carMaintenance', v)}
+            claimed={s.carMaintenance}
+            belowField={<DetectedHint monthly={detectedFuel} rule="Exempt only for official-use car running/maintenance (fuel, repairs, insurance). Confirm the eligible amount." onUse={() => update('carMaintenance', detectedFuel * 12)} />}
+            footnote="u/s 10(14)(i) · official-use car running costs — fuel, repairs · old regime"
+          />
 
-      {/* Section 10 — Daily allowance on tour */}
-      <SimpleSection
-        open={expanded.includes('da')}
-        onToggle={() => toggle('da')}
-        q="Daily allowance on tour/transfer u/s 10(14)(ii)"
-        sub="Per-day allowance on official tour · old regime"
-        value={s.dailyAllowance}
-        onChange={(v) => update('dailyAllowance', v)}
-        claimed={s.dailyAllowance}
-      />
+          {/* Section 10 — Daily allowance on tour */}
+          <SimpleSection
+            open={expanded.includes('da')}
+            onToggle={() => toggle('da')}
+            q="Daily allowance on tours"
+            sub="For days you travel for work."
+            value={s.dailyAllowance}
+            onChange={(v) => update('dailyAllowance', v)}
+            claimed={s.dailyAllowance}
+            footnote="u/s 10(14)(ii) · per-day allowance on official tour · old regime"
+          />
+        </div>
+      </div>
 
-      {/* Section 10 — Superannuation */}
-      <SimpleSection
-        open={expanded.includes('superann')}
-        onToggle={() => toggle('superann')}
-        q="Superannuation fund contribution"
-        sub="Employer contribution · exempt up to 15% of (basic + DA)"
-        value={s.superannuation}
-        onChange={(v) => update('superannuation', v)}
-        claimed={s.superannuation}
-      />
+      {/* Group B — Retirement & exit payouts. Inner wrapper stays MOUNTED, hidden via CSS only. */}
+      <div style={{ background: C.card, border: `1px dashed ${C.wm}`, borderRadius: 11, marginBottom: 16, overflow: 'hidden' }}>
+        <button onClick={() => toggle('grpRetire')} style={{ width: '100%', padding: '14px 16px', background: T.card, border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <div style={{ textAlign: 'left' }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>Retirement & exit payouts</p>
+            <p style={{ fontSize: 10.5, color: C.muted, margin: 0 }}>Superannuation · PF withdrawal · gratuity</p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {grpRetireSum > 0
+              ? <span style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' as const, color: C.green }}>{fmt(grpRetireSum)} ✓</span>
+              : <span style={{ fontSize: 11.5, color: C.faint }}>3 items</span>}
+            <span style={{ fontSize: 13, color: C.fg }}>{expanded.includes('grpRetire') ? '▾' : '▸'}</span>
+          </div>
+        </button>
+        <div hidden={!expanded.includes('grpRetire')} style={{ padding: '12px 12px 0' }}>
+          {/* Section 10 — Superannuation */}
+          <SimpleSection
+            open={expanded.includes('superann')}
+            onToggle={() => toggle('superann')}
+            q="Superannuation"
+            sub="What your employer puts into a retirement fund"
+            value={s.superannuation}
+            onChange={(v) => update('superannuation', v)}
+            claimed={s.superannuation}
+            footnote="Employer contribution · exempt up to 15% of (basic + DA)"
+          />
 
-      {/* Section 10 — PF withdrawal */}
-      <SimpleSection
-        open={expanded.includes('pf')}
-        onToggle={() => toggle('pf')}
-        q="PF withdrawal on retirement / separation"
-        sub="Tax-free after 5 yrs' service or on retirement"
-        value={s.pfWithdrawal}
-        onChange={(v) => update('pfWithdrawal', v)}
-        claimed={s.pfWithdrawal}
-      />
+          {/* Section 10 — PF withdrawal */}
+          <SimpleSection
+            open={expanded.includes('pf')}
+            onToggle={() => toggle('pf')}
+            q="PF withdrawal"
+            sub="Money you took out of your PF this year"
+            value={s.pfWithdrawal}
+            onChange={(v) => update('pfWithdrawal', v)}
+            claimed={s.pfWithdrawal}
+            footnote="Tax-free after 5 yrs' service or on retirement"
+          />
 
-      {/* Section 10 — Gratuity */}
-      <SimpleSection
-        open={expanded.includes('gratuity')}
-        onToggle={() => toggle('gratuity')}
-        q="Gratuity u/s 10(10)"
-        sub="On retirement · ½-month basic × years · cap ₹10L (non-govt)"
-        value={s.gratuity}
-        onChange={(v) => update('gratuity', v)}
-        claimed={gratuityCapped}
-        capLabel="₹10,00,000 (non-govt)"
-      />
+          {/* Section 10 — Gratuity */}
+          <SimpleSection
+            open={expanded.includes('gratuity')}
+            onToggle={() => toggle('gratuity')}
+            q="Gratuity"
+            sub="Exit payout — tax-free up to ₹10L"
+            value={s.gratuity}
+            onChange={(v) => update('gratuity', v)}
+            claimed={gratuityCapped}
+            capLabel="₹10,00,000 (non-govt)"
+            footnote="u/s 10(10) · on retirement · ½-month basic × years · cap ₹10L (non-govt)"
+          />
+        </div>
+      </div>
 
       {/* Total */}
-      <div style={{ background: '#F0F9F7', border: `1px solid #D1E8E4`, borderRadius: 8, padding: 16, marginBottom: 24 }}>
-        <p style={{ fontSize: 11, color: C.muted, margin: '0 0 6px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>Total exemptions claimed (annual)</p>
+      <div style={{ background: T.tint, border: `1px solid ${T.hairline}`, borderRadius: 8, padding: 16, marginBottom: 24 }}>
+        <p style={{ fontSize: 11, color: C.muted, margin: '0 0 6px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>Total allowances claimed (annual)</p>
         <p style={{ fontSize: 18, fontWeight: 700, color: C.fg, margin: 0 }}>{fmt(totalAnnualExempt)}</p>
-        <p style={{ fontSize: 10.5, color: C.muted, margin: '6px 0 0' }}>HRA {fmt(hraAnnualExemption)} · LTA {fmt(s.lta)} · Driver {fmt(s.driverSalary)} · Car {fmt(s.carMaintenance)} · DA {fmt(s.dailyAllowance)} · Super-ann {fmt(s.superannuation)} · PF {fmt(s.pfWithdrawal)} · Gratuity {fmt(gratuityCapped)}</p>
+        <p style={{ fontSize: 10.5, color: C.muted, margin: '6px 0 0' }}>
+          {[
+            `HRA ${fmt(hraAnnualExemption)}`,
+            `LTA ${fmt(s.lta)}`,
+            `Driver ${fmt(s.driverSalary)}`,
+            `Car ${fmt(s.carMaintenance)}`,
+            `DA ${fmt(s.dailyAllowance)}`,
+            `Super-ann ${fmt(s.superannuation)}`,
+            `PF ${fmt(s.pfWithdrawal)}`,
+            `Gratuity ${fmt(gratuityCapped)}`,
+          ].map((t, i) => (
+            <span key={i}>{i > 0 ? ' · ' : ''}<span style={{ whiteSpace: 'nowrap' }}>{t}</span></span>
+          ))}
+        </p>
         <p style={{ fontSize: 10.5, color: C.muted, margin: '6px 0 0', fontStyle: 'italic' }}>These count only under Old Regime. New Regime disables Section 10 exemptions.</p>
       </div>
 
       {/* Navigation */}
       <div style={{ display: 'flex', gap: 12 }}>
-        <button onClick={() => router.push('/dashboard/profile/other-income')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
-        <button onClick={() => router.push('/dashboard/profile/deductions')} style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Next: Deductions →</button>
+        <button onClick={() => router.push('/dashboard/profile/other-income')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>← Back</button>
+        <button onClick={() => router.push('/dashboard/profile/deductions')} style={{ flex: 1, padding: '12px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Deductions →</button>
       </div>
     </div>
   )

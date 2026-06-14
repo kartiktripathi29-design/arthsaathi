@@ -1,25 +1,20 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAppStore } from '@/store/AppStore'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { useUser } from '@/lib/useUser'
+import { tokens as T } from '@/lib/tokens'
+import Logo from '@/components/Logo'
+import { ThemeToggle, useThemedBase } from '@/components/ThemeToggle'
 
 const SUPABASE_CONFIGURED = !!process.env.NEXT_PUBLIC_SUPABASE_URL
 
-const C = { primary: '#3A4B41', accent: '#E6CFA7', white: '#fff', bg: '#FDFAF6' }
+// Dashboard chrome palette (desktop): taupe rail + teal brand cap + sand header.
+const C = { rail: T.taupe, railLine: T.taupeLine, cap: T.teal, accent: T.teal, nav: T.nav, bg: T.paper }
 
-function Logo() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 120 120" fill="none">
-      <rect width="120" height="120" rx="14" fill={C.accent}/>
-      <polygon points="9,9 21,9 60,101 99,9 111,9 60,111" fill={C.primary}/>
-      <circle cx="90" cy="24" r="18" fill={C.primary}/>
-      <circle cx="90" cy="24" r="11" fill={C.accent}/>
-    </svg>
-  )
-}
+type ThemeMode = 'system' | 'light' | 'dark'
 
 function Sidebar() {
   const pathname = usePathname()
@@ -50,30 +45,57 @@ function Sidebar() {
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/')
 
-  const PROFILE_SECTIONS = [
+  // One top-level profile item (Documents), then two always-visible families. Each family renders a
+  // section label styled like "MY PROFILE" with its sub-items nested below — no expand/collapse.
+  // (This is the sidebar's own structure; TopBar keeps its separate title lookup.)
+  const PROFILE_TOP = [
     { href: '/dashboard/profile/documents', label: 'Documents' },
-    { href: '/dashboard/profile/salary', label: 'Salary' },
-    { href: '/dashboard/profile/other-income', label: 'Other Income' },
-    { href: '/dashboard/profile/exemptions', label: 'Exemptions' },
-    { href: '/dashboard/profile/deductions', label: 'Deductions' },
   ]
+  const PROFILE_FAMILIES = [
+    { label: 'Income', items: [
+      { href: '/dashboard/profile/salary', label: 'Salary' },
+      { href: '/dashboard/profile/other-income', label: 'Other earnings' },
+    ] },
+    { label: 'Tax breaks', items: [
+      { href: '/dashboard/profile/exemptions', label: 'Allowances' },
+      { href: '/dashboard/profile/deductions', label: 'Deductions' },
+    ] },
+  ]
+  // Shared section-label style so the family labels match "MY PROFILE" exactly.
+  const sectionLabelStyle: React.CSSProperties = { fontSize: 10, color: T.nav, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '10px 16px 5px' }
+  // One profile link; paddingLeft sets the indent (26 = top-level, 42 = nested under a family).
+  const profileLink = (item: { href: string; label: string }, paddingLeft: number) => {
+    const active = isActive(item.href)
+    return (
+      <Link key={item.href} href={item.href} style={{
+        display: 'flex', alignItems: 'center',
+        padding: `9px 16px 9px ${paddingLeft}px`, textDecoration: 'none',
+        fontSize: 13, fontFamily: 'inherit',
+        borderLeft: `2px solid ${active ? C.accent : 'transparent'}`,
+        background: active ? T.tint : 'transparent',
+        color: active ? C.accent : C.nav,
+        fontWeight: active ? 600 : 500,
+        transition: 'all 0.15s',
+      }}>
+        {item.label}
+      </Link>
+    )
+  }
 
   return (
-    <aside style={{
-      width: 216, minHeight: '100vh', background: C.primary,
+    <aside className="dash-rail" style={{
+      width: 216, minHeight: '100vh', background: C.rail,
+      borderRight: `1px solid ${C.railLine}`,
       display: 'flex', flexDirection: 'column', flexShrink: 0,
       position: 'fixed', top: 0, left: 0, bottom: 0, zIndex: 50,
       fontFamily: '"Sora",-apple-system,sans-serif',
     }}>
-      <div style={{ padding: '18px 16px 14px', borderBottom: '1px solid rgba(230,207,167,0.1)', display: 'flex', alignItems: 'center', gap: 10 }}>
+      {/* Teal brand cap — logo reads in ivory on the teal block. Height mirrors the header bar exactly
+          (same 46px + safe-area-top math) so the cap's bottom edge lands on the header's green underline,
+          reading as one continuous top band. Sidebar is desktop-only, so this never affects mobile. */}
+      <div style={{ height: 'calc(46px + env(safe-area-inset-top))', padding: 'env(safe-area-inset-top) 16px 0', background: T.cap, display: 'flex', alignItems: 'center', gap: 10 }}>
         <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Logo />
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#fff', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
-              Arth<span style={{ color: C.accent }}>Vo</span>
-            </div>
-            <div style={{ fontSize: 8, color: 'rgba(230,207,167,0.35)', letterSpacing: '0.12em', marginTop: 1 }}>WEALTH EVOLVED</div>
-          </div>
+          <Logo variant="onTeal" size={28} />
         </Link>
       </div>
 
@@ -85,80 +107,67 @@ function Sidebar() {
               padding: '10px 16px', textDecoration: 'none',
               fontSize: 13, fontFamily: 'inherit',
               borderLeft: `2px solid ${pathname === '/dashboard' ? C.accent : 'transparent'}`,
-              background: pathname === '/dashboard' ? 'rgba(230,207,167,0.1)' : 'transparent',
-              color: pathname === '/dashboard' ? C.accent : 'rgba(255,255,255,0.45)',
-              fontWeight: pathname === '/dashboard' ? 600 : 400,
+              background: pathname === '/dashboard' ? T.tint : 'transparent',
+              color: pathname === '/dashboard' ? C.accent : C.nav,
+              fontWeight: pathname === '/dashboard' ? 600 : 500,
               transition: 'all 0.15s',
             }}>
-              <span style={{ fontSize: 15, width: 20, textAlign: 'center' }}>📊</span>
               Dashboard
             </Link>
-            <div style={{ margin: '6px 16px', borderTop: '1px solid rgba(255,255,255,0.07)' }} />
+            <div style={{ margin: '6px 16px', borderTop: `1px solid ${C.railLine}` }} />
           </>
         )}
 
-        <div style={{ fontSize: 9, color: 'rgba(230,207,167,0.35)', letterSpacing: '0.14em', textTransform: 'uppercase', padding: '10px 16px 5px' }}>
-          My Profile
-        </div>
-        {PROFILE_SECTIONS.map(item => {
-          const active = isActive(item.href)
-          return (
-            <Link key={item.href} href={item.href} style={{
-              display: 'flex', alignItems: 'center',
-              padding: '9px 16px 9px 26px', textDecoration: 'none',
-              fontSize: 12.5, fontFamily: 'inherit',
-              borderLeft: `2px solid ${active ? C.accent : 'transparent'}`,
-              background: active ? 'rgba(230,207,167,0.1)' : 'transparent',
-              color: active ? C.accent : 'rgba(255,255,255,0.4)',
-              fontWeight: active ? 600 : 400,
-              transition: 'all 0.15s',
-            }}>
-              {item.label}
-            </Link>
-          )
-        })}
+        <div style={sectionLabelStyle}>My Profile</div>
+        {PROFILE_TOP.map(item => profileLink(item, 26))}
 
-        <div style={{ margin: '8px 16px 6px', borderTop: '1px solid rgba(255,255,255,0.07)' }} />
+        {PROFILE_FAMILIES.map(family => (
+          <Fragment key={family.label}>
+            <div style={sectionLabelStyle}>{family.label}</div>
+            {family.items.map(item => profileLink(item, 42))}
+          </Fragment>
+        ))}
 
-        <Link href="/dashboard/tax" style={{
+        <div style={{ margin: '8px 16px 6px', borderTop: `1px solid ${C.railLine}` }} />
+
+        <Link href="/dashboard/tax/optimizer" style={{
           display: 'flex', alignItems: 'center', gap: 9,
           padding: '10px 16px', textDecoration: 'none',
           fontSize: 13, fontFamily: 'inherit',
           borderLeft: `2px solid ${isActive('/dashboard/tax') ? C.accent : 'transparent'}`,
-          background: isActive('/dashboard/tax') ? 'rgba(230,207,167,0.1)' : 'transparent',
-          color: isActive('/dashboard/tax') ? C.accent : 'rgba(255,255,255,0.45)',
-          fontWeight: isActive('/dashboard/tax') ? 600 : 400,
+          background: isActive('/dashboard/tax') ? T.tint : 'transparent',
+          color: isActive('/dashboard/tax') ? C.accent : C.nav,
+          fontWeight: isActive('/dashboard/tax') ? 600 : 500,
           transition: 'all 0.15s',
         }}>
-          <span style={{ fontSize: 15, width: 20, textAlign: 'center' }}>🎯</span>
-          Tax Optimizer
+          Your Tax
         </Link>
       </nav>
 
-      <div style={{ padding: 10, borderTop: '1px solid rgba(230,207,167,0.08)' }}>
+      <div style={{ padding: 10, borderTop: `1px solid ${C.railLine}` }}>
         {user && (
           <div style={{
             display: 'flex', alignItems: 'center', gap: 9,
             padding: '8px 10px', marginBottom: 6,
-            background: 'rgba(230,207,167,0.07)', border: '1px solid rgba(230,207,167,0.12)',
+            background: T.card, border: `1px solid ${T.hairline}`,
             borderRadius: 7,
           }}>
             <div style={{
               width: 30, height: 30, borderRadius: '50%',
-              background: C.accent, color: C.primary,
+              background: C.cap, color: T.onTeal,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 11, fontWeight: 700, flexShrink: 0,
             }}>{initials}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12, color: '#fff', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name}</div>
-              <div style={{ fontSize: 10, color: 'rgba(230,207,167,0.4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(user as any).phone || (user as any).email || ''}</div>
+              <div style={{ fontSize: 12, color: T.ink, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name}</div>
+              <div style={{ fontSize: 10, color: T.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(user as any).phone || (user as any).email || ''}</div>
             </div>
           </div>
         )}
         <button onClick={handleSignOut} style={{
           width: '100%', padding: '7px 10px', background: 'transparent',
-          border: '1px solid rgba(255,255,255,0.08)', borderRadius: 5,
-          color: 'rgba(255,255,255,0.35)', fontSize: 12, cursor: 'pointer',
+          border: `1px solid ${C.railLine}`, borderRadius: 5,
+          color: C.nav, fontSize: 12, cursor: 'pointer',
           textAlign: 'left', fontFamily: 'inherit', letterSpacing: '0.01em',
         }}>
           ↪ Sign out
@@ -168,9 +177,28 @@ function Sidebar() {
   )
 }
 
-function TopBar() {
+function TopBar({ theme, setTheme, resolved }: { theme: ThemeMode; setTheme: (t: ThemeMode) => void; resolved: 'light' | 'dark' }) {
   const pathname = usePathname()
+  const router = useRouter()
+  const { user, logout } = useAppStore()
   const [selectedFY, setSelectedFY] = useState('FY 2026–27')
+  // Mobile-only account menu: the sidebar footer (chip + sign-out) hides with the rail under 768px,
+  // so the chip resurfaces here in the top bar as a tap-to-open dropdown.
+  const [menuOpen, setMenuOpen] = useState(false)
+  const chipRef = useRef<HTMLDivElement>(null)
+
+  const initials = user?.name?.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase() || '?'
+
+  // Same teardown as the sidebar's sign-out: clear the Supabase session before wiping local state.
+  const handleSignOut = async () => {
+    try {
+      if (SUPABASE_CONFIGURED) await createSupabaseBrowserClient().auth.signOut()
+    } catch {
+      // ignore — still clear local state below
+    }
+    logout()
+    router.replace('/login')
+  }
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -179,32 +207,150 @@ function TopBar() {
     }
   }, [])
 
+  // Close the account menu on any tap outside the chip.
+  useEffect(() => {
+    if (!menuOpen) return
+    const onDocClick = (e: MouseEvent) => {
+      if (chipRef.current && !chipRef.current.contains(e.target as Node)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [menuOpen])
+
   const pageTitle = pathname === '/dashboard' ? 'Dashboard'
     : pathname.startsWith('/dashboard/profile/documents') ? 'Documents'
     : pathname.startsWith('/dashboard/profile/salary') ? 'Salary'
-    : pathname.startsWith('/dashboard/profile/other-income') ? 'Other Income'
-    : pathname.startsWith('/dashboard/profile/exemptions') ? 'Exemptions'
+    : pathname.startsWith('/dashboard/profile/other-income') ? 'Other earnings'
+    : pathname.startsWith('/dashboard/profile/exemptions') ? 'Allowances'
     : pathname.startsWith('/dashboard/profile/deductions') ? 'Deductions'
-    : pathname.startsWith('/dashboard/tax') ? 'Tax Optimizer'
+    : pathname.startsWith('/dashboard/tax') ? 'Your Tax'
     : 'Dashboard'
 
   return (
     <header style={{
-      height: 46, borderBottom: '1px solid #E4DDD1', background: '#fff',
-      display: 'flex', alignItems: 'center', padding: '0 24px', gap: 10,
+      // Background bleeds up under the status bar; the safe-area top padding keeps the 46px content
+      // row clear of it. env() is 0 on desktop / non-notched, so this is a no-op there.
+      height: 'calc(46px + env(safe-area-inset-top))', borderBottom: `2px solid ${T.teal}`, background: T.sand,
+      display: 'flex', alignItems: 'center', padding: 'env(safe-area-inset-top) 24px 0', gap: 10,
       position: 'sticky', top: 0, zIndex: 40,
       fontFamily: '"Sora",-apple-system,sans-serif',
     }}>
-      <h1 style={{ fontSize: 13, fontWeight: 600, color: '#1C2B22', margin: 0 }}>{pageTitle}</h1>
+      {/* Mobile-only brand lockup — same V mark as the sidebar cap, teal on sand. Hidden on desktop. */}
+      <Link href="/dashboard" className="dash-toplogo" style={{ display: 'none', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
+        <svg width={22} height={22} viewBox="0 0 120 120" fill="none" aria-hidden="true">
+          <rect x="8" y="8" width="104" height="104" rx="28" fill="none" stroke={T.teal} strokeWidth="8" />
+          <polygon points="28,28 36,28 60,85 84,28 92,28 60,92" fill={T.teal} />
+        </svg>
+        <span style={{ fontSize: 14, fontWeight: 700, color: T.ink }}>ArthVo</span>
+      </Link>
+      <h1 className="dash-toptitle" style={{ fontSize: 13, fontWeight: 600, color: T.ink, margin: 0 }}>{pageTitle}</h1>
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 11, color: '#A09080' }}>{selectedFY}</span>
-        <span style={{
-          fontSize: 11, background: '#F5ECD8', color: C.primary,
+        <span style={{ fontSize: 11, color: T.muted }}>{selectedFY}</span>
+        <span className="dash-topbadge" style={{
+          fontSize: 11, background: T.card, color: T.teal,
           padding: '2px 9px', borderRadius: 3, fontWeight: 500,
-          border: '1px solid #D4B98A',
+          border: `1px solid ${T.taupeLine}`,
         }}>ArthVo</span>
+        {/* Mobile-only account chip — hidden on desktop (display:none flipped by .dash-topchip media rule). */}
+        <div className="dash-topchip" ref={chipRef} style={{ display: 'none', position: 'relative', alignItems: 'center' }}>
+          <button onClick={() => setMenuOpen(o => !o)} aria-label="Account menu" style={{
+            width: 28, height: 28, borderRadius: '50%',
+            background: T.teal, color: T.onTeal, border: 'none',
+            fontSize: 11, fontWeight: 700, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit',
+          }}>{initials}</button>
+          {menuOpen && user && (
+            <div style={{
+              position: 'absolute', top: 'calc(100% + 8px)', right: 0, minWidth: 200,
+              background: T.card, border: `1px solid ${T.hairline}`, borderRadius: 10,
+              boxShadow: '0 6px 24px rgba(0,0,0,0.12)', padding: 6, zIndex: 70,
+            }}>
+              <div style={{ padding: '8px 10px' }}>
+                <div style={{ fontSize: 12, color: T.ink, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name}</div>
+                <div style={{ fontSize: 10, color: T.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(user as any).phone || (user as any).email || ''}</div>
+              </div>
+              <button onClick={handleSignOut} style={{
+                width: '100%', textAlign: 'left', padding: '8px 10px', marginTop: 2,
+                background: 'transparent', border: 'none', borderTop: `1px solid ${T.hairline}`,
+                color: T.nav, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit',
+              }}>↪ Sign out</button>
+            </div>
+          )}
+        </div>
+        {/* Theme toggle — same single icon → System/Light/Dark menu used on the landing/auth pages.
+            Sits at the top-right on both desktop and mobile (replaces the old sidebar/dropdown pills). */}
+        <ThemeToggle theme={theme} setTheme={setTheme} resolved={resolved} />
       </div>
     </header>
+  )
+}
+
+// Mobile bottom tab bar — 4 family-level tabs. Hidden on desktop (display:none flipped by media rule).
+function BottomTabBar() {
+  const pathname = usePathname()
+  const tabs = [
+    { label: 'Documents', href: '/dashboard/profile/documents', active: pathname.startsWith('/dashboard/profile/documents') },
+    { label: 'Income', href: '/dashboard/profile/salary', active: pathname.startsWith('/dashboard/profile/salary') || pathname.startsWith('/dashboard/profile/other-income') },
+    { label: 'Tax breaks', href: '/dashboard/profile/exemptions', active: pathname.startsWith('/dashboard/profile/exemptions') || pathname.startsWith('/dashboard/profile/deductions') },
+    { label: 'Your Tax', href: '/dashboard/tax/optimizer', active: pathname.startsWith('/dashboard/tax') },
+  ]
+  return (
+    <nav className="dash-tabbar" style={{
+      display: 'none', position: 'fixed', bottom: 0, left: 0, right: 0,
+      background: T.card, borderTop: `1px solid ${T.hairline}`,
+      paddingBottom: 'env(safe-area-inset-bottom)', zIndex: 60,
+      fontFamily: '"Sora",-apple-system,sans-serif',
+    }}>
+      {tabs.map(tab => (
+        <Link key={tab.href} href={tab.href} style={{
+          flex: 1, minWidth: 0, textAlign: 'center', textDecoration: 'none',
+          fontSize: 11, fontWeight: 600, padding: '10px 0 12px',
+          color: tab.active ? T.teal : T.nav,
+          borderTop: `2px solid ${tab.active ? T.teal : 'transparent'}`,
+        }}>
+          {tab.label}
+        </Link>
+      ))}
+    </nav>
+  )
+}
+
+// Mobile family segment — the two-pill control under the top bar on Income / Tax breaks routes.
+// Renders nothing off-family or on desktop (display:none flipped by media rule).
+function FamilySegment() {
+  const pathname = usePathname()
+  let pills: { label: string; href: string }[] | null = null
+  if (pathname.startsWith('/dashboard/profile/salary') || pathname.startsWith('/dashboard/profile/other-income')) {
+    pills = [
+      { label: 'Salary', href: '/dashboard/profile/salary' },
+      { label: 'Other earnings', href: '/dashboard/profile/other-income' },
+    ]
+  } else if (pathname.startsWith('/dashboard/profile/exemptions') || pathname.startsWith('/dashboard/profile/deductions')) {
+    pills = [
+      { label: 'Allowances', href: '/dashboard/profile/exemptions' },
+      { label: 'Deductions', href: '/dashboard/profile/deductions' },
+    ]
+  }
+  if (!pills) return null
+  return (
+    <div className="dash-segment" style={{
+      display: 'none', margin: '10px 16px 0', background: T.sand,
+      borderRadius: 10, padding: 3, fontFamily: '"Sora",-apple-system,sans-serif',
+    }}>
+      {pills.map(pill => {
+        const active = pathname.startsWith(pill.href)
+        return (
+          <Link key={pill.href} href={pill.href} style={{
+            flex: 1, textAlign: 'center', textDecoration: 'none',
+            fontSize: 13, fontWeight: 600, padding: '7px 0', borderRadius: 8,
+            background: active ? T.teal : 'transparent',
+            color: active ? T.onTeal : T.nav,
+          }}>
+            {pill.label}
+          </Link>
+        )
+      })}
+    </div>
   )
 }
 
@@ -239,13 +385,60 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  // Theme: 'system' follows prefers-color-scheme; 'light'/'dark' force. Synchronous initializers
+  // (localStorage + matchMedia, both window-guarded) resolve the right value on the first client
+  // paint — no light-then-dark flash. The matchMedia listener keeps system mode live.
+  const [theme, setThemeState] = useState<ThemeMode>(() =>
+    (typeof window !== 'undefined' && (localStorage.getItem('av_theme') as ThemeMode | null)) || 'system'
+  )
+  const [systemDark, setSystemDark] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
+  )
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const onChange = (e: MediaQueryListEvent) => setSystemDark(e.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+  const setTheme = (t: ThemeMode) => {
+    setThemeState(t)
+    try { localStorage.setItem('av_theme', t) } catch {}
+  }
+  const resolved: 'light' | 'dark' = theme === 'system' ? (systemDark ? 'dark' : 'light') : theme
+
+  // Mirror the resolved theme onto <html> and paint the html/body base with --paper, so an
+  // overscroll/rubber-band past any dashboard page (Documents, Salary, Other earnings, Allowances,
+  // Deductions, Your Tax) shows themed paper instead of the default white. The dashboard track is a
+  // single ground (--paper) top-to-bottom, so one tone is correct here (no two-tone like the landing).
+  // Restored on unmount, so leaving the dashboard for the landing/auth pages hands <html> back clean.
+  useThemedBase(resolved)
+
   return (
     <AuthGate>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap');`}</style>
-      <div style={{ display: 'flex', minHeight: '100vh', background: C.bg, fontFamily: '"Sora",-apple-system,sans-serif' }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap');
+        .btn-ghost { transition: background .15s; }
+        .btn-ghost:hover { background: var(--tint) !important; }
+      `}</style>
+      {/* Mobile overrides only — desktop (≥768px) gets no rules here, so inline styles rule untouched. */}
+      <style>{`
+        @media (max-width: 767px) {
+          .dash-rail { display: none !important; }
+          .dash-main { margin-left: 0 !important; padding-bottom: 76px; }
+          .dash-tabbar { display: flex !important; }
+          .dash-segment { display: flex !important; }
+          .dash-topchip { display: flex !important; }
+          .dash-toplogo { display: flex !important; }
+          .dash-toptitle { display: none !important; }
+          .dash-topbadge { display: none !important; }
+        }
+      `}</style>
+      <div data-theme={resolved} suppressHydrationWarning style={{ display: 'flex', minHeight: '100vh', background: C.bg, fontFamily: '"Sora",-apple-system,sans-serif' }}>
         <Sidebar />
-        <div style={{ marginLeft: 216, flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <TopBar />
+        <BottomTabBar />
+        <div className="dash-main" style={{ marginLeft: 216, flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <TopBar theme={theme} setTheme={setTheme} resolved={resolved} />
+          <FamilySegment />
           <main style={{ flex: 1, padding: '28px 28px', maxWidth: 1100, width: '100%' }}>
             {children}
           </main>

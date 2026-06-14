@@ -1,8 +1,11 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { useAppStore } from '@/store/AppStore'
 
-const C = { fg:'#3A4B41', wheat:'#E6CFA7', wl:'#F5ECD8', wm:'#D4B98A', bg:'#FDFAF6', card:'#fff', border:'#E4DDD1', text:'#1C2B22', muted:'#7A8A7E', danger:'#B94040' }
+import { tokens as T } from '@/lib/tokens'
+
+const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, bg:T.paper, card:T.card, border:T.hairline, text:T.ink, muted:T.muted, danger:'#B94040' }
 const fmt = (n:number) => `₹${Math.round(n).toLocaleString('en-IN')}`
 
 interface Message { role:'user'|'assistant'; content:string }
@@ -17,6 +20,9 @@ const SUGGESTIONS = [
 
 export default function ChatPage() {
   const { salary } = useAppStore()
+  // PHASE-2: remove this guard to re-enable
+  const router = useRouter()
+  useEffect(() => { router.replace('/dashboard/profile/documents') }, [router])
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)

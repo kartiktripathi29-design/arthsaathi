@@ -1,241 +1,217 @@
 'use client'
 import Link from 'next/link'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import BgDemo from '@/components/BgDemo'
-
-function Logo({ size = 36 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 120 120" fill="none">
-      <rect width="120" height="120" rx="16" fill="#059669"/>
-      <polygon points="9,9 21,9 60,101 99,9 111,9 60,111" fill="#FFFFFF"/>
-      <circle cx="90" cy="24" r="18" fill="#FFFFFF"/>
-      <circle cx="90" cy="24" r="11" fill="#059669"/>
-    </svg>
-  )
-}
-
-function useCountUp(target: number, duration = 1800, start = false) {
-  const [count, setCount] = useState(0)
-  useEffect(() => {
-    if (!start) return
-    let startTime: number
-    const step = (timestamp: number) => {
-      if (!startTime) startTime = timestamp
-      const progress = Math.min((timestamp - startTime) / duration, 1)
-      const ease = 1 - Math.pow(1 - progress, 3)
-      setCount(Math.floor(ease * target))
-      if (progress < 1) requestAnimationFrame(step)
-    }
-    requestAnimationFrame(step)
-  }, [target, duration, start])
-  return count
-}
-
-function StatCard({ num, suffix, label, sublabel, started }: { num: number; suffix: string; label: string; sublabel: string; started: boolean }) {
-  const count = useCountUp(num, 1600, started)
-  return (
-    <div style={{ textAlign: 'center', padding: '28px 16px' }}>
-      <div style={{ fontSize: 'clamp(32px,5vw,52px)', fontWeight: 900, color: '#059669', letterSpacing: '-0.04em', lineHeight: 1, fontFamily: '"Sora",sans-serif' }}>
-        {num >= 1000 ? `₹${(count/100).toFixed(0)}L` : count}{suffix}
-      </div>
-      <div style={{ fontSize: 15, fontWeight: 700, color: '#1E293B', marginTop: 8, fontFamily: '"Sora",sans-serif' }}>{label}</div>
-      <div style={{ fontSize: 12, color: '#64748B', marginTop: 4, lineHeight: 1.5 }}>{sublabel}</div>
-    </div>
-  )
-}
-
-const TICKER_ITEMS = [
-  '🇮🇳 Made for every working Indian',
-  '💸 Most users save ₹68,000 in taxes every year',
-  '⚡ Know your exact taxes in under 8 minutes',
-  '🔒 Your documents stay private — always',
-  '📑 Works with any salary slip from any company',
-  '✅ We tell you which tax option saves you more money',
-  '🏦 Finds income you forgot you even had',
-  '🎯 Trusted, government-registered financial advice',
-]
+import Logo from '@/components/Logo'
+import { ThemeToggle, type ThemeMode } from '@/components/ThemeToggle'
+import { tokens as T } from '@/lib/tokens'
+import { estimateAnnualTax } from '@/lib/tax-slabs'
 
 export default function LandingPage() {
-  const [statsVisible, setStatsVisible] = useState(false)
   const [salary, setSalary] = useState('')
-  const [taxSaving, setTaxSaving] = useState<number | null>(null)
-  const statsRef = useRef<HTMLDivElement>(null)
+  const [taxSaving, setTaxSaving] = useState<{ monthly: number; newTax: number; oldTax: number } | null>(null)
 
+  // Theme: identical logic to dashboard/layout.tsx (same av_theme key, same default, same resolution),
+  // so a choice made here matches the dashboard and vice versa. 'system' follows prefers-color-scheme;
+  // 'light'/'dark' force. Synchronous, window-guarded initializers resolve the right value on first paint.
+  const [theme, setThemeState] = useState<ThemeMode>(() =>
+    (typeof window !== 'undefined' && (localStorage.getItem('av_theme') as ThemeMode | null)) || 'system'
+  )
+  const [systemDark, setSystemDark] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
+  )
   useEffect(() => {
-    const observer = new IntersectionObserver(([e]) => { if (e.isIntersecting) setStatsVisible(true) }, { threshold: 0.3 })
-    if (statsRef.current) observer.observe(statsRef.current)
-    return () => observer.disconnect()
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const onChange = (e: MediaQueryListEvent) => setSystemDark(e.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
   }, [])
+  const setTheme = (t: ThemeMode) => {
+    setThemeState(t)
+    try { localStorage.setItem('av_theme', t) } catch {}
+  }
+  const resolved: 'light' | 'dark' = theme === 'system' ? (systemDark ? 'dark' : 'light') : theme
+
+  // Base background: the page's root div is themed, but html/body are not — so an overscroll/bounce
+  // past the content shows the default light body through. Mirror the page theme onto <html> (so the
+  // existing tokens resolve per mode) and keep the rubber-band bounce (it signals page end).
+  //
+  // Two-tone rebound: the overscroll stretch is painted by the canvas, which only ever takes the
+  // root's single solid background-color (a gradient/fixed image can't fill it). So to make each end
+  // match the section it borders, we swap that color as the user crosses the page midpoint — top half
+  // → --paper (matches the header/hero), bottom half → the footer band's color (--ink in light,
+  // --paper in dark; same conditional the footer uses). You can only rubber-band at an end you've
+  // already scrolled to, and the swap sits behind opaque sections, so it's invisible mid-scroll and
+  // only shows in the rebound. color-scheme is mirrored too so native chrome follows the theme.
+  // Scoped to this route: everything is restored on unmount so other routes (e.g. the dashboard) are
+  // untouched. (Existing tokens only — no new color.)
+  useEffect(() => {
+    const html = document.documentElement
+    const body = document.body
+    const prev = {
+      theme: html.getAttribute('data-theme'),
+      htmlBg: html.style.background, htmlScheme: html.style.colorScheme,
+      bodyBg: body.style.background,
+    }
+    html.setAttribute('data-theme', resolved)
+    html.style.colorScheme = resolved
+    body.style.background = 'var(--paper)'
+
+    const topColor = 'var(--paper)'
+    const bottomColor = resolved === 'dark' ? 'var(--paper)' : 'var(--ink)'
+    const applyEdge = () => {
+      const max = html.scrollHeight - window.innerHeight
+      const pastMid = max > 0 && window.scrollY > max / 2
+      html.style.background = pastMid ? bottomColor : topColor
+    }
+    applyEdge()
+    window.addEventListener('scroll', applyEdge, { passive: true })
+    window.addEventListener('resize', applyEdge)
+    return () => {
+      window.removeEventListener('scroll', applyEdge)
+      window.removeEventListener('resize', applyEdge)
+      if (prev.theme === null) html.removeAttribute('data-theme'); else html.setAttribute('data-theme', prev.theme)
+      html.style.colorScheme = prev.htmlScheme
+      html.style.background = prev.htmlBg
+      body.style.background = prev.bodyBg
+    }
+  }, [resolved])
 
   const calcQuickSaving = (s: string) => {
     const monthly = parseFloat(s.replace(/,/g, '')) || 0
     if (!monthly) { setTaxSaving(null); return }
     const annual = monthly * 12
-    const saving = Math.max(0, Math.round(annual * 0.06))
-    setTaxSaving(saving > 0 ? saving : null)
+    const newTax = estimateAnnualTax(annual, 'new')
+    const oldTax = estimateAnnualTax(annual, 'old')
+    setTaxSaving({ monthly, newTax, oldTax })
+  }
+
+  const runCheck = () => {
+    calcQuickSaving(salary)
+    const target = document.getElementById('demo-reveal')
+    if (target) {
+      const y = target.getBoundingClientRect().top + window.scrollY - 84  // sticky nav + breathing room
+      window.scrollTo({ top: y, behavior: 'smooth' })
+    }
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#FFFFFF', color: '#1E293B', fontFamily: '"Sora",-apple-system,sans-serif', overflowX: 'hidden' }}>
+    <div data-theme={resolved} suppressHydrationWarning style={{ minHeight: '100vh', background: T.paper, color: T.ink, fontFamily: '"Sora",-apple-system,sans-serif', overflowX: 'hidden' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800;900&display=swap');
         *{box-sizing:border-box;margin:0;padding:0}
         .btn-green{transition:transform 0.15s,box-shadow 0.15s}
-        .btn-green:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(5,150,105,0.25)}
+        .btn-green:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(14,77,71,0.25)}
         .btn-ghost{transition:background 0.15s}
-        .btn-ghost:hover{background:#F0FDF4!important}
+        .btn-ghost:hover{background:var(--tint)!important}
         .pain-card{transition:transform 0.2s,box-shadow 0.2s}
-        .pain-card:hover{transform:translateY(-4px);box-shadow:0 12px 40px rgba(5,150,105,0.1)}
+        .pain-card:hover{transform:translateY(-4px);box-shadow:0 12px 40px rgba(14,77,71,0.1)}
         @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes ticker{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
-        @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
-        @keyframes wiggle{0%,100%{transform:rotate(-2deg)}50%{transform:rotate(2deg)}}
         .fu{animation:fadeUp 0.7s cubic-bezier(0.16,1,0.3,1) both}
-        .d1{animation-delay:0.05s}.d2{animation-delay:0.2s}.d3{animation-delay:0.35s}.d4{animation-delay:0.5s}
-        .ticker-track{display:flex;animation:ticker 28s linear infinite;white-space:nowrap}
-        .ticker-track:hover{animation-play-state:paused}
-        .wobble:hover{animation:wiggle 0.3s ease}
-        .salary-input:focus{outline:none;border-color:#059669!important;box-shadow:0 0 0 3px rgba(5,150,105,0.12)}
+        .d2{animation-delay:0.2s}.d3{animation-delay:0.35s}.d4{animation-delay:0.5s}
+        .salary-input:focus{outline:none;border-color:var(--teal)!important;box-shadow:0 0 0 3px rgba(14,77,71,0.12)}
         .highlight{position:relative;display:inline-block}
-        .highlight::after{content:'';position:absolute;bottom:4px;left:0;width:100%;height:6px;background:#ECFDF5;z-index:-1;border-radius:2px}
+        .highlight::after{content:'';position:absolute;bottom:4px;left:0;width:100%;height:6px;background:var(--tint);z-index:-1;border-radius:2px}
+        .nav-bar{padding:16px 52px}
+        .hero-sec{padding:80px 32px 32px}
+        .demo-wrap{padding:4px 32px 24px}
+        .pain-sec{padding:40px 52px 24px}
+        .pain-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+        .hiw-sec{padding:80px 52px}
+        .hiw-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+        .cta-sec{padding:72px 48px}
+        .footer-bar{padding:20px 48px}
+        .demo-regime{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+        .demo-slots{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+        @media (max-width:900px){ .pain-grid{grid-template-columns:1fr} .hiw-grid{grid-template-columns:repeat(2,1fr)} }
+        @media (max-width:768px){ .nav-bar{padding:12px 20px} .hero-sec{padding:56px 20px 24px} .demo-wrap{padding:4px 16px 24px} .pain-sec{padding:32px 20px 24px} .hiw-sec{padding:56px 20px} .cta-sec{padding:56px 24px} .footer-bar{padding:16px 20px} }
+        @media (max-width:560px){ .hiw-grid{grid-template-columns:1fr} .demo-slots{grid-template-columns:1fr} }
+        @media (max-width:480px){ .demo-regime{grid-template-columns:1fr} .demo-topbar{flex-wrap:wrap;row-gap:4px} }
+        @media (max-width:430px){ .nav-actions{gap:6px} .nav-cta{padding-left:13px!important;padding-right:13px!important} }
       `}</style>
 
       {/* Sticky nav */}
-      <nav style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'16px 52px', borderBottom:'1px solid #F0FDF4', position:'sticky', top:0, background:'rgba(255,255,255,0.95)', backdropFilter:'blur(8px)', zIndex:50 }}>
+      <nav className="nav-bar" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:`1px solid ${T.hairline}`, position:'sticky', top:0, background: resolved === 'dark' ? 'rgba(20,30,27,0.85)' : 'rgba(248,242,231,0.95)', backdropFilter:'blur(8px)', zIndex:50 }}>
         <Link href="/" style={{ textDecoration:'none', display:'flex', alignItems:'center', gap:11 }}>
-          <Logo size={32} />
-          <div>
-            <div style={{ fontWeight:800, fontSize:19, color:'#1E293B', letterSpacing:'-0.025em' }}>Arth<span style={{ color:'#059669' }}>Vo</span></div>
-            <div style={{ fontSize:8, color:'#94A3B8', letterSpacing:'0.18em', marginTop:-1 }}>WEALTH EVOLVED</div>
-          </div>
-          <span style={{ fontSize:9, background:'#ECFDF5', color:'#065F46', padding:'3px 8px', borderRadius:20, marginLeft:4, border:'1px solid #A7F3D0', fontWeight:700, letterSpacing:'0.04em' }}>GOV. REGISTERED</span>
+          <Logo variant="onLight" size={32} />
         </Link>
-        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-          <Link href="/login" className="btn-ghost" style={{ padding:'8px 20px', background:'transparent', border:'1px solid #D1FAE5', borderRadius:8, color:'#475569', fontWeight:500, textDecoration:'none', fontSize:13 }}>Sign in</Link>
-          <Link href="/signup" className="btn-green" style={{ padding:'9px 22px', background:'#059669', color:'#fff', borderRadius:8, fontWeight:700, textDecoration:'none', fontSize:13 }}>Sign up — it's free →</Link>
+        <div className="nav-actions" style={{ display:'flex', gap:8, alignItems:'center' }}>
+          <ThemeToggle theme={theme} setTheme={setTheme} resolved={resolved} />
+          <Link href="/login" className="btn-ghost nav-cta" style={{ padding:'8px 20px', background:'transparent', border:`1px solid ${T.hairline}`, borderRadius:8, color:T.muted, fontWeight:500, textDecoration:'none', fontSize:13, whiteSpace:'nowrap' as const }}>Sign in</Link>
+          <Link href="/signup" className="btn-green nav-cta" style={{ padding:'9px 22px', background:T.teal, color:T.ivory, borderRadius:8, fontWeight:700, textDecoration:'none', fontSize:13, whiteSpace:'nowrap' as const }}>Sign up →</Link>
         </div>
       </nav>
 
-      {/* Ticker strip */}
-      <div style={{ background:'#F0FDF4', borderBottom:'1px solid #D1FAE5', padding:'10px 0', overflow:'hidden' }}>
-        <div className="ticker-track">
-          {[...TICKER_ITEMS, ...TICKER_ITEMS].map((item, i) => (
-            <span key={i} style={{ fontSize:12, color:'#065F46', fontWeight:500, padding:'0 32px', flexShrink:0 }}>
-              {item} <span style={{ color:'#A7F3D0', margin:'0 8px' }}>·</span>
-            </span>
-          ))}
-        </div>
-      </div>
-
       {/* HERO */}
-      <div style={{ maxWidth:860, margin:'0 auto', padding:'80px 48px 32px', textAlign:'center' }}>
-        <div className="fu d1" style={{ display:'inline-flex', alignItems:'center', gap:8, background:'#1E293B', color:'#ECFDF5', padding:'6px 18px', borderRadius:100, fontSize:12, marginBottom:28, fontWeight:600, letterSpacing:'0.02em' }}>
-          <span style={{ width:6, height:6, borderRadius:'50%', background:'#34D399', display:'inline-block', animation:'pulse 2s infinite' }} />
-          ₹68,000 is sitting in your pocket. You just don't know it yet.
-        </div>
-
-        <h1 className="fu d2" style={{ fontSize:'clamp(38px, 6.5vw, 72px)', fontWeight:900, lineHeight:1.04, letterSpacing:'-0.04em', color:'#1E293B', marginBottom:8 }}>
-          Stop overpaying tax.<br />
-          <span style={{ color:'#059669' }} className="highlight">Start this year.</span>
+      <div className="hero-sec" style={{ maxWidth:1000, margin:'0 auto', textAlign:'center' }}>
+        <h1 className="fu d2" style={{ fontSize:'clamp(26px, 7vw, 54px)', fontWeight:900, lineHeight:1.04, letterSpacing:'-0.04em', color:T.ink, marginBottom:8 }}>
+          <span style={{ display:'block' }}>Your employer taxed<br />what they knew.</span>
+          <span style={{ color:T.teal }} className="highlight">Not what's true for you.</span>
         </h1>
 
-        <p className="fu d3" style={{ fontSize:'clamp(15px,2vw,18px)', color:'#64748B', margin:'20px auto 32px', maxWidth:520, lineHeight:1.75, fontWeight:400 }}>
-          Upload your government tax document. In 8 minutes, ArthVo shows you exactly how much tax you've been overpaying — and exactly how to get it back.
+        <p className="fu d3" style={{ fontSize:'clamp(15px,2vw,18px)', color:T.muted, margin:'20px auto 32px', maxWidth:520, lineHeight:1.75, fontWeight:400 }}>
+          One slip. Your real tax — and which regime it belongs in.
         </p>
 
         {/* Quick calculator */}
-        <div className="fu d4" style={{ background:'#F8FFFE', border:'1.5px solid #D1FAE5', borderRadius:16, padding:'24px 28px', maxWidth:440, margin:'0 auto 12px', textAlign:'left' }}>
-          <div style={{ fontSize:13, fontWeight:700, color:'#065F46', marginBottom:12 }}>Quick estimate — what's your monthly salary?</div>
-          <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:taxSaving !== null ? 14 : 0 }}>
-            <div style={{ display:'flex', flex:1, border:'1.5px solid #CBD5E1', borderRadius:10, overflow:'hidden', background:'#fff' }}>
-              <span style={{ padding:'11px 12px', fontSize:15, color:'#059669', fontWeight:700, borderRight:'1px solid #E2E8F0' }}>₹</span>
-              <input type="tel" value={salary} onChange={e => { setSalary(e.target.value); calcQuickSaving(e.target.value) }}
+        <div className="fu d4" style={{ background:T.card, border:`1.5px solid ${T.hairline}`, borderRadius:16, padding:'24px 28px', maxWidth:440, margin:'0 auto 12px', textAlign:'left' }}>
+          <div style={{ fontSize:13, fontWeight:700, color:T.teal, marginBottom:12 }}>Quick estimate — what's your monthly salary?</div>
+          <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:0 }}>
+            <div style={{ display:'flex', flex:1, border:`1.5px solid ${T.hairline}`, borderRadius:10, overflow:'hidden', background:T.card }}>
+              <span style={{ padding:'11px 12px', fontSize:15, color:T.teal, fontWeight:700, borderRight:`1px solid ${T.hairline}` }}>₹</span>
+              <input type="tel" value={salary} onChange={e => setSalary(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') runCheck() }}
                 placeholder="e.g. 1,20,000" className="salary-input"
                 style={{ flex:1, padding:'11px 12px', border:'none', fontSize:14, fontFamily:'"Sora",sans-serif' }} />
             </div>
-            <Link href="/signup" className="btn-green"
-              style={{ padding:'11px 18px', background:'#059669', color:'#fff', borderRadius:10, fontWeight:700, fontSize:13, textDecoration:'none', whiteSpace:'nowrap' as const }}>
+            <button onClick={runCheck} className="btn-green"
+              style={{ padding:'11px 18px', background:T.teal, color:T.ivory, borderRadius:10, fontWeight:700, fontSize:13, border:'none', cursor:'pointer', fontFamily:'"Sora",sans-serif', whiteSpace:'nowrap' as const }}>
               Check now →
-            </Link>
+            </button>
           </div>
-          {taxSaving !== null && (
-            <div style={{ background:'#ECFDF5', borderRadius:8, padding:'10px 14px', fontSize:13, color:'#065F46', fontWeight:500 }}>
-              🎉 You could save approx. <strong style={{ color:'#059669' }}>₹{taxSaving.toLocaleString('en-IN')}/year</strong> by picking the right tax option.
-            </div>
-          )}
+          <div style={{ fontSize:11, color:T.muted, marginTop:12 }}>No signup needed.</div>
         </div>
-
-        <div style={{ fontSize:11, color:'#94A3B8', marginTop:8 }}>No signup needed for the estimate. Free, forever.</div>
       </div>
 
       {/* Demo */}
-      <div style={{ maxWidth:860, margin:'0 auto', padding:'8px 48px 56px' }}>
-        <div style={{ textAlign:'center', marginBottom:16 }}>
-          <span style={{ fontSize:10, color:'#94A3B8', fontWeight:700, letterSpacing:'0.25em', textTransform:'uppercase' as const }}>See it in action</span>
-        </div>
-        <div style={{ borderRadius:20, overflow:'hidden', border:'1.5px solid #D1FAE5', boxShadow:'0 8px 48px rgba(5,150,105,0.1)' }}>
-          <BgDemo />
-        </div>
-      </div>
-
-      {/* Stats strip */}
-      <div ref={statsRef} style={{ background:'#1E293B', padding:'0 48px' }}>
-        <div style={{ maxWidth:960, margin:'0 auto', display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:0 }}>
-          {[
-            { num: 6800, suffix: '+', label: 'Average tax saved', sublabel: 'per person, per year' },
-            { num: 8, suffix: ' min', label: 'Start to finish', sublabel: 'upload your doc, get your answer' },
-            { num: 100, suffix: '%', label: 'Reads any slip', sublabel: 'any company, any format' },
-            { num: 0, suffix: ' ₹ fee', label: 'Forever free', sublabel: 'no credit card, no catch' },
-          ].map((s, i) => (
-            <div key={i} style={{ borderRight: i < 3 ? '1px solid rgba(255,255,255,0.07)' : 'none' }}>
-              <StatCard {...s} started={statsVisible} />
-            </div>
-          ))}
+      <div id="live-demo" className="demo-wrap" style={{ maxWidth:680, margin:'0 auto' }}>
+        <div style={{ borderRadius:20, overflow:'hidden', border:`1.5px solid ${T.hairline}`, boxShadow:'0 8px 48px rgba(14,77,71,0.1)' }}>
+          <BgDemo monthly={taxSaving?.monthly ?? null} />
         </div>
       </div>
 
       {/* Pain section */}
-      <div style={{ padding:'80px 52px', background:'#FAFFFE' }}>
-        <div style={{ maxWidth:960, margin:'0 auto' }}>
+      <div className="pain-sec" style={{ background:T.paper }}>
+        <div style={{ maxWidth:1100, margin:'0 auto' }}>
           <div style={{ textAlign:'center', marginBottom:52 }}>
-            <div style={{ fontSize:11, color:'#059669', fontWeight:700, letterSpacing:'0.15em', textTransform:'uppercase' as const, marginBottom:12 }}>Why ArthVo exists</div>
-            <h2 style={{ fontSize:'clamp(26px,4vw,42px)', fontWeight:900, letterSpacing:'-0.03em', color:'#1E293B', lineHeight:1.1 }}>
+            <div style={{ fontSize:11, color:T.faint, fontWeight:700, letterSpacing:'0.3em', textTransform:'uppercase' as const, marginBottom:12 }}>Why ArthVo exists</div>
+            <h2 style={{ fontSize:'clamp(26px,4vw,42px)', fontWeight:900, letterSpacing:'-0.03em', color:T.ink, lineHeight:1.1 }}>
               We've all been there.
             </h2>
           </div>
 
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:18 }}>
+          <div className="pain-grid">
             {[
               {
-                emoji: '😰',
-                pain: '"I got a notice from the Income Tax office for bank interest I didn\'t even know I had to report."',
-                fix: 'ArthVo checks your government tax records and tells you about every rupee before the taxman does.',
-                tag: 'Tax Notice',
-                tagColor: '#DC2626',
+                statement: 'You picked a regime once. Maybe.',
+                body: 'Most people never ran the comparison — they ticked a box in an HR form years ago.',
+                answer: 'ArthVo shows you both regimes on your actual salary.',
               },
               {
-                emoji: '🤑',
-                pain: '"My CA charges ₹5,000 just to tell me which tax option to pick. Every. Single. Year."',
-                fix: 'ArthVo compares both tax options in seconds with YOUR exact numbers. Free. No appointment.',
-                tag: 'CA Fees',
-                tagColor: '#D97706',
+                statement: 'Your salary slip is written for payroll software, not for you.',
+                body: 'Basic, special allowance, employer PF — what does any of it mean for your tax?',
+                answer: 'ArthVo turns it into plain numbers.',
               },
               {
-                emoji: '😅',
-                pain: '"I sold some mutual funds last year and had no idea I had to report the profit anywhere."',
-                fix: 'The government already knows about your profits. ArthVo reads that record and handles it for you.',
-                tag: 'Missed Reporting',
-                tagColor: '#7C3AED',
+                statement: 'HR gives you a deadline and a dropdown. You guess.',
+                body: 'Regime election, investment declarations — decided in a rush, once a year, with zero explanation.',
+                answer: 'Run the real numbers here before you commit.',
               },
             ].map((p, i) => (
-              <div key={i} className="pain-card" style={{ background:'#fff', border:'1.5px solid #E2E8F0', borderRadius:16, padding:'28px 24px', cursor:'pointer' }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16 }}>
-                  <div style={{ fontSize:32 }} className="wobble">{p.emoji}</div>
-                  <span style={{ fontSize:10, fontWeight:700, color:p.tagColor, background:`${p.tagColor}12`, padding:'3px 10px', borderRadius:20, border:`1px solid ${p.tagColor}30` }}>{p.tag}</span>
-                </div>
-                <div style={{ fontSize:14, color:'#475569', fontStyle:'italic', marginBottom:16, lineHeight:1.75, paddingLeft:14, borderLeft:'2px solid #E2E8F0' }}>{p.pain}</div>
-                <div style={{ fontSize:13, color:'#059669', fontWeight:600, lineHeight:1.68, display:'flex', gap:8 }}>
-                  <span>✓</span><span>{p.fix}</span>
+              <div key={i} className="pain-card" style={{ background:T.card, border:`1.5px solid ${T.hairline}`, borderRadius:16, padding:'28px 24px', cursor:'pointer' }}>
+                <div style={{ fontSize:16, fontWeight:700, color:T.ink, lineHeight:1.35, marginBottom:10 }}>{p.statement}</div>
+                <div style={{ fontSize:13.5, color:T.muted, lineHeight:1.7, marginBottom:16 }}>{p.body}</div>
+                <div style={{ fontSize:13, color:T.green, fontWeight:600, lineHeight:1.6, display:'flex', gap:8 }}>
+                  <span>✓</span><span>{p.answer}</span>
                 </div>
               </div>
             ))}
@@ -244,64 +220,63 @@ export default function LandingPage() {
       </div>
 
       {/* How it works */}
-      <div style={{ padding:'80px 52px', background:'#fff' }}>
-        <div style={{ maxWidth:960, margin:'0 auto' }}>
+      <div className="hiw-sec" style={{ background:T.sand }}>
+        <div style={{ maxWidth:1100, margin:'0 auto' }}>
           <div style={{ textAlign:'center', marginBottom:52 }}>
-            <div style={{ fontSize:11, color:'#059669', fontWeight:700, letterSpacing:'0.15em', textTransform:'uppercase' as const, marginBottom:12 }}>How it works</div>
-            <h2 style={{ fontSize:'clamp(24px,3.5vw,40px)', fontWeight:900, letterSpacing:'-0.03em', color:'#1E293B' }}>
-              4 steps. 8 minutes. Done.
+            <div style={{ fontSize:11, color:T.faint, fontWeight:700, letterSpacing:'0.3em', textTransform:'uppercase' as const, marginBottom:12 }}>How it works</div>
+            <h2 style={{ fontSize:'clamp(24px,3.5vw,40px)', fontWeight:900, letterSpacing:'-0.03em', color:T.ink }}>
+              From slip to answer. In minutes.
             </h2>
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:16 }}>
+          <div className="hiw-grid">
             {[
-              { num:'01', icon:'📑', title:'Upload your tax document', body:'Download it from the Income Tax website. ArthVo reads it instantly — no manual typing needed.' },
-              { num:'02', icon:'🤖', title:'We find everything', body:'Your salary, bank interest, profits from selling shares or property — all found automatically.' },
-              { num:'03', icon:'📊', title:'See exactly what you owe', body:'Two tax options compared side by side. We tell you which one puts more money back in your pocket.' },
-              { num:'04', icon:'💡', title:'Get a clear plan', body:'Where to invest, what to claim, how to legally pay less tax. Proper advice — not guesswork.' },
+              { num:'01', title:'Add your salary slip', body:'ArthVo reads it for you — no manual typing.' },
+              { num:'02', title:'It pulls your income', body:'Your salary and the earnings it can read from your documents.' },
+              { num:'03', title:'See what you owe', body:'Old vs new regime, side by side, on your numbers.' },
+              { num:'04', title:'Know your next step', body:'Which regime fits and what to check — in plain English.' },
             ].map((s, i) => (
-              <div key={i} style={{ background:'#F8FFFE', border:'1.5px solid #ECFDF5', borderRadius:14, padding:'24px 20px', position:'relative' as const }}>
-                <div style={{ position:'absolute' as const, top:16, right:16, fontSize:11, fontWeight:900, color:'#D1FAE5', letterSpacing:'0.05em' }}>{s.num}</div>
-                <div style={{ fontSize:32, marginBottom:14 }}>{s.icon}</div>
-                <div style={{ fontSize:15, fontWeight:700, color:'#1E293B', marginBottom:8 }}>{s.title}</div>
-                <div style={{ fontSize:13, color:'#64748B', lineHeight:1.7 }}>{s.body}</div>
+              <div key={i} style={{ background:T.card, border:`1.5px solid ${T.hairline}`, borderRadius:14, padding:'24px 20px' }}>
+                <div style={{ fontSize:28, fontWeight:800, color:T.teal, letterSpacing:'0.02em', marginBottom:14 }}>{s.num}</div>
+                <div style={{ fontSize:15, fontWeight:700, color:T.ink, marginBottom:8 }}>{s.title}</div>
+                <div style={{ fontSize:13, color:T.muted, lineHeight:1.7 }}>{s.body}</div>
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Final CTA */}
-      <div style={{ background:'#1E293B', padding:'100px 48px', textAlign:'center' }}>
-        <div style={{ fontSize:11, color:'#34D399', fontWeight:700, letterSpacing:'0.2em', marginBottom:20, textTransform:'uppercase' as const }}>
-          Your CA doesn't want you to read this
+      {/* Final CTA — dark section: eyebrow/accents → green, headline → ivory, CTA button → green (teal would vanish on dark) */}
+      <div className="cta-sec" style={{ background: resolved === 'dark' ? T.paper : T.ink, textAlign:'center' }}>
+        <div style={{ fontSize:11, color:T.green, fontWeight:700, letterSpacing:'0.2em', marginBottom:16, textTransform:'uppercase' as const }}>
+          One slip is all it takes
         </div>
-        <h2 style={{ fontSize:'clamp(32px,5vw,60px)', fontWeight:900, letterSpacing:'-0.04em', color:'#FFFFFF', lineHeight:1.05, marginBottom:20 }}>
-          Know exactly what you owe.<br />
-          <span style={{ color:'#34D399' }}>Keep the rest.</span>
+        <h2 style={{ fontSize:'clamp(32px,5vw,60px)', fontWeight:900, letterSpacing:'-0.04em', color:T.ivory, lineHeight:1.05, marginBottom:20 }}>
+          Know what you owe.<br />
+          <span style={{ color:T.green }}>And which regime <span style={{ whiteSpace:'nowrap' }}>is yours.</span></span>
         </h2>
-        <p style={{ fontSize:16, color:'rgba(255,255,255,0.5)', marginBottom:44, maxWidth:400, margin:'0 auto 44px', lineHeight:1.75 }}>
-          Free forever. No credit card. Takes 8 minutes.
+        <p style={{ fontSize:16, color:'rgba(244,238,224,0.75)', marginBottom:44, maxWidth:400, margin:'0 auto 44px', lineHeight:1.75 }}>
+          No credit card. No guesswork.
         </p>
         <div style={{ display:'flex', gap:12, justifyContent:'center', flexWrap:'wrap' as const }}>
           <Link href="/signup" className="btn-green"
-            style={{ display:'inline-flex', alignItems:'center', gap:12, padding:'16px 40px', background:'#059669', color:'#fff', borderRadius:12, fontWeight:800, textDecoration:'none', fontSize:17, letterSpacing:'-0.01em' }}>
-            Start saving tax — free →
+            style={{ display:'inline-flex', alignItems:'center', gap:12, padding:'16px 40px', background:T.green, color:T.ivory, borderRadius:12, fontWeight:800, textDecoration:'none', fontSize:17, letterSpacing:'-0.01em' }}>
+            See which one's yours →
           </Link>
         </div>
-        <div style={{ marginTop:24, display:'flex', justifyContent:'center', gap:28, flexWrap:'wrap' as const }}>
-          {['No credit card needed', 'Free to try, no signup', 'Government-registered advisors'].map(t => (
-            <div key={t} style={{ fontSize:12, color:'rgba(255,255,255,0.3)', display:'flex', alignItems:'center', gap:6 }}>
-              <span style={{ color:'#34D399' }}>✓</span> {t}
+        <div style={{ marginTop:20, display:'flex', justifyContent:'center', gap:28, flexWrap:'wrap' as const }}>
+          {['No signup for the estimate', 'Plain English, always'].map(t => (
+            <div key={t} style={{ fontSize:13, color:'rgba(244,238,224,0.7)', display:'flex', alignItems:'center', gap:6 }}>
+              <span style={{ color:T.green }}>✓</span> {t}
             </div>
           ))}
         </div>
       </div>
 
       {/* Footer */}
-      <div style={{ textAlign:'center', padding:'20px 48px', background:'#0F172A', fontSize:11, color:'rgba(255,255,255,0.2)' }}>
-        ArthVo provides general financial guidance. Consult a CA for ITR filing. © 2025 ArthVo
+      <div className="footer-bar" style={{ textAlign:'center', background: resolved === 'dark' ? T.paper : T.ink, fontSize:11, color:'rgba(244,238,224,0.55)' }}>
+        ArthVo helps you read your salary slip and compare tax regimes. Consult a CA for ITR filing. © 2026 ArthVo
         {' · '}
-        <a href="/privacy" style={{ color:'rgba(255,255,255,0.3)', textDecoration:'underline' }}>Privacy</a>
+        <a href="/privacy" style={{ color:'rgba(244,238,224,0.7)', textDecoration:'underline' }}>Privacy</a>
       </div>
     </div>
   )

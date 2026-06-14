@@ -11,7 +11,9 @@ import type { IntelligenceReport, ClassifiedTransaction } from '@/lib/txn-intell
 import type { ParsedSalaryData } from '@/types'
 import { calcOldRegime, calcNewRegime, calcHRAExemption } from '@/lib/tax-engine'
 
-const C = { fg:'#3A4B41', wheat:'#E6CFA7', wl:'#F5ECD8', wm:'#D4B98A', bg:'#FDFAF6', card:'#fff', border:'#E4DDD1', text:'#1C2B22', muted:'#7A8A7E', danger:'#B94040' }
+import { tokens as T } from '@/lib/tokens'
+
+const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, bg:T.paper, card:T.card, border:T.hairline, text:T.ink, muted:T.muted, danger:'#B94040' }
 const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`
 const uid = () => Math.random().toString(36).slice(2,8)
 
@@ -50,7 +52,7 @@ const OTHER_TYPES = [
   { key:'ltcg', icon:'📊', label:'Capital Gains', sub:'MF, shares, property' },
   { key:'rental', icon:'🏠', label:'Rental Income', sub:'From property you own' },
   { key:'freelance', icon:'💻', label:'Freelance / Consulting', sub:'Professional income' },
-  { key:'other', icon:'💼', label:'Other Income', sub:'Any other taxable income' },
+  { key:'other', icon:'💼', label:'Other earnings', sub:'Any other taxable income' },
 ]
 
 const fileToBase64 = (f:File): Promise<string> => new Promise((res,rej) => { const r=new FileReader(); r.onload=()=>res((r.result as string).split(',')[1]); r.onerror=rej; r.readAsDataURL(f) })
@@ -1956,7 +1958,7 @@ function ProfileContent() {
       setTaxCta({ submittedAt: new Date().toISOString() })
       router.push('/dashboard/tax')
     } catch (e: any) {
-      toast.error('Could not open Tax Optimiser')
+      toast.error('Could not open Your Tax')
     }
   }
 
@@ -2334,7 +2336,7 @@ function ProfileContent() {
                         </div>
                       </div>
                       <div style={{ padding:'10px 16px', fontSize:11, color:C.muted, background:'#FAFAF8' }}>
-                        Annual figure feeds Tax Optimiser. Click any projected month below to override its values.
+                        Annual figure feeds Your Tax. Click any projected month below to override its values.
                       </div>
                     </div>
 
@@ -2480,7 +2482,7 @@ function ProfileContent() {
                               <div style={{ padding:'8px 10px', borderTop:`1px solid ${C.border}`, borderLeft:`1px solid ${C.border}`, textAlign:'right' as const, fontWeight:700, color: isSurplusNew ? '#2A7A4A' : '#D85A30', background:isSurplusNew ? '#EEF2EE' : '#FBEFEF' }}>{isSurplusNew ? `+${fmt(Math.abs(mte.shortfallNew))}` : fmt(mte.shortfallNew)}</div>
                             </div>
                             <p style={{ fontSize:10.5, color:C.muted, margin:'0 0 8px', lineHeight:1.5 }}>
-                              <strong style={{ color:C.text }}>Note:</strong> Expected tax assumes only what's on your slips (EPF + HRA exemption based on slip's basic/HRA, rent assumed ₹0). Once you finish in Tax Optimiser with rent, 80D, and other deductions, the real shortfall will be lower.
+                              <strong style={{ color:C.text }}>Note:</strong> Expected tax assumes only what's on your slips (EPF + HRA exemption based on slip's basic/HRA, rent assumed ₹0). Once you finish in Your Tax with rent, 80D, and other deductions, the real shortfall will be lower.
                             </p>
                             <p style={{ fontSize:10.5, color:C.muted, margin:0, lineHeight:1.5 }}>
                               {isSurplusOld && isSurplusNew
@@ -2500,8 +2502,8 @@ function ProfileContent() {
                           {months.map(mk => {
                             const r = rollupMonth(salaryTimeline, mk)
                             const status = r.isActual ? 'actual' : r.isOverride ? 'override' : 'projected'
-                            const bg = status === 'actual' ? '#3A4B41' : status === 'override' ? '#C9A84C' : '#E4DDD1'
-                            const fg = status === 'actual' ? '#fff' : status === 'override' ? '#fff' : '#7A8A7E'
+                            const bg = status === 'actual' ? T.teal : status === 'override' ? '#C9A84C' : T.hairline
+                            const fg = status === 'actual' ? T.ivory : status === 'override' ? T.ivory : T.muted
                             return (
                               <button key={mk} onClick={() => {
                                 if (r.isActual) {
@@ -2519,9 +2521,9 @@ function ProfileContent() {
                           })}
                         </div>
                         <div style={{ display:'flex', gap:14, marginTop:10, fontSize:10.5, color:C.muted }}>
-                          <span><span style={{ display:'inline-block', width:8, height:8, borderRadius:2, background:'#3A4B41', marginRight:4 }} /> Slip uploaded</span>
+                          <span><span style={{ display:'inline-block', width:8, height:8, borderRadius:2, background:T.teal, marginRight:4 }} /> Slip uploaded</span>
                           <span><span style={{ display:'inline-block', width:8, height:8, borderRadius:2, background:'#C9A84C', marginRight:4 }} /> Edited projection</span>
-                          <span><span style={{ display:'inline-block', width:8, height:8, borderRadius:2, background:'#E4DDD1', marginRight:4 }} /> Auto-projected</span>
+                          <span><span style={{ display:'inline-block', width:8, height:8, borderRadius:2, background:T.hairline, marginRight:4 }} /> Auto-projected</span>
                         </div>
                         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, marginTop:14, paddingTop:12, borderTop:`1px solid ${C.border}` }}>
                           <button onClick={() => salaryRef.current?.click()} disabled={loadingDoc==='salary'} style={{ padding:'8px 14px', background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12, fontWeight:600, cursor: loadingDoc==='salary' ? 'wait' : 'pointer', fontFamily:'inherit', opacity: loadingDoc==='salary' ? 0.6 : 1 }}>
@@ -2612,7 +2614,7 @@ function ProfileContent() {
                     {/* ── Other Income section (Build 4) ── */}
                     <div style={S.card}>
                       <div style={{ ...S.cardHead, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                        <span>Other Income</span>
+                        <span>Other earnings</span>
                         {otherIncomeStore && otherIncomeStore.entries.length > 0 && (
                           <button onClick={() => setOtherIncomeMenuOpen(v => !v)} style={{ fontSize:11, padding:'4px 10px', background:C.fg, color:C.wheat, border:'none', borderRadius:3, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>+ Add source</button>
                         )}
@@ -2714,9 +2716,9 @@ function ProfileContent() {
                       <div style={{ ...S.cardHead, background:C.wl, color:C.fg }}>Next step · see your tax picture</div>
                       <div style={{ padding:'14px 16px' }}>
                         <p style={{ fontSize:12, color:C.muted, margin:'0 0 12px', lineHeight:1.55 }}>
-                          We've sent your salary data — annual gross <strong style={{ color:C.text }}>{fmt(annual.annualGross)}</strong>, HRA, EPF, and basic — to Tax Optimiser. Continue there to add rent, health insurance, and any other deductions to estimate your actual tax.
+                          We've sent your salary data — annual gross <strong style={{ color:C.text }}>{fmt(annual.annualGross)}</strong>, HRA, EPF, and basic — to Your Tax. Continue there to add rent, health insurance, and any other deductions to estimate your actual tax.
                         </p>
-                        <button onClick={syncToTaxOptimiser} style={{ padding:'9px 18px', background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Continue to Tax Optimiser →</button>
+                        <button onClick={syncToTaxOptimiser} style={{ padding:'9px 18px', background:C.fg, color:C.wheat, border:'none', borderRadius:5, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Continue to Your Tax →</button>
                         {taxCta.submittedAt && (
                           <p style={{ fontSize:11, color:C.muted, margin:'10px 0 0' }}>
                             ✓ Synced · last sent {new Date(taxCta.submittedAt).toLocaleDateString('en-IN', { day:'numeric', month:'short' })}
@@ -3375,7 +3377,7 @@ function ProfileContent() {
                     <div>
                       <label style={labelStyle}>Savings account interest earned this year</label>
                       <input type="text" inputMode="numeric" value={incomeForm.savingsInterest} onChange={e => update('savingsInterest', e.target.value.replace(/[^0-9]/g, ''))} placeholder="₹ 0" style={inputStyle} />
-                      <p style={{ fontSize:10.5, color:C.muted, margin:'3px 0 0', lineHeight:1.4 }}>Up to ₹10,000 will auto-apply as a deduction (Section 80TTA) in Tax Optimiser.</p>
+                      <p style={{ fontSize:10.5, color:C.muted, margin:'3px 0 0', lineHeight:1.4 }}>Up to ₹10,000 will auto-apply as a deduction (Section 80TTA) in Your Tax.</p>
                     </div>
                     <div>
                       <label style={labelStyle}>Dividends received this year</label>

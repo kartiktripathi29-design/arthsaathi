@@ -3,6 +3,7 @@
 // components/DematHoldings.tsx
 
 import { useState, useEffect } from 'react';
+import { tokens as T } from '@/lib/tokens';
 
 interface Transaction {
   date: string;
@@ -323,7 +324,7 @@ export default function DematHoldings({ existingHoldings, onSuccess }: DematHold
     ? new Date(holdings.fetched_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
     : null;
 
-  const C = { fg: '#3A4B41', wheat: '#E6CFA7', wl: '#F5ECD8', wm: '#D4B98A', border: '#E4DDD1', text: '#1C2B22', muted: '#7A8A7E' };
+  const C = { fg: T.teal, wheat: T.taupe, wl: T.sand, wm: T.taupeLine, border: T.hairline, text: T.ink, muted: T.muted };
 
   return (
     <div style={{ marginBottom: 14 }}>

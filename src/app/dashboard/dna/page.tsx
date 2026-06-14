@@ -2,7 +2,9 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
-const C = { fg:'#3A4B41', wheat:'#E6CFA7', wl:'#F5ECD8', wm:'#D4B98A', bg:'#FDFAF6', card:'#fff', border:'#E4DDD1', text:'#1C2B22', muted:'#7A8A7E' }
+import { tokens as T } from '@/lib/tokens'
+
+const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, bg:T.paper, card:T.card, border:T.hairline, text:T.ink, muted:T.muted }
 
 const QUESTIONS = [
   {
@@ -142,6 +144,8 @@ const PROFILES: Record<string, any> = {
 
 export default function DNAPage() {
   const router = useRouter()
+  // PHASE-2: remove this guard to re-enable
+  useEffect(() => { router.replace('/dashboard/profile/documents') }, [router])
   const [step, setStep] = useState<'quiz'|'processing'|'result'>('quiz')
   const [current, setCurrent] = useState(0)
   const [scores, setScores] = useState({ E:0, B:0, P:0, O:0 })

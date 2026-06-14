@@ -4,8 +4,20 @@ import { useRouter } from 'next/navigation'
 import { computeSec80G, type DonationCat } from '@/lib/deductions'
 import { getSalaryFacts } from '@/lib/salary-facts'
 
-const C = { fg:'#3A4B41', wheat:'#E6CFA7', wl:'#F5ECD8', wm:'#D4B98A', bg:'#FDFAF6', card:'#fff', border:'#E4DDD1', text:'#1C2B22', muted:'#7A8A7E', danger:'#B94040' }
+import { tokens as T } from '@/lib/tokens'
+
+const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, bg:T.paper, card:T.card, border:T.hairline, text:T.ink, muted:T.muted, faint:T.faint, green:T.green, marigold:T.marigold, danger:'#B94040' }
 const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`
+
+// Right-aligned ₹-state shown in each collapsed card header — same grammar as the exemptions page:
+// claimed total > 0 → green "₹… ✓", else marigold "₹ —".
+function StatePill({ value }: { value: number }) {
+  return (
+    <span style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' as const, color: value > 0 ? C.green : C.marigold }}>
+      {value > 0 ? `${fmt(value)} ✓` : '₹ —'}
+    </span>
+  )
+}
 
 export default function DeductionsPage() {
   const router = useRouter()
@@ -157,29 +169,32 @@ export default function DeductionsPage() {
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '20px 0' }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Deductions</h1>
-      <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>Tax-saving investments and expenses. (These only reduce tax in Old Regime)</p>
+      <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>Tax-saving investments and expenses. <span style={{ whiteSpace: 'nowrap' }}>(These only reduce tax in Old Regime)</span></p>
 
       {/* Context Banner */}
       <div style={{ background: C.wl, border: `1px solid ${C.wm}`, borderRadius: 8, padding: 16, marginBottom: 24 }}>
         <p style={{ fontSize: 12, color: C.text, margin: 0, lineHeight: 1.6 }}>
-          You've claimed <strong>{fmt(sec80C + ded.homeLoanInterest + ded.nps)}</strong> total. Only invest what makes financial sense — tax saving is a bonus, not the goal.
+          You've claimed <strong>{fmt(sec80C + ded.homeLoanInterest + ded.nps)}</strong> total. Only invest what makes financial sense — <span style={{ whiteSpace: 'nowrap' }}>tax saving is a bonus, not the goal.</span>
         </p>
       </div>
 
       {/* Section 80C */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 16, overflow: 'hidden' }}>
-        <button onClick={() => toggle('80c')} style={{ width: '100%', padding: '14px 16px', background: expanded.includes('80c') ? C.wl : '#fff', border: 'none', borderBottom: expanded.includes('80c') ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <button onClick={() => toggle('80c')} style={{ width: '100%', padding: '14px 16px', background: expanded.includes('80c') ? C.wl : T.card, border: 'none', borderBottom: expanded.includes('80c') ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ textAlign: 'left' }}>
-            <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>Did you invest in PPF, ELSS, LIC, or tuition?</p>
-            <p style={{ fontSize: 10, color: C.muted, margin: 0 }}>Section 80C (max ₹1,50,000)</p>
+            <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>Tax-saving investments</p>
+            <p style={{ fontSize: 10, color: C.muted, margin: 0 }}>PF, PPF, ELSS, LIC and the rest — <span style={{ whiteSpace: 'nowrap' }}>one shared limit</span></p>
           </div>
-          <span style={{ fontSize: 14, color: C.fg }}>{expanded.includes('80c') ? '−' : '+'}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <StatePill value={sec80C} />
+            <span style={{ fontSize: 14, color: C.fg }}>{expanded.includes('80c') ? '−' : '+'}</span>
+          </div>
         </button>
         {expanded.includes('80c') && (
-          <div style={{ padding: '14px 16px', background: '#fff' }}>
+          <div style={{ padding: '14px 16px', background: T.card }}>
             {pfAutoApplied && (
-              <div style={{ marginBottom: 12, padding: '8px 10px', background: '#E8F2EC', border: '1px solid #B8D9C4', borderRadius: 4 }}>
-                <p style={{ fontSize: 11, color: '#1A5634', margin: 0, lineHeight: 1.5 }}>
+              <div style={{ marginBottom: 12, padding: '8px 10px', background: T.slip.fill, border: `1px solid ${T.slip.border}`, borderRadius: 4 }}>
+                <p style={{ fontSize: 11, color: C.green, margin: 0, lineHeight: 1.5 }}>
                   💡 Auto-filled <strong>Employee PF</strong> = {fmt(pfAutoApplied.annual)} (from your salary slip × 12). Adjust below if needed.
                 </p>
               </div>
@@ -198,39 +213,43 @@ export default function DeductionsPage() {
               ].map(({ key, label, hint }) => (
                 <div key={key}>
                   <label style={{ display: 'block', fontSize: 10.5, color: C.muted, marginBottom: 3, fontWeight: 500 }}>
-                    {label}{hint === 'auto' && <span style={{ marginLeft: 4, fontSize: 9.5, color: '#2A7A4A', fontWeight: 700 }}>· prefilled</span>}
+                    {label}{hint === 'auto' && <span style={{ marginLeft: 4, fontSize: 9.5, color: C.green, fontWeight: 700 }}>· prefilled</span>}
                   </label>
                   <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden' }}>
                     <span style={{ padding: '6px 6px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
-                    <input type="text" inputMode="numeric" value={(ded as any)[key] > 0 ? (ded as any)[key] : ''} onChange={(e) => setDed({ ...ded, [key]: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit' }} />
+                    <input type="text" inputMode="numeric" value={(ded as any)[key] > 0 ? (ded as any)[key] : ''} onChange={(e) => setDed({ ...ded, [key]: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit', background: 'transparent', color: C.text }} />
                   </div>
                 </div>
               ))}
             </div>
-            <div style={{ padding: '10px 12px', background: C.wl, borderRadius: 4, display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 11, color: C.muted }}>Total claimed</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: C.fg }}>{fmt(sec80C)} / ₹1,50,000</span>
+            <div style={{ padding: '10px 12px', background: C.bg, borderRadius: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 11, color: C.muted }}>Counted toward the cap</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.fg }}>{fmt(Math.min(sec80C, 150000))} / ₹1,50,000</span>
             </div>
+            <p style={{ fontSize: 10, color: C.faint, margin: '10px 0 0', lineHeight: 1.45 }}>Section 80C · everything above shares one ₹1.5L limit</p>
           </div>
         )}
       </div>
 
       {/* Section 80D */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 16, overflow: 'hidden' }}>
-        <button onClick={() => toggle('80d')} style={{ width: '100%', padding: '14px 16px', background: expanded.includes('80d') ? C.wl : '#fff', border: 'none', borderBottom: expanded.includes('80d') ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <button onClick={() => toggle('80d')} style={{ width: '100%', padding: '14px 16px', background: expanded.includes('80d') ? C.wl : T.card, border: 'none', borderBottom: expanded.includes('80d') ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ textAlign: 'left' }}>
-            <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>Do you pay health insurance premiums?</p>
-            <p style={{ fontSize: 10, color: C.muted, margin: 0 }}>Section 80D (max ₹1,00,000)</p>
+            <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>Health insurance</p>
+            <p style={{ fontSize: 10, color: C.muted, margin: 0 }}>Premiums for you, your family, your parents</p>
           </div>
-          <span style={{ fontSize: 14, color: C.fg }}>{expanded.includes('80d') ? '−' : '+'}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <StatePill value={sec80D} />
+            <span style={{ fontSize: 14, color: C.fg }}>{expanded.includes('80d') ? '−' : '+'}</span>
+          </div>
         </button>
         {expanded.includes('80d') && (
-          <div style={{ padding: '14px 16px', background: '#fff' }}>
+          <div style={{ padding: '14px 16px', background: T.card }}>
             <div>
               <label style={{ display: 'block', fontSize: 11, color: C.text, marginBottom: 8, fontWeight: 600 }}>Self + Family</label>
               <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden', marginBottom: 10 }}>
                 <span style={{ padding: '6px 6px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
-                <input type="text" inputMode="numeric" value={ded.selfFamily > 0 ? ded.selfFamily : ''} onChange={(e) => setDed({ ...ded, selfFamily: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit' }} />
+                <input type="text" inputMode="numeric" value={ded.selfFamily > 0 ? ded.selfFamily : ''} onChange={(e) => setDed({ ...ded, selfFamily: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit', background: 'transparent', color: C.text }} />
               </div>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 11 }}>
                 <input type="checkbox" checked={ded.selfSenior} onChange={(e) => {
@@ -248,7 +267,7 @@ export default function DeductionsPage() {
               <label style={{ display: 'block', fontSize: 11, color: C.text, marginBottom: 8, fontWeight: 600 }}>Parents</label>
               <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden', marginBottom: 10 }}>
                 <span style={{ padding: '6px 6px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
-                <input type="text" inputMode="numeric" value={ded.parents > 0 ? ded.parents : ''} onChange={(e) => setDed({ ...ded, parents: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit' }} />
+                <input type="text" inputMode="numeric" value={ded.parents > 0 ? ded.parents : ''} onChange={(e) => setDed({ ...ded, parents: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit', background: 'transparent', color: C.text }} />
               </div>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 11 }}>
                 <input type="checkbox" checked={ded.parentsSenior} onChange={(e) => setDed({ ...ded, parentsSenior: e.target.checked })} /> <span>Parents are 60+? (₹50k limit instead of ₹25k)</span>
@@ -260,7 +279,7 @@ export default function DeductionsPage() {
                 <p style={{ fontSize: 10.5, color: C.muted, margin: '0 0 6px' }}>Out-of-pocket medical bills for senior parents who DON'T have health insurance. Combined with parents-premium under the ₹50k cap.</p>
                 <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden' }}>
                   <span style={{ padding: '6px 6px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
-                  <input type="text" inputMode="numeric" value={ded.parentsMedicalExp > 0 ? ded.parentsMedicalExp : ''} onChange={(e) => setDed({ ...ded, parentsMedicalExp: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit' }} />
+                  <input type="text" inputMode="numeric" value={ded.parentsMedicalExp > 0 ? ded.parentsMedicalExp : ''} onChange={(e) => setDed({ ...ded, parentsMedicalExp: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit', background: 'transparent', color: C.text }} />
                 </div>
               </div>
             )}
@@ -268,76 +287,88 @@ export default function DeductionsPage() {
               <span style={{ fontSize: 11, color: C.muted }}>Total claimed</span>
               <span style={{ fontSize: 13, fontWeight: 700, color: C.fg }}>{fmt(sec80D)} / {fmt(selfCap + parentsCap)}</span>
             </div>
+            <p style={{ fontSize: 10, color: C.faint, margin: '10px 0 0', lineHeight: 1.45 }}>Section 80D · self + family capped at ₹25k (₹50k if 60+) · parents another ₹25k (₹50k if 60+)</p>
           </div>
         )}
       </div>
 
       {/* Home Loan */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 16, overflow: 'hidden' }}>
-        <button onClick={() => toggle('24b')} style={{ width: '100%', padding: '14px 16px', background: expanded.includes('24b') ? C.wl : '#fff', border: 'none', borderBottom: expanded.includes('24b') ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <button onClick={() => toggle('24b')} style={{ width: '100%', padding: '14px 16px', background: expanded.includes('24b') ? C.wl : T.card, border: 'none', borderBottom: expanded.includes('24b') ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ textAlign: 'left' }}>
-            <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>Are you paying a home loan?</p>
-            <p style={{ fontSize: 10, color: C.muted, margin: 0 }}>Section 24(b) (max ₹2,00,000)</p>
+            <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>Home loan interest</p>
+            <p style={{ fontSize: 10, color: C.muted, margin: 0 }}>The interest part of your EMIs</p>
           </div>
-          <span style={{ fontSize: 14, color: C.fg }}>{expanded.includes('24b') ? '−' : '+'}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <StatePill value={sec24b} />
+            <span style={{ fontSize: 14, color: C.fg }}>{expanded.includes('24b') ? '−' : '+'}</span>
+          </div>
         </button>
         {expanded.includes('24b') && (
-          <div style={{ padding: '14px 16px', background: '#fff' }}>
+          <div style={{ padding: '14px 16px', background: T.card }}>
             <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 6, fontWeight: 500 }}>Interest paid this year</label>
             <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden' }}>
               <span style={{ padding: '8px 8px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
-              <input type="text" inputMode="numeric" value={ded.homeLoanInterest > 0 ? ded.homeLoanInterest : ''} onChange={(e) => setDed({ ...ded, homeLoanInterest: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '8px 8px', fontSize: 13, fontFamily: 'inherit' }} />
+              <input type="text" inputMode="numeric" value={ded.homeLoanInterest > 0 ? ded.homeLoanInterest : ''} onChange={(e) => setDed({ ...ded, homeLoanInterest: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '8px 8px', fontSize: 13, fontFamily: 'inherit', background: 'transparent', color: C.text }} />
             </div>
             <div style={{ padding: '10px 12px', background: C.wl, borderRadius: 4, display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
               <span style={{ fontSize: 11, color: C.muted }}>Claimed (capped at ₹2L)</span>
               <span style={{ fontSize: 13, fontWeight: 700, color: C.fg }}>{fmt(Math.min(ded.homeLoanInterest, 200000))}</span>
             </div>
+            <p style={{ fontSize: 10, color: C.faint, margin: '10px 0 0', lineHeight: 1.45 }}>Section 24(b) · cap ₹2L</p>
           </div>
         )}
       </div>
 
       {/* NPS */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 24, overflow: 'hidden' }}>
-        <button onClick={() => toggle('nps')} style={{ width: '100%', padding: '14px 16px', background: expanded.includes('nps') ? C.wl : '#fff', border: 'none', borderBottom: expanded.includes('nps') ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <button onClick={() => toggle('nps')} style={{ width: '100%', padding: '14px 16px', background: expanded.includes('nps') ? C.wl : T.card, border: 'none', borderBottom: expanded.includes('nps') ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ textAlign: 'left' }}>
-            <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>Did you contribute to NPS?</p>
-            <p style={{ fontSize: 10, color: C.muted, margin: 0 }}>Section 80CCD(1B) (max ₹50,000 — separate from 80C)</p>
+            <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>Pension savings (NPS)</p>
+            <p style={{ fontSize: 10, color: C.muted, margin: 0 }}>Your own NPS contributions</p>
           </div>
-          <span style={{ fontSize: 14, color: C.fg }}>{expanded.includes('nps') ? '−' : '+'}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <StatePill value={secNps} />
+            <span style={{ fontSize: 14, color: C.fg }}>{expanded.includes('nps') ? '−' : '+'}</span>
+          </div>
         </button>
         {expanded.includes('nps') && (
-          <div style={{ padding: '14px 16px', background: '#fff' }}>
+          <div style={{ padding: '14px 16px', background: T.card }}>
             <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 6, fontWeight: 500 }}>NPS contribution this year</label>
             <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden' }}>
               <span style={{ padding: '8px 8px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
-              <input type="text" inputMode="numeric" value={ded.nps > 0 ? ded.nps : ''} onChange={(e) => setDed({ ...ded, nps: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '8px 8px', fontSize: 13, fontFamily: 'inherit' }} />
+              <input type="text" inputMode="numeric" value={ded.nps > 0 ? ded.nps : ''} onChange={(e) => setDed({ ...ded, nps: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '8px 8px', fontSize: 13, fontFamily: 'inherit', background: 'transparent', color: C.text }} />
             </div>
             <div style={{ padding: '10px 12px', background: C.wl, borderRadius: 4, display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
               <span style={{ fontSize: 11, color: C.muted }}>Claimed (capped at ₹50k)</span>
               <span style={{ fontSize: 13, fontWeight: 700, color: C.fg }}>{fmt(Math.min(ded.nps, 50000))}</span>
             </div>
+            <p style={{ fontSize: 10, color: C.faint, margin: '10px 0 0', lineHeight: 1.45 }}>Section 80CCD(1B) · ₹50k over and above 80C</p>
           </div>
         )}
       </div>
 
       {/* Section 80TTA / 80TTB — savings & FD interest */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 16, overflow: 'hidden' }}>
-        <button onClick={() => toggle('80tta')} style={{ width: '100%', padding: '14px 16px', background: expanded.includes('80tta') ? C.wl : '#fff', border: 'none', borderBottom: expanded.includes('80tta') ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <button onClick={() => toggle('80tta')} style={{ width: '100%', padding: '14px 16px', background: expanded.includes('80tta') ? C.wl : T.card, border: 'none', borderBottom: expanded.includes('80tta') ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ textAlign: 'left' }}>
-            <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>Did you earn savings / FD interest?</p>
-            <p style={{ fontSize: 10, color: C.muted, margin: 0 }}>Section 80TTA (under 60: savings only, max ₹10k) · 80TTB (60+: savings + FD + RD, max ₹50k)</p>
+            <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>Savings & FD interest</p>
+            <p style={{ fontSize: 10, color: C.muted, margin: 0 }}>Interest your bank paid you</p>
           </div>
-          <span style={{ fontSize: 14, color: C.fg }}>{expanded.includes('80tta') ? '−' : '+'}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <StatePill value={sec80TTA + sec80TTB} />
+            <span style={{ fontSize: 14, color: C.fg }}>{expanded.includes('80tta') ? '−' : '+'}</span>
+          </div>
         </button>
         {expanded.includes('80tta') && (
-          <div style={{ padding: '14px 16px', background: '#fff' }}>
+          <div style={{ padding: '14px 16px', background: T.card }}>
             {!ded.selfSenior ? (
               <div>
                 <label style={{ display: 'block', fontSize: 11, color: C.text, marginBottom: 4, fontWeight: 600 }}>80TTA — Interest on savings accounts (cap ₹10k)</label>
                 <p style={{ fontSize: 10.5, color: C.muted, margin: '0 0 6px' }}>FD interest is NOT eligible under 80TTA — that's taxable. Only savings-account interest.</p>
                 <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden' }}>
                   <span style={{ padding: '6px 6px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
-                  <input type="text" inputMode="numeric" value={ded.savingsInterest80TTA > 0 ? ded.savingsInterest80TTA : ''} onChange={(e) => setDed({ ...ded, savingsInterest80TTA: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit' }} />
+                  <input type="text" inputMode="numeric" value={ded.savingsInterest80TTA > 0 ? ded.savingsInterest80TTA : ''} onChange={(e) => setDed({ ...ded, savingsInterest80TTA: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit', background: 'transparent', color: C.text }} />
                 </div>
                 <p style={{ fontSize: 10.5, color: C.muted, marginTop: 8 }}>Tick "You/spouse is 60+" in the 80D section to switch to 80TTB (covers FD too).</p>
               </div>
@@ -347,7 +378,7 @@ export default function DeductionsPage() {
                 <p style={{ fontSize: 10.5, color: C.muted, margin: '0 0 6px' }}>Available because you ticked "You/spouse is 60+" above. Combined cap ₹50k across all deposit interest.</p>
                 <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden' }}>
                   <span style={{ padding: '6px 6px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
-                  <input type="text" inputMode="numeric" value={ded.interest80TTB > 0 ? ded.interest80TTB : ''} onChange={(e) => setDed({ ...ded, interest80TTB: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit' }} />
+                  <input type="text" inputMode="numeric" value={ded.interest80TTB > 0 ? ded.interest80TTB : ''} onChange={(e) => setDed({ ...ded, interest80TTB: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '6px 6px', fontSize: 12, fontFamily: 'inherit', background: 'transparent', color: C.text }} />
                 </div>
               </div>
             )}
@@ -355,45 +386,53 @@ export default function DeductionsPage() {
               <span style={{ fontSize: 11, color: C.muted }}>Claimed</span>
               <span style={{ fontSize: 13, fontWeight: 700, color: C.fg }}>{fmt(sec80TTA + sec80TTB)} / {ded.selfSenior ? '₹50k (80TTB)' : '₹10k (80TTA)'}</span>
             </div>
+            <p style={{ fontSize: 10, color: C.faint, margin: '10px 0 0', lineHeight: 1.45 }}>Section 80TTA · savings interest, cap ₹10k (under 60) · 80TTB · savings + FD + RD, cap ₹50k (60+)</p>
           </div>
         )}
       </div>
 
       {/* Section 80E — education loan interest */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 16, overflow: 'hidden' }}>
-        <button onClick={() => toggle('80e')} style={{ width: '100%', padding: '14px 16px', background: expanded.includes('80e') ? C.wl : '#fff', border: 'none', borderBottom: expanded.includes('80e') ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <button onClick={() => toggle('80e')} style={{ width: '100%', padding: '14px 16px', background: expanded.includes('80e') ? C.wl : T.card, border: 'none', borderBottom: expanded.includes('80e') ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ textAlign: 'left' }}>
-            <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>Are you paying education loan interest?</p>
-            <p style={{ fontSize: 10, color: C.muted, margin: 0 }}>Section 80E (no upper cap · only INTEREST, not principal · 8-year limit from loan start)</p>
+            <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>Education loan interest</p>
+            <p style={{ fontSize: 10, color: C.muted, margin: 0 }}>No upper limit on this one</p>
           </div>
-          <span style={{ fontSize: 14, color: C.fg }}>{expanded.includes('80e') ? '−' : '+'}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <StatePill value={sec80E} />
+            <span style={{ fontSize: 14, color: C.fg }}>{expanded.includes('80e') ? '−' : '+'}</span>
+          </div>
         </button>
         {expanded.includes('80e') && (
-          <div style={{ padding: '14px 16px', background: '#fff' }}>
+          <div style={{ padding: '14px 16px', background: T.card }}>
             <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 6, fontWeight: 500 }}>Interest paid this FY on a higher-education loan (for self / spouse / children / ward you legally guardian)</label>
             <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden' }}>
               <span style={{ padding: '8px 8px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
-              <input type="text" inputMode="numeric" value={ded.eduLoanInterest80E > 0 ? ded.eduLoanInterest80E : ''} onChange={(e) => setDed({ ...ded, eduLoanInterest80E: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '8px 8px', fontSize: 13, fontFamily: 'inherit' }} />
+              <input type="text" inputMode="numeric" value={ded.eduLoanInterest80E > 0 ? ded.eduLoanInterest80E : ''} onChange={(e) => setDed({ ...ded, eduLoanInterest80E: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 })} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', padding: '8px 8px', fontSize: 13, fontFamily: 'inherit', background: 'transparent', color: C.text }} />
             </div>
             <div style={{ padding: '10px 12px', background: C.wl, borderRadius: 4, display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
               <span style={{ fontSize: 11, color: C.muted }}>Claimed (no cap)</span>
               <span style={{ fontSize: 13, fontWeight: 700, color: C.fg }}>{fmt(sec80E)}</span>
             </div>
+            <p style={{ fontSize: 10, color: C.faint, margin: '10px 0 0', lineHeight: 1.45 }}>Section 80E · only interest, not principal · 8-year window from loan start</p>
           </div>
         )}
       </div>
 
       {/* Section 80G — donations, broken out by the four statutory qualifying-limit buckets */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 24, overflow: 'hidden' }}>
-        <button onClick={() => toggle('80g')} style={{ width: '100%', padding: '14px 16px', background: expanded.includes('80g') ? C.wl : '#fff', border: 'none', borderBottom: expanded.includes('80g') ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <button onClick={() => toggle('80g')} style={{ width: '100%', padding: '14px 16px', background: expanded.includes('80g') ? C.wl : T.card, border: 'none', borderBottom: expanded.includes('80g') ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ textAlign: 'left' }}>
-            <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>Did you donate to a registered charity / PM CARES / etc.?</p>
-            <p style={{ fontSize: 10, color: C.muted, margin: 0 }}>Section 80G — pick the qualifying-limit bucket per donation. Buckets with limit are capped at 10% of Adjusted GTI.</p>
+            <p style={{ fontSize: 12, fontWeight: 600, color: C.text, margin: '0 0 2px' }}>Donations</p>
+            <p style={{ fontSize: 10, color: C.muted, margin: 0 }}>To registered charities</p>
           </div>
-          <span style={{ fontSize: 14, color: C.fg }}>{expanded.includes('80g') ? '−' : '+'}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <StatePill value={sec80G} />
+            <span style={{ fontSize: 14, color: C.fg }}>{expanded.includes('80g') ? '−' : '+'}</span>
+          </div>
         </button>
         {expanded.includes('80g') && (
-          <div style={{ padding: '14px 16px', background: '#fff' }}>
+          <div style={{ padding: '14px 16px', background: T.card }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12, fontSize: 10.5, color: C.muted, lineHeight: 1.5 }}>
               <div><strong style={{ color: C.text }}>100% · No qualifying limit</strong><br/>PM CARES, PMNRF, National Defence Fund, Swachh Bharat Kosh, Clean Ganga Fund</div>
               <div><strong style={{ color: C.text }}>50% · No qualifying limit</strong><br/>JN Memorial Fund, Indira Gandhi Memorial Trust, Rajiv Gandhi Foundation, PM's Drought Relief Fund</div>
@@ -413,7 +452,7 @@ export default function DeductionsPage() {
                   style={{
                     flex: '0 0 220px', height: 36, padding: '0 28px 0 10px',
                     border: `1px solid ${C.border}`, borderRadius: 4,
-                    fontSize: 12, fontFamily: 'inherit', background: '#fff', color: C.text,
+                    fontSize: 12, fontFamily: 'inherit', background: T.card, color: C.text,
                     boxSizing: 'border-box', appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none' as any,
                     lineHeight: '34px', cursor: 'pointer',
                     backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%237A8A7E'/></svg>")`,
@@ -421,10 +460,10 @@ export default function DeductionsPage() {
                     backgroundPosition: 'right 10px center',
                   }}
                 >
-                  <option value="100NoLimit">100% · No limit</option>
-                  <option value="50NoLimit">50% · No limit</option>
-                  <option value="100WithLimit">100% · 10% AGTI cap</option>
-                  <option value="50WithLimit">50% · 10% AGTI cap</option>
+                  <option value="100NoLimit">100% — no limit</option>
+                  <option value="50NoLimit">50% — no limit</option>
+                  <option value="100WithLimit">100% — capped at 10% of income</option>
+                  <option value="50WithLimit">50% — capped at 10% of income</option>
                 </select>
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden', height: 36, boxSizing: 'border-box' }}>
                   <span style={{ padding: '0 10px', height: '100%', display: 'flex', alignItems: 'center', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
@@ -433,7 +472,7 @@ export default function DeductionsPage() {
                     value={row.amount > 0 ? row.amount : ''}
                     onChange={(e) => setDonationRows(prev => prev.map(r => r.id === row.id ? { ...r, amount: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0 } : r))}
                     placeholder="Gross donation amount"
-                    style={{ flex: 1, border: 'none', outline: 'none', padding: '0 10px', fontSize: 13, fontFamily: 'inherit', height: '100%' }}
+                    style={{ flex: 1, border: 'none', outline: 'none', padding: '0 10px', fontSize: 13, fontFamily: 'inherit', height: '100%', background: 'transparent', color: C.text }}
                   />
                 </div>
                 <button
@@ -449,8 +488,8 @@ export default function DeductionsPage() {
               style={{ marginTop: 4, padding: '8px 12px', background: 'transparent', border: `1px dashed ${C.border}`, borderRadius: 4, color: C.fg, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}
             >+ Add donation</button>
 
-            <div style={{ padding: '8px 10px', background: '#FFF8E6', border: '1px solid #E8D9A8', borderRadius: 4, marginTop: 12 }}>
-              <p style={{ fontSize: 10.5, color: '#7A5C00', margin: 0, lineHeight: 1.45 }}>
+            <div style={{ padding: '8px 10px', background: T.caution.fill, border: `1px solid ${T.caution.border}`, borderRadius: 4, marginTop: 12 }}>
+              <p style={{ fontSize: 10.5, color: T.caution.text, margin: 0, lineHeight: 1.45 }}>
                 ⚠️ Cash donations above <strong>₹2,000</strong> are not eligible (must be via cheque/UPI/bank). 80G is <strong>not available under the new tax regime</strong>.
               </p>
             </div>
@@ -474,14 +513,15 @@ export default function DeductionsPage() {
               <span style={{ fontSize: 11, color: C.muted }}>Total 80G claimed</span>
               <span style={{ fontSize: 13, fontWeight: 700, color: C.fg }}>{fmt(sec80G)}</span>
             </div>
+            <p style={{ fontSize: 10, color: C.faint, margin: '10px 0 0', lineHeight: 1.45 }}>Section 80G · some categories capped at 10% of income</p>
           </div>
         )}
       </div>
 
       {/* Tax Savings Preview */}
       {taxSavingsOld > 0 && (
-        <div style={{ background: '#F0F9F7', border: `1px solid #D1E8E4`, borderRadius: 8, padding: 16, marginBottom: 24 }}>
-          <p style={{ fontSize: 11, color: C.muted, margin: '0 0 6px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>Rough tax savings (Old Regime)</p>
+        <div style={{ background: T.tint, border: `1px solid ${T.hairline}`, borderRadius: 8, padding: 16, marginBottom: 24 }}>
+          <p style={{ fontSize: 11, color: C.muted, margin: '0 0 6px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>Rough savings — old regime, <span style={{ whiteSpace: 'nowrap' }}>before your real rate</span></p>
           <p style={{ fontSize: 18, fontWeight: 700, color: C.fg, margin: 0 }}>~{fmt(taxSavingsOld)}</p>
           <p style={{ fontSize: 10, color: C.muted, margin: '6px 0 0' }}>These deductions don't count in New Regime. Your actual saving depends on your total income and which regime you choose.</p>
         </div>
@@ -489,8 +529,8 @@ export default function DeductionsPage() {
 
       {/* Navigation */}
       <div style={{ display: 'flex', gap: 12 }}>
-        <button onClick={() => router.push('/dashboard/profile/exemptions')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
-        <button onClick={() => router.push('/dashboard/tax/optimizer')} style={{ flex: 1, padding: '12px', background: C.fg, color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Next: Tax Optimizer →</button>
+        <button onClick={() => router.push('/dashboard/profile/exemptions')} style={{ flex: 1, padding: '12px', background: 'transparent', color: C.fg, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>← Back</button>
+        <button onClick={() => router.push('/dashboard/tax/optimizer')} style={{ flex: 1, padding: '12px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Your Tax →</button>
       </div>
     </div>
   )

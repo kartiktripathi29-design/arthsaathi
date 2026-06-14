@@ -2,8 +2,11 @@
 import { useState, useEffect } from 'react'
 import { useAppStore } from '@/store/AppStore'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
-const C = { fg:'#3A4B41', wheat:'#E6CFA7', wl:'#F5ECD8', wm:'#D4B98A', bg:'#FDFAF6', card:'#fff', border:'#E4DDD1', text:'#1C2B22', muted:'#7A8A7E', danger:'#B94040' }
+import { tokens as T } from '@/lib/tokens'
+
+const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, bg:T.paper, card:T.card, border:T.hairline, text:T.ink, muted:T.muted, danger:'#B94040' }
 const fmt = (n:number) => `₹${Math.round(n).toLocaleString('en-IN')}`
 const calcEMI = (p:number, months:number, annualRate:number) => {
   if (annualRate === 0) return p/months
@@ -15,6 +18,9 @@ type Step = 'input' | 'verdict'
 
 export default function DecidePage() {
   const { salary } = useAppStore()
+  // PHASE-2: remove this guard to re-enable
+  const router = useRouter()
+  useEffect(() => { router.replace('/dashboard/profile/documents') }, [router])
   const [step, setStep] = useState<Step>('input')
   const [itemName, setItemName] = useState('')
   const [price, setPrice] = useState('')

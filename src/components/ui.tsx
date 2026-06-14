@@ -1,9 +1,10 @@
 'use client'
 import React from 'react'
+import { tokens as T } from '@/lib/tokens'
 
 // ─── Stat Card ────────────────────────────────────────────────────────────
 export function StatCard({
-  label, value, sub, color = '#1A3C5E', icon, trend
+  label, value, sub, color = T.teal, icon, trend
 }: {
   label: string; value: string; sub?: string
   color?: string; icon?: string; trend?: { dir: 'up' | 'down'; label: string }
@@ -43,7 +44,7 @@ export function SectionHeader({ title, sub, action }: { title: string; sub?: str
 // ─── Badge ────────────────────────────────────────────────────────────────
 export function Badge({ children, color = 'blue' }: { children: React.ReactNode; color?: 'blue' | 'green' | 'orange' | 'red' | 'gray' }) {
   const styles: Record<string, { bg: string; text: string }> = {
-    blue:   { bg: '#E8F1FA', text: '#1A3C5E' },
+    blue:   { bg: T.tint, text: T.teal },
     green:  { bg: '#E9F7EF', text: '#1E8449' },
     orange: { bg: '#FEF3E2', text: '#92400E' },
     red:    { bg: '#FDEDEC', text: '#C0392B' },
@@ -58,7 +59,7 @@ export function Badge({ children, color = 'blue' }: { children: React.ReactNode;
 // ─── Info Box ─────────────────────────────────────────────────────────────
 export function InfoBox({ icon = 'ℹ️', children, variant = 'info' }: { icon?: string; children: React.ReactNode; variant?: 'info' | 'success' | 'warning' | 'danger' }) {
   const styles = {
-    info:    { bg: '#E8F1FA', border: '#A8CCE8', text: '#1A3C5E' },
+    info:    { bg: T.tint, border: T.slip.border, text: T.teal },
     success: { bg: '#E9F7EF', border: '#A9DFBF', text: '#1E5631' },
     warning: { bg: '#FEF3E2', border: '#F0C070', text: '#78350F' },
     danger:  { bg: '#FDEDEC', border: '#F5C6C2', text: '#922B21' },
