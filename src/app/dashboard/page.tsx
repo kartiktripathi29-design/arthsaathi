@@ -161,6 +161,51 @@ export default function DashboardPage() {
         </Card>
       </div>
 
+      {/* Savings opportunities — unused deduction headroom (only when the snapshot carries usage). */}
+      {typeof ov.sec80C === 'number' && (() => {
+        const items = [
+          { label: 'Home-loan interest · 24(b)', limit: 200000, used: Math.max(0, ov.sec24b || 0) },
+          { label: '80C investments', limit: 150000, used: Math.max(0, ov.sec80C || 0) },
+          { label: 'Health insurance · 80D', limit: 100000, used: Math.max(0, ov.sec80D || 0) },
+          { label: 'NPS · 80CCD(1B)', limit: 50000, used: Math.max(0, ov.nps || 0) },
+        ]
+        const open = items.filter(i => i.limit - i.used > 0)
+        const taxSaveable = open.reduce((s, i) => s + (i.limit - i.used) * 0.30, 0)
+        return (
+          <Card style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+              <h3 style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Where you can save more</h3>
+              {taxSaveable > 0 && <span style={{ fontSize: 12, color: C.muted }}>Up to <strong style={{ color: C.green }}>~{fmt(taxSaveable)}</strong> more in tax</span>}
+            </div>
+            {open.length === 0 ? (
+              <div style={{ padding: '12px', background: C.tint, border: `1px solid ${C.border}`, borderRadius: 8 }}>
+                <p style={{ fontSize: 12.5, color: C.green, margin: 0, fontWeight: 600 }}>✓ You’ve used all the major deduction limits (80C, 80D, NPS, home-loan interest).</p>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+                {open.map(i => {
+                  const gap = i.limit - i.used
+                  const pct = Math.round((i.used / i.limit) * 100)
+                  return (
+                    <div key={i.label}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
+                        <span style={{ fontSize: 12, color: C.ink, fontWeight: 600 }}>{i.label}</span>
+                        <span style={{ fontSize: 11, color: C.muted }}>{fmt(i.used)} / {fmt(i.limit)}</span>
+                      </div>
+                      <div style={{ height: 8, background: C.sand, borderRadius: 4, overflow: 'hidden' }}>
+                        <div style={{ width: `${pct}%`, height: '100%', background: C.green }} />
+                      </div>
+                      <p style={{ fontSize: 11, color: C.muted, margin: '5px 0 0' }}><strong style={{ color: C.fg }}>{fmt(gap)}</strong> unused · save ~{fmt(gap * 0.30)} in tax</p>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            <Link href="/dashboard/profile/deductions" style={{ display: 'inline-block', marginTop: 14, fontSize: 12, fontWeight: 700, color: C.fg, textDecoration: 'underline' }}>Add deductions →</Link>
+          </Card>
+        )
+      })()}
+
       {/* Quick links */}
       <Card>
         <h3 style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: '0 0 12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Jump back in</h3>

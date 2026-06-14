@@ -499,6 +499,8 @@ export default function TaxOptimizerPage() {
         totalTax: rec ? calc.newTotal : calc.oldTotal,
         tdsPaid: calc.tdsPaid, balance: rec ? calc.newBalance : calc.oldBalance,
         itrForm: calc.itrForm,
+        // Deduction usage — lets the Dashboard show unused 80C/80D/NPS/home-loan headroom.
+        sec80C: calc.sec80C, sec80D: calc.sec80D, sec24b: calc.sec24b, nps: calc.nps,
         computedAt: Date.now(),
       }))
     } catch {}
