@@ -34,13 +34,16 @@ function Shell({ children }: { children: React.ReactNode }) {
         .otp-input { text-align: center; letter-spacing: .5em; font-size: 18px; font-weight: 600; }
         .btn-ghost { transition: background .15s; }
         .btn-ghost:hover { background: var(--tint) !important; }
-        /* Mobile: desktop's 52px side padding overflowed the nav. The actions group is allowed to
-           SHRINK and the prompt text YIELDS (wraps to a second line) while the toggle keeps its size
-           and stays visible. Same robust rule as the sign-up page (not the fragile wrap-only version). */
+        .auth-nav-prompt-short { display: none; }   /* desktop shows the full prompt */
+        /* Mobile: the whole nav sits on ONE line aligned with the logo — logo left, prompt + toggle
+           right, no wrapping. The prompt is nowrap + smaller, swaps to a shorter label, and the gap
+           tightens so it fits beside the logo and toggle at phone widths. The toggle keeps its size. */
         @media (max-width: 480px) {
           .auth-nav { padding-left: 16px !important; padding-right: 16px !important; }
-          .auth-nav-actions { flex-shrink: 1 !important; min-width: 0; gap: 12px !important; }
-          .auth-nav-prompt { min-width: 0; line-height: 1.3; }
+          .auth-nav-actions { flex-shrink: 1 !important; min-width: 0; gap: 8px !important; }
+          .auth-nav-prompt { white-space: nowrap; font-size: 11px !important; line-height: 1.2; }
+          .auth-nav-prompt-full { display: none; }
+          .auth-nav-prompt-short { display: inline; }
         }
       `}</style>
       <nav className="auth-nav" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, padding: '18px 52px', borderBottom: `1px solid ${T.hairline}` }}>
@@ -48,7 +51,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           <Logo variant="onLight" size={32} />
         </Link>
         <div className="auth-nav-actions" style={{ display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0 }}>
-          <div className="auth-nav-prompt" style={{ fontSize: 13, color: C.sub }}>New to ArthVo?{' '}<Link href="/signup" style={{ color: C.green, fontWeight: 600, textDecoration: 'none' }}>Sign up</Link></div>
+          <div className="auth-nav-prompt" style={{ fontSize: 13, color: C.sub }}><span className="auth-nav-prompt-full">New to ArthVo?</span><span className="auth-nav-prompt-short">New here?</span>{' '}<Link href="/signup" style={{ color: C.green, fontWeight: 600, textDecoration: 'none' }}>Sign up</Link></div>
           <ThemeToggle theme={theme} setTheme={setTheme} resolved={resolved} />
         </div>
       </nav>
