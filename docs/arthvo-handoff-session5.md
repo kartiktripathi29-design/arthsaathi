@@ -29,7 +29,7 @@
   3. **"Recommended" badge tension** — the recommended-regime badge vs the clarity-not-advice positioning; needs a product call on how strongly to assert a recommendation.
 
 ## Merge runbook
-The runbook is referenced as **ready**. ⚠️ I could **not** find a dedicated runbook file in `docs/` this session — the closest in-repo deploy artifact is **`docs/deploy-notes.md`** (Vercel env vars: `DATABASE_URL`, `ANTHROPIC_API_KEY`, Supabase keys; the Prisma `postinstall` fix; pre-launch tasks like the other-earnings zero-income save guard). **Action:** confirm where the merge runbook actually lives (PR description / external doc) and link it here so it isn't lost.
+The `ui-locked-changes` → `main` merge sequence is written up in **`docs/merge-runbook.md`**: tag `pre-ui-merge` first, update the branch from `origin/main` and resolve conflicts (stop-and-confirm on any tax-logic/salary conflict), push, review **PR #6** on GitHub (a human merges — not the CLI), verify the Vercel deploy is green, with rollback options (reset-to-tag + force-push if solo, `git revert -m 1` if others have pulled, plus a Vercel deploy rollback for the live site). Deploy env vars / pre-launch tasks remain in **`docs/deploy-notes.md`**.
 
 ## Commits this session (`a361a7f..cd6e182`, newest first)
 ```
