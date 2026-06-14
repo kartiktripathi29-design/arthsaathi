@@ -899,7 +899,10 @@ export default function SalaryPageCompleteFinal() {
     setManualEarnings(earningsRows)
     setManualDeductions(dedRows)
     setManualMonthKey(monthKey)
-    setManualOpenEmpId(employmentId)
+    // The manual-entry editor renders only for the 'unified' id (the timeline was unified across
+    // employers); it derives the employer from the selected month. Setting the employmentId here left
+    // the editor hidden, so "Edit breakdown" appeared to do nothing.
+    setManualOpenEmpId('unified')
     setExpandedEmployment(employmentId)
     setPreviewMonth(null)
     setPreviewEmploymentId(null)
