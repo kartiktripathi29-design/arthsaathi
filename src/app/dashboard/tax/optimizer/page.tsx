@@ -117,6 +117,24 @@ function ITRFormsReference() {
   )
 }
 
+// Itemised break-up shown inside an expanded Income row — lists only the non-zero components.
+function Breakup({ items, note }: { items: { label: string; amount: number }[]; note?: React.ReactNode }) {
+  const rows = items.filter(i => i.amount > 0)
+  return (
+    <>
+      {rows.length === 0
+        ? <div style={{ color: C.muted }}>Nothing recorded here yet.</div>
+        : rows.map(r => (
+            <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '3px 0' }}>
+              <span style={{ color: C.text }}>{r.label}</span>
+              <span style={{ color: C.fg, fontWeight: 500 }}>{fmt(r.amount)}</span>
+            </div>
+          ))}
+      {note && <p style={{ margin: '6px 0 0', lineHeight: 1.55 }}>{note}</p>}
+    </>
+  )
+}
+
 // Income & components row that EXPANDS in place to explain how the figure is computed, instead of
 // navigating away. An explicit, full-width "View/Edit at source" link inside the panel keeps
 // navigation available (large tap target so it works on touch). Module-level (a stable component) so
@@ -233,6 +251,7 @@ export default function TaxOptimizerPage() {
       const isEquityAsset = (a: string) => a === 'listed_equity' || a === 'equity_mf'
       const otherEntries: any[] = Array.isArray(otherData) ? otherData : []
       let slabOtherIncome = 0
+      let freelanceSlab = 0, fnoSlab = 0, interestSlab = 0, otherSlab = 0   // slab-income break-up by source
       let ltcgEquityTotal = 0, stcgEquityTotal = 0, ltcgUnlistedTotal = 0, cgSlabIncome = 0, cryptoTotal = 0
       for (const e of otherEntries) {
         if (e?.type === 'equity') {
@@ -257,7 +276,12 @@ export default function TaxOptimizerPage() {
         } else if (e?.type === 'crypto') {
           cryptoTotal += Math.max(0, Number(e.cryptoGains) || 0)
         } else {
-          slabOtherIncome += Math.max(0, Number(e?.amount) || 0)
+          const amt = Math.max(0, Number(e?.amount) || 0)
+          slabOtherIncome += amt
+          if (e?.type === 'freelance') freelanceSlab += amt
+          else if (e?.type === 'fno') fnoSlab += amt
+          else if (e?.type === 'interest') interestSlab += amt
+          else otherSlab += amt
         }
       }
       slabOtherIncome += cgSlabIncome   // debt-MF gains + unlisted STCG are taxed at slab
@@ -428,10 +452,14 @@ export default function TaxOptimizerPage() {
         // Gross/Net rows. 'summary' = month-by-month from the reviewed timeline; 'slip-average' =
         // avg(slip) × 12. salaryMonths = months of data behind the timeline summary.
         salarySource: facts.source, salaryMonths: facts.hraBasis.length,
+        // Per-source break-up of the slab-taxed "Other income" line (for the expandable row).
+        slabBreakdown: { freelance: freelanceSlab, fno: fnoSlab, interest: interestSlab, other: otherSlab, cgSlab: cgSlabIncome },
         // Special-rate (capital gains / crypto) income + tax
         specialIncome: { ltcg: ltcgEquityTotal, ltcgTaxable: ltcgEquityTaxable, ltcgUnlisted: ltcgUnlistedTotal, stcg: stcgEquityTotal, crypto: cryptoTotal, cgSlab: cgSlabIncome, total: specialIncomeTotal },
         specialRateTax, specialCess, specialTaxTotal,
         hraExempt, otherExempts, totalExemptions,
+        // Component break-up of Section-10 exemptions (for the expandable row).
+        exemptBreakdown: { hra: hraExempt, lta: ltaCapped, driver: Number(exemptionsData.driverSalary || 0), car: Number(exemptionsData.carMaintenance || 0), daily: Number(exemptionsData.dailyAllowance || 0), superannuation: superannuationCapped, pfWithdrawal: Number(exemptionsData.pfWithdrawal || 0), gratuity: gratuityCapped, medical: Number(exemptionsData.medical || 0), other: Number(exemptionsData.other || 0) },
         sec80C, sec80D, sec24b, nps, sec80TTA, sec80TTB, sec80E, sec80G, totalDeductions,
         stdDedNew, stdDedOld,
         subTotalNew, subTotalOld,
@@ -595,13 +623,36 @@ export default function TaxOptimizerPage() {
             )
           })()} />
         <ExpRow expandedRows={expandedRows} setExpandedRows={setExpandedRows} id="otherslab" label="Other income (slab-taxed)" value={fmt(calc.slabOtherIncome)} sub="freelance · F&O · interest · other" editHref="/dashboard/profile/other-income" editLabel="Edit in Other earnings"
-          detail={<>Income taxed at your normal slab rate — freelance / consulting, F&amp;O / intraday, interest &amp; dividends, and any “other” income, plus debt-fund and unlisted-STCG gains that fall to slab. Open Other earnings to see each source.</>} />
+          detail={<Breakup
+            items={[
+              { label: 'Freelance / consulting', amount: calc.slabBreakdown.freelance },
+              { label: 'F&O / intraday', amount: calc.slabBreakdown.fno },
+              { label: 'Interest & dividends', amount: calc.slabBreakdown.interest },
+              { label: 'Debt funds / unlisted STCG (slab)', amount: calc.slabBreakdown.cgSlab },
+              { label: 'Other income', amount: calc.slabBreakdown.other },
+            ]}
+            note={<>All taxed at your normal slab rate. Open Other earnings to edit each source.</>}
+          />} />
         {calc.specialIncome.total > 0 && (
           <ExpRow expandedRows={expandedRows} setExpandedRows={setExpandedRows} id="special" label="Capital gains / crypto (special rate)" value={fmt(calc.specialIncome.total)} sub="taxed separately — not at slab" editHref="/dashboard/profile/other-income" editLabel="Edit in Other earnings"
             detail={<>Equity LTCG/STCG, unlisted-share LTCG and crypto are taxed at flat statutory rates — <strong>not</strong> your slab rate — so they’re kept out of the slab income below. See the “Capital gains &amp; crypto” breakdown for the rate on each.</>} />
         )}
         <ExpRow expandedRows={expandedRows} setExpandedRows={setExpandedRows} id="exemptions" label="Total exemptions" value={fmt(calc.totalExemptions)} sub={`HRA ${fmt(calc.hraExempt)} · Other ${fmt(calc.otherExempts)}`} editHref="/dashboard/profile/exemptions" editLabel="Edit in Allowances"
-          detail={<>HRA exemption <strong>{fmt(calc.hraExempt)}</strong> + other Section 10 exemptions (LTA, gratuity, etc.) <strong>{fmt(calc.otherExempts)}</strong>. These reduce taxable income under the <strong>old regime only</strong>.</>} />
+          detail={<Breakup
+            items={[
+              { label: 'HRA', amount: calc.exemptBreakdown.hra },
+              { label: 'LTA', amount: calc.exemptBreakdown.lta },
+              { label: 'Driver salary', amount: calc.exemptBreakdown.driver },
+              { label: 'Car maintenance', amount: calc.exemptBreakdown.car },
+              { label: 'Daily allowance', amount: calc.exemptBreakdown.daily },
+              { label: 'Superannuation', amount: calc.exemptBreakdown.superannuation },
+              { label: 'PF withdrawal', amount: calc.exemptBreakdown.pfWithdrawal },
+              { label: 'Gratuity', amount: calc.exemptBreakdown.gratuity },
+              { label: 'Medical', amount: calc.exemptBreakdown.medical },
+              { label: 'Other', amount: calc.exemptBreakdown.other },
+            ]}
+            note={<>Section 10 exemptions — they reduce taxable income under the <strong>old regime only</strong>.</>}
+          />} />
         {/* Sanity warning — exemptions north of 40% of gross are almost always a data-entry error
             (e.g., PF withdrawal or gratuity entered while still employed). Flag it and link to fix. */}
         {calc.grossSalary > 0 && calc.totalExemptions > calc.grossSalary * 0.4 && (
@@ -618,16 +669,19 @@ export default function TaxOptimizerPage() {
           value={fmt(calc.totalDeductions)}
           editHref="/dashboard/profile/deductions"
           editLabel="Edit in Deductions"
-          detail={<>Chapter VI-A deductions (old regime only): {[
-            `80C ${fmt(calc.sec80C)}`,
-            `80D ${fmt(calc.sec80D)}`,
-            `24(b) ${fmt(calc.sec24b)}`,
-            `NPS ${fmt(calc.nps)}`,
-            calc.sec80TTA > 0 ? `80TTA ${fmt(calc.sec80TTA)}` : null,
-            calc.sec80TTB > 0 ? `80TTB ${fmt(calc.sec80TTB)}` : null,
-            calc.sec80E > 0 ? `80E ${fmt(calc.sec80E)}` : null,
-            calc.sec80G > 0 ? `80G ${fmt(calc.sec80G)}` : null,
-          ].filter(Boolean).join(' · ')}.</>}
+          detail={<Breakup
+            items={[
+              { label: '80C (PPF, ELSS, EPF, …)', amount: calc.sec80C },
+              { label: '80D (health insurance)', amount: calc.sec80D },
+              { label: '24(b) (home-loan interest)', amount: calc.sec24b },
+              { label: 'NPS 80CCD(1B)', amount: calc.nps },
+              { label: '80TTA (savings interest)', amount: calc.sec80TTA },
+              { label: '80TTB (senior interest)', amount: calc.sec80TTB },
+              { label: '80E (education-loan interest)', amount: calc.sec80E },
+              { label: '80G (donations)', amount: calc.sec80G },
+            ]}
+            note={<>Chapter VI-A deductions — they apply under the <strong>old regime only</strong>.</>}
+          />}
         />
 
       </div>
