@@ -1,6 +1,7 @@
 'use client'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import toast from 'react-hot-toast'
 import { seedIfMissing, verifyIdentity, setStoredIdentity } from '@/lib/identity'
 import { confirmDialog, passwordDialog } from '@/components/Dialog'
 import { estimateAnnualTax, type SeniorStatus } from '@/lib/tax-slabs'
@@ -217,6 +218,39 @@ interface ForecastChange {
   offer?: OfferBreakdown    // set when a job switch is prefilled from an offer letter (2-employer split)
 }
 
+// Build a job-switch forecast change from already-parsed offer-letter data. Used when an offer letter
+// was uploaded on the Documents page and handed off via `av_pending_offer` — mirrors applyOfferLetter's
+// mapping but works from parsed data (no re-fetch). Returns null when the offer carries no usable pay.
+function jobSwitchChangeFromOfferData(d: any, fyStartYear: number, slipsMeta: { monthKey: string }[]): ForecastChange | null {
+  const fixed = d?.fixedCTC || d?.totalCTC || 0
+  const monthlyGross = Math.max(0, Math.round((fixed - (d?.employerPF || 0)) / 12))
+  if (monthlyGross <= 0) return null
+  const mo = (n: number) => Math.max(0, Math.round((n || 0) / 12))
+  const employeePfMonthly = mo(d.employeePF)
+  const ptMonthly = mo(d.professionalTax)
+  const offer: OfferBreakdown = {
+    employerName: d.employerName || 'New employer',
+    grossMonthly: monthlyGross,
+    basicMonthly: mo(d.basicSalary),
+    hraMonthly: mo(d.hra),
+    specialMonthly: mo((d.specialAllowance || 0) + (d.da || 0) + (d.ta || 0) + (d.lta || 0) + (d.medicalAllowance || 0) + (d.otherAllowances || 0)),
+    employeePfMonthly,
+    ptMonthly,
+    netMonthly: Math.max(0, monthlyGross - employeePfMonthly - ptMonthly),
+  }
+  const iso = joiningDateISO(d.joiningDate)
+  const mk = iso ? iso.slice(0, 7) : ''
+  const fullFY = fyMonths(fyStartYear)
+  const latest = slipsMeta.length > 0 ? [...slipsMeta].sort((a, b) => b.monthKey.localeCompare(a.monthKey))[0] : null
+  const allFY = latest ? fullFY.filter(m => m >= latest.monthKey) : fullFY
+  const inFy = !!mk && allFY.includes(mk)
+  return {
+    kind: 'job_switch', monthApplies: inFy ? mk : '', retroactive: false, retroFromMonth: '',
+    amountMode: 'abs', amountPct: 0, amountAbs: monthlyGross, tdsRegime: 'new', offer,
+    ...(inFy ? { joiningDate: iso } : {}),
+  }
+}
+
 interface WizardData {
   intent: Intent | null
   // v7 Step 3: confirmation of each parsed slip (yes / no→edit). Keyed by slip id.
@@ -309,6 +343,8 @@ export default function SalaryPageCompleteFinal() {
   })
   // Per-change status for the offer-letter prefill on a job-switch forecast change.
   const [offerStatus, setOfferStatus] = useState<{ idx: number; state: 'loading' | 'done' | 'error'; msg: string } | null>(null)
+  // Guards the one-time pickup of an offer letter handed off from the Documents page.
+  const offerPickupDone = useRef(false)
 
   // Parse an uploaded offer letter and prefill a job-switch change with the new monthly gross
   // (≈ (fixedCTC − employer PF) / 12) and the switch month derived from the offer's joining date.
@@ -526,6 +562,30 @@ export default function SalaryPageCompleteFinal() {
     }
     return mappings
   }
+
+  // One-time pickup of an offer letter handed off from the Documents page (`av_pending_offer`).
+  // The user here already has slips, so the offer is staged as a mid-year job-switch change they can
+  // review under "expected changes" (forecast). A brand-new joiner with no slips is bootstrapped on
+  // the Documents page instead, so it never reaches here. Purely pre-fills the change list — it does
+  // not drive the wizard or alter any timeline/tax computation.
+  useEffect(() => {
+    if (offerPickupDone.current || slips.length === 0) return
+    let raw: string | null = null
+    try { raw = localStorage.getItem('av_pending_offer') } catch {}
+    if (!raw) return
+    offerPickupDone.current = true
+    try { localStorage.removeItem('av_pending_offer') } catch {}
+    let d: any
+    try { d = JSON.parse(raw) } catch { return }
+    const change = jobSwitchChangeFromOfferData(d, fyStartYear, slipsWithMeta)
+    if (!change) return
+    setWizard(prev =>
+      prev.forecastChanges.some(c => c.kind === 'job_switch' && c.offer)
+        ? prev
+        : { ...prev, forecastChanges: [change, ...prev.forecastChanges] }
+    )
+    toast(`Offer letter loaded — choose “Plan ahead / forecast” to add ${change.offer!.employerName} as a job switch.`, { icon: '📄', duration: 6000 })
+  }, [slips, slipsWithMeta, fyStartYear])
 
   // v7 build: turn the confirmed period mapping into a 12-month timeline. Single employment.
   const buildEmploymentsFromMapping = (changesOverride?: ForecastChange[]) => {
