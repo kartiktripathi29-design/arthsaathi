@@ -210,11 +210,17 @@ function ResultCard({ r, onRemove }: { r: ParsedReturn; onRemove: () => void }) 
     : r.documentType === 'itr_json' ? 'Filed ITR JSON'
     : 'Return'
 
+  // A real assessment/financial year carries a 4-digit year; the model's "unknown" (or any junk)
+  // must NOT render as a literal title or get folded into the "pre-2020 regime" copy below.
+  const hasYear = (s?: string) => !!s && /\d{4}/.test(s)
+  const yearLabel = hasYear(r.ay) ? r.ay : hasYear(r.fy) ? r.fy : 'Return'
+  const yearKnown = /FY \d{4}-\d{2}/.test(r.fy || '')
+
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: 20, marginBottom: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, marginBottom: 12 }}>
         <div>
-          <h3 style={{ fontSize: 16, fontWeight: 700, color: C.fg, margin: 0 }}>{r.ay || r.fy || 'Return'}</h3>
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: C.fg, margin: 0 }}>{yearLabel}</h3>
           <p style={{ fontSize: 11, color: C.muted, margin: '3px 0 0' }}>
             {docLabel}{r.itrForm && r.itrForm !== 'unknown' ? ` · ${r.itrForm}` : ''} · filed under {regimeLabel(r.filedRegime).toLowerCase()}
           </p>
@@ -222,11 +228,20 @@ function ResultCard({ r, onRemove }: { r: ParsedReturn; onRemove: () => void }) 
         <button onClick={onRemove} style={{ background: 'transparent', border: 'none', color: C.muted, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline', flexShrink: 0 }}>Remove</button>
       </div>
 
-      {/* Case 1 — year out of range (pre new-regime) */}
-      {!r.fySupported ? (
+      {/* Case 0 — we couldn't read which year this return is for. Distinct from a genuine pre-2020
+           year: don't claim anything about the regime, just ask for a clearer source. */}
+      {!yearKnown ? (
+        <div style={{ padding: 14, background: C.caution.fill, border: `1px solid ${C.caution.border}`, borderRadius: 6 }}>
+          <p style={{ fontSize: 12.5, color: C.caution.text, margin: 0, lineHeight: 1.55 }}>
+            We couldn’t read which year this {docLabel.toLowerCase()} is for. Upload the <strong>filed ITR JSON</strong> or
+            the <strong>full ITR PDF</strong> — the assessment year is sometimes missing from a scanned or partial acknowledgement.
+          </p>
+        </div>
+      ) : !r.fySupported ? (
+        /* Case 1 — a known year, but before the new regime existed (nothing to compare against). */
         <div style={{ padding: 14, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6 }}>
           <p style={{ fontSize: 12.5, color: C.text, margin: 0, lineHeight: 1.55 }}>
-            {r.ay || 'This year'} is before the new tax regime existed (it began FY 2020-21), so there’s no second regime to compare against.
+            {yearLabel} is before the new tax regime existed (it began FY 2020-21), so there’s no second regime to compare against.
           </p>
         </div>
       ) : !r.canComputeSavings ? (

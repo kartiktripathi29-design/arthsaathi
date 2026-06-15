@@ -140,7 +140,10 @@ export async function POST(req: NextRequest) {
     const parsed = JSON.parse(jsonMatch[0])
 
     // ── Normalize into engine inputs ──────────────────────────────────────────
-    const fy = fyFromAY(parsed.assessmentYear || '')
+    // Only keep an assessment year that actually carries a 4-digit year — the model emits "unknown"
+    // (or other junk) when it can't read it, and that must not surface as a label downstream.
+    const ay = /\d{4}/.test(parsed.assessmentYear || '') ? String(parsed.assessmentYear) : ''
+    const fy = fyFromAY(ay)
     const filedRegime: Regime = parsed.filedRegime === 'old' ? 'old' : 'new'
     const senior: SeniorStatus = ['senior', 'super_senior'].includes(seniorStatus) ? seniorStatus : 'normal'
     const components: IncomeComponents = {
@@ -162,7 +165,7 @@ export async function POST(req: NextRequest) {
       success: true,
       data: {
         fy,
-        ay: parsed.assessmentYear || '',
+        ay,
         fySupported: !!fySupported,
         documentType: parsed.documentType || 'unknown',
         itrForm: parsed.itrForm || 'unknown',
