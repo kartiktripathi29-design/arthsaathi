@@ -142,6 +142,19 @@ function Sidebar() {
         }}>
           Your Tax
         </Link>
+
+        <Link href="/dashboard/chat" style={{
+          display: 'flex', alignItems: 'center', gap: 9,
+          padding: '10px 16px', textDecoration: 'none',
+          fontSize: 13, fontFamily: 'inherit',
+          borderLeft: `2px solid ${isActive('/dashboard/chat') ? C.accent : 'transparent'}`,
+          background: isActive('/dashboard/chat') ? T.tint : 'transparent',
+          color: isActive('/dashboard/chat') ? C.accent : C.nav,
+          fontWeight: isActive('/dashboard/chat') ? 600 : 500,
+          transition: 'all 0.15s',
+        }}>
+          Ask ArthVo
+        </Link>
       </nav>
 
       <div style={{ padding: 10, borderTop: `1px solid ${C.railLine}` }}>
