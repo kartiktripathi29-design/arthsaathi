@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { tokens as T } from '@/lib/tokens'
 
 export type ThemeMode = 'system' | 'light' | 'dark'
@@ -55,73 +55,61 @@ export function useThemedBase(resolved: 'light' | 'dark') {
   }, [resolved])
 }
 
-// Single icon button that reveals a compact System / Light / Dark menu. Token-only colors so it flips
-// correctly in both modes; the icon reflects the resolved state. Shared by the landing and the auth
-// pages — one unobtrusive icon, not a pill ribbon. (Relies on a `.btn-ghost` hover rule being present
-// on the host page for the hover tint; works fine without it.)
+// Sliding pill switch that toggles light ↔ dark. The knob carries the active glyph (sun in light,
+// moon in dark) and slides across a track that tints teal in dark. Token-only colors so it flips
+// correctly in both modes. Binary by design — first load still follows the OS via the host's
+// 'system' default; tapping sets an explicit light/dark choice. Shared by the landing, auth pages and
+// dashboard. (`theme` kept in the signature so every call site stays unchanged; the switch reflects
+// `resolved`.) Relies on a `.btn-ghost` hover rule on the host page for the hover tint; fine without.
 export function ThemeToggle({ theme, setTheme, resolved }: { theme: ThemeMode; setTheme: (t: ThemeMode) => void; resolved: 'light' | 'dark' }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  // Close on any tap outside the control.
-  useEffect(() => {
-    if (!open) return
-    const onDocClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onDocClick)
-    return () => document.removeEventListener('mousedown', onDocClick)
-  }, [open])
-
-  const opts: { v: ThemeMode; label: string }[] = [
-    { v: 'system', label: 'System' },
-    { v: 'light', label: 'Light' },
-    { v: 'dark', label: 'Dark' },
-  ]
+  void theme // retained for call-site compatibility; the switch is driven by `resolved`
+  const isDark = resolved === 'dark'
+  const W = 52, H = 28, KNOB = 22, PAD = 2
 
   return (
-    <div ref={ref} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-      <button onClick={() => setOpen(o => !o)} className="btn-ghost"
-        aria-label="Appearance" aria-haspopup="menu" aria-expanded={open}
-        style={{ width: 34, height: 34, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: 0, background: 'transparent', border: `1px solid ${T.hairline}`, borderRadius: 8, color: T.muted, cursor: 'pointer' }}>
-        {resolved === 'dark' ? (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-          </svg>
-        ) : (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="4" />
-            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
-          </svg>
-        )}
-      </button>
-      {open && (
-        <div role="menu" style={{
-          position: 'absolute', top: 'calc(100% + 8px)', right: 0, minWidth: 144,
-          background: T.card, border: `1px solid ${T.hairline}`, borderRadius: 10,
-          boxShadow: '0 6px 24px rgba(0,0,0,0.12)', padding: 6, zIndex: 80,
-        }}>
-          {opts.map(o => {
-            const active = theme === o.v
-            return (
-              <button key={o.v} role="menuitemradio" aria-checked={active}
-                onClick={() => { setTheme(o.v); setOpen(false) }}
-                style={{
-                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
-                  padding: '8px 10px', borderRadius: 7, border: 'none', cursor: 'pointer',
-                  fontFamily: 'inherit', fontSize: 13, textAlign: 'left',
-                  background: active ? T.tint : 'transparent',
-                  color: active ? T.teal : T.nav,
-                  fontWeight: active ? 700 : 500,
-                }}>
-                {o.label}
-                {active && <span style={{ color: T.teal }}>✓</span>}
-              </button>
-            )
-          })}
-        </div>
-      )}
-    </div>
+    <button onClick={() => setTheme(isDark ? 'light' : 'dark')} className="btn-ghost"
+      role="switch" aria-checked={isDark} aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`} title="Appearance"
+      style={{
+        position: 'relative', width: W, height: H, flexShrink: 0, padding: 0, cursor: 'pointer',
+        borderRadius: H / 2, border: `1px solid ${T.hairline}`,
+        background: isDark ? T.teal : T.sand, transition: 'background .2s ease',
+      }}>
+      {/* Track glyphs — the inactive side shows faintly; the knob covers the active side. */}
+      <span aria-hidden="true" style={{ position: 'absolute', left: 6, top: 0, bottom: 0, display: 'flex', alignItems: 'center', color: isDark ? T.ivory : T.muted, opacity: isDark ? 0.45 : 0 }}>
+        <SunGlyph />
+      </span>
+      <span aria-hidden="true" style={{ position: 'absolute', right: 6, top: 0, bottom: 0, display: 'flex', alignItems: 'center', color: isDark ? T.ivory : T.muted, opacity: isDark ? 0 : 0.45 }}>
+        <MoonGlyph />
+      </span>
+      {/* Knob — slides left (light) / right (dark) and carries the active glyph. */}
+      <span style={{
+        position: 'absolute', top: PAD, left: isDark ? W - KNOB - PAD : PAD,
+        width: KNOB, height: KNOB, borderRadius: '50%',
+        background: T.card, border: `1px solid ${T.hairline}`,
+        boxShadow: '0 1px 3px rgba(0,0,0,0.28)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: isDark ? T.ivory : T.teal,
+        transition: 'left .2s ease',
+      }}>
+        {isDark ? <MoonGlyph /> : <SunGlyph />}
+      </span>
+    </button>
+  )
+}
+
+function SunGlyph() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+    </svg>
+  )
+}
+
+function MoonGlyph() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </svg>
   )
 }
