@@ -92,7 +92,7 @@ function fyFromAY(ay: string): string {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { base64Data, mediaType, password, jsonText, seniorStatus } = body
+    const { base64Data, mediaType, password, jsonText, seniorStatus, images } = body
 
     let content: any[]
 
@@ -103,6 +103,16 @@ export async function POST(req: NextRequest) {
         type: 'text',
         text: `Extract the return fields from this filed ITR JSON. Return only JSON per the schema.\n\n${raw.slice(0, 60000)}`,
       }]
+    } else if (Array.isArray(images) && images.length > 0) {
+      // Page images — the client's fallback for scanned/image-only PDFs (ITR-V acknowledgements are
+      // often flattened images with no text layer). Read via vision.
+      content = [
+        ...images.slice(0, 4).map((im: any) => ({
+          type: 'image',
+          source: { type: 'base64', media_type: im.mediaType || 'image/jpeg', data: im.base64 },
+        })),
+        { type: 'text', text: 'Extract the return fields from these ITR page images. Return only JSON per the schema.' },
+      ]
     } else if (mediaType === 'application/pdf') {
       let pdfText: string
       try {
@@ -112,6 +122,11 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: 'incorrect_password' }, { status: 422 })
         }
         throw e
+      }
+      // Scanned/image-only PDF: no text layer. Bail cheaply (before any model call) and signal the
+      // client to re-send the pages as rendered images.
+      if (pdfText.replace(/--- Page \d+ ---/g, '').replace(/\s/g, '').length < 20) {
+        return NextResponse.json({ error: 'pdf_no_text' }, { status: 422 })
       }
       content = [{
         type: 'text',

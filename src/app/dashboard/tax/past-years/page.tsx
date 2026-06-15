@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { passwordDialog } from '@/components/Dialog'
+import { pdfToCompressedImages } from '@/lib/pdfToImages'
 import { tokens as T } from '@/lib/tokens'
 import type { SavingsResult, SeniorStatus } from '@/lib/tax-history'
 
@@ -110,6 +111,25 @@ export default function PastYearsPage() {
           })
           if (!pwd) { setStatus({ state: 'idle' }); return }
           res = await call(pwd)
+        } else if (j?.error === 'pdf_no_text' && !isJson) {
+          // Scanned / image-only PDF (common for ITR-V acknowledgements) — no text layer. Render the
+          // pages to images in the browser and re-send for vision extraction.
+          let imgs: { base64: string; mediaType: string }[]
+          try {
+            imgs = await pdfToCompressedImages(file, 3, 0.7)
+          } catch {
+            setStatus({ state: 'error', msg: 'This looks like a scanned PDF we couldn’t open to read. Try the filed ITR JSON, or a clearer scan.' })
+            return
+          }
+          if (!imgs.length) {
+            setStatus({ state: 'error', msg: 'This looks like a scanned PDF with no readable pages. Try the filed ITR JSON.' })
+            return
+          }
+          res = await fetch('/api/parse-itr', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ seniorStatus, images: imgs }),
+          })
         }
       }
       if (!res.ok) {
@@ -333,7 +353,7 @@ function ReportedRows({ reported }: { reported: ParsedReturn['reported'] }) {
   const rows = [
     { label: 'Gross total income', amount: reported.grossTotalIncome },
     { label: 'Total income (taxable)', amount: reported.totalIncome },
-    { label: 'Tax paid', amount: reported.totalTax },
+    { label: 'Total tax on the return', amount: reported.totalTax },
   ].filter(x => x.amount > 0)
   if (rows.length === 0) return null
   return (
