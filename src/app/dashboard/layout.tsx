@@ -130,17 +130,37 @@ function Sidebar() {
 
         <div style={{ margin: '8px 16px 6px', borderTop: `1px solid ${C.railLine}` }} />
 
-        <Link href="/dashboard/tax/optimizer" style={{
+        {/* "Your Tax" covers the current-year optimizer + computation, but NOT the retrospective
+            Past years tool, which gets its own active state below. */}
+        {(() => {
+          const taxMain = isActive('/dashboard/tax') && !isActive('/dashboard/tax/past-years')
+          return (
+            <Link href="/dashboard/tax/optimizer" style={{
+              display: 'flex', alignItems: 'center', gap: 9,
+              padding: '10px 16px', textDecoration: 'none',
+              fontSize: 13, fontFamily: 'inherit',
+              borderLeft: `2px solid ${taxMain ? C.accent : 'transparent'}`,
+              background: taxMain ? T.tint : 'transparent',
+              color: taxMain ? C.accent : C.nav,
+              fontWeight: taxMain ? 600 : 500,
+              transition: 'all 0.15s',
+            }}>
+              Your Tax
+            </Link>
+          )
+        })()}
+
+        <Link href="/dashboard/tax/past-years" style={{
           display: 'flex', alignItems: 'center', gap: 9,
           padding: '10px 16px', textDecoration: 'none',
           fontSize: 13, fontFamily: 'inherit',
-          borderLeft: `2px solid ${isActive('/dashboard/tax') ? C.accent : 'transparent'}`,
-          background: isActive('/dashboard/tax') ? T.tint : 'transparent',
-          color: isActive('/dashboard/tax') ? C.accent : C.nav,
-          fontWeight: isActive('/dashboard/tax') ? 600 : 500,
+          borderLeft: `2px solid ${isActive('/dashboard/tax/past-years') ? C.accent : 'transparent'}`,
+          background: isActive('/dashboard/tax/past-years') ? T.tint : 'transparent',
+          color: isActive('/dashboard/tax/past-years') ? C.accent : C.nav,
+          fontWeight: isActive('/dashboard/tax/past-years') ? 600 : 500,
           transition: 'all 0.15s',
         }}>
-          Your Tax
+          Past years
         </Link>
 
         <Link href="/dashboard/chat" style={{
@@ -236,6 +256,7 @@ function TopBar({ theme, setTheme, resolved }: { theme: ThemeMode; setTheme: (t:
     : pathname.startsWith('/dashboard/profile/other-income') ? 'Other earnings'
     : pathname.startsWith('/dashboard/profile/exemptions') ? 'Allowances'
     : pathname.startsWith('/dashboard/profile/deductions') ? 'Deductions'
+    : pathname.startsWith('/dashboard/tax/past-years') ? 'Past years'
     : pathname.startsWith('/dashboard/tax') ? 'Your Tax'
     : 'Dashboard'
 
