@@ -46,6 +46,44 @@ async function extractTextFromPDF(base64Data: string, password?: string): Promis
   return fullText
 }
 
+// Render PDF pages to JPEG base64 — the fallback for scanned / image-only PDFs (ITR-V acknowledgements
+// are usually flattened images with no text layer). Server-side via @napi-rs/canvas, so it doesn't
+// depend on the browser's pdfjs worker. Mirrors the text extractor's pdfjs setup + Windows worker fix.
+async function renderPDFToImages(base64Data: string, password?: string, maxPages = 3): Promise<string[]> {
+  const req = createRequire(import.meta.url)
+  const canvasModule = req('@napi-rs/canvas')
+  const { DOMMatrix, DOMPoint, DOMRect, createCanvas } = canvasModule
+  ;(global as any).DOMMatrix = DOMMatrix
+  ;(global as any).DOMPoint = DOMPoint
+  ;(global as any).DOMRect = DOMRect
+
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs' as any)
+  const workerPath = pathToFileURL(join(process.cwd(), 'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs')).href
+  ;(pdfjs as any).GlobalWorkerOptions.workerSrc = workerPath
+
+  const loadOptions: any = { data: new Uint8Array(Buffer.from(base64Data, 'base64')), useWorkerFetch: false }
+  if (password) loadOptions.password = password
+  const pdf = await (pdfjs as any).getDocument(loadOptions).promise
+
+  // pdfjs needs a canvas factory in Node (no DOM). Back it with @napi-rs/canvas.
+  const canvasFactory = {
+    create: (w: number, h: number) => { const c = createCanvas(w, h); return { canvas: c, context: c.getContext('2d') } },
+    reset: (cc: any, w: number, h: number) => { cc.canvas.width = w; cc.canvas.height = h },
+    destroy: (cc: any) => { cc.canvas.width = 0; cc.canvas.height = 0 },
+  }
+
+  const images: string[] = []
+  for (let i = 1; i <= Math.min(pdf.numPages, maxPages); i++) {
+    const page = await pdf.getPage(i)
+    const viewport = page.getViewport({ scale: 2 })   // 2× keeps acknowledgement digits legible
+    const canvas = createCanvas(viewport.width, viewport.height)
+    const ctx = canvas.getContext('2d')
+    await page.render({ canvasContext: ctx, viewport, canvasFactory }).promise
+    images.push(canvas.toBuffer('image/jpeg', 80).toString('base64'))
+  }
+  return images
+}
+
 // The model's job is ONLY extraction → our component shape. All tax math stays in tax-history.ts.
 // "missing" is load-bearing: when a source (e.g. a totals-only ITR-V) doesn't expose a component we
 // need for an EXACT alternate-regime calc, the model must say so rather than invent it.
@@ -92,7 +130,7 @@ function fyFromAY(ay: string): string {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { base64Data, mediaType, password, jsonText, seniorStatus, images } = body
+    const { base64Data, mediaType, password, jsonText, seniorStatus } = body
 
     let content: any[]
 
@@ -103,16 +141,6 @@ export async function POST(req: NextRequest) {
         type: 'text',
         text: `Extract the return fields from this filed ITR JSON. Return only JSON per the schema.\n\n${raw.slice(0, 60000)}`,
       }]
-    } else if (Array.isArray(images) && images.length > 0) {
-      // Page images — the client's fallback for scanned/image-only PDFs (ITR-V acknowledgements are
-      // often flattened images with no text layer). Read via vision.
-      content = [
-        ...images.slice(0, 4).map((im: any) => ({
-          type: 'image',
-          source: { type: 'base64', media_type: im.mediaType || 'image/jpeg', data: im.base64 },
-        })),
-        { type: 'text', text: 'Extract the return fields from these ITR page images. Return only JSON per the schema.' },
-      ]
     } else if (mediaType === 'application/pdf') {
       let pdfText: string
       try {
@@ -123,15 +151,28 @@ export async function POST(req: NextRequest) {
         }
         throw e
       }
-      // Scanned/image-only PDF: no text layer. Bail cheaply (before any model call) and signal the
-      // client to re-send the pages as rendered images.
-      if (pdfText.replace(/--- Page \d+ ---/g, '').replace(/\s/g, '').length < 20) {
-        return NextResponse.json({ error: 'pdf_no_text' }, { status: 422 })
+      const hasText = pdfText.replace(/--- Page \d+ ---/g, '').replace(/\s/g, '').length >= 20
+      if (hasText) {
+        content = [{
+          type: 'text',
+          text: `Extract the return fields from this ITR document text. Return only JSON per the schema.\n\n${pdfText}`,
+        }]
+      } else {
+        // Scanned / image-only PDF (no text layer) — render the pages and read them via vision.
+        let pages: string[]
+        try {
+          pages = await renderPDFToImages(base64Data, password || undefined, 3)
+        } catch {
+          return NextResponse.json({ error: 'pdf_unreadable' }, { status: 422 })
+        }
+        if (pages.length === 0) {
+          return NextResponse.json({ error: 'pdf_unreadable' }, { status: 422 })
+        }
+        content = [
+          ...pages.map(b64 => ({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b64 } })),
+          { type: 'text', text: 'Extract the return fields from these ITR page images. Return only JSON per the schema.' },
+        ]
       }
-      content = [{
-        type: 'text',
-        text: `Extract the return fields from this ITR document text. Return only JSON per the schema.\n\n${pdfText}`,
-      }]
     } else if (base64Data && mediaType?.startsWith('image/')) {
       content = [
         { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Data } },
