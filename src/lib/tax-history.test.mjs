@@ -59,6 +59,28 @@ test('FY 2025-26 new regime marginal relief triggers just past ₹12L', () => {
   assert.equal(r.totalTax, 52000) // 50,000 + 4% cess
 })
 
+// ── House-property loss set-off (regression: real ITR-1, FY 2024-25, filed old) ───────────
+test('FY 2024-25 old regime: house-property loss reduces taxable; reconciles to filed tax', () => {
+  // Real return: gross 25,09,943; s.10 exempts 5,31,713; house-property loss −1,65,622; VI-A 1,56,484.
+  const r = computeYearTax('FY 2024-25', 'old', {
+    grossSalary: 2509943, exemptAllowances: 531713, otherSlabIncome: -165622, chapterVIA: 156484,
+  })
+  assert.equal(r.grossTotalIncome, 1762608) // 25,09,943 − 50k std − 5,31,713 exempt − 1,65,622 loss
+  assert.equal(r.taxableIncome, 1606124)     // − 1,56,484 VI-A (return rounds to 16,06,120)
+  assert.equal(r.totalTax, 306111)           // return reports ₹3,06,109 — reconciles within ₹2
+})
+
+test('new regime disallows the house-property loss set-off (floored at 0)', () => {
+  const r = computeYearTax('FY 2024-25', 'new', { grossSalary: 2509943, otherSlabIncome: -165622 })
+  assert.equal(r.grossTotalIncome, 2434943) // loss does NOT reduce salary in new regime
+})
+
+test('house-property loss set-off is capped at ₹2L (old regime)', () => {
+  const r = computeYearTax('FY 2024-25', 'old', { grossSalary: 1000000, otherSlabIncome: -500000 })
+  // gross 10L − 50k std − min(5L,2L)=2L loss → GTI 7.5L
+  assert.equal(r.grossTotalIncome, 750000)
+})
+
 // ── Old regime is constant across the window ─────────────────────────────────────────────
 test('old regime ₹10L taxable is identical in FY 2020-21 and FY 2025-26', () => {
   const a = computeYearTax('FY 2020-21', 'old', { grossSalary: 1050000 }) // −50k std → 10L

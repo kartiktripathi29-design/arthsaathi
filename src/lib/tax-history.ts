@@ -182,6 +182,9 @@ export function getYearRules(fy: string, senior: SeniorStatus = 'normal'): YearR
 
 // ─── Core math ─────────────────────────────────────────────────────────────────────────
 
+// Max house-property loss set off against other heads under the old regime (s.71B), per year.
+const HOUSE_LOSS_SETOFF_CAP = 200000
+
 function slabTax(taxable: number, slabs: Slab[]): number {
   let tax = 0
   for (let i = 0; i < slabs.length; i++) {
@@ -220,7 +223,8 @@ export interface IncomeComponents {
   grossSalary: number
   /** s.10 exemptions claimed against salary (HRA + LTA + others). Old regime only; ignored in new. */
   exemptAllowances?: number
-  /** Net income from other heads taxed at SLAB rate (house property, interest, slab-rate CG, etc.). */
+  /** Net income from other heads taxed at SLAB rate (house property, interest, slab-rate CG, etc.).
+   *  MAY be negative — a house-property loss (home-loan interest) set off against salary. */
   otherSlabIncome?: number
   /** Chapter VI-A deductions claimed (80C/80D/80CCD(1B)/24b/80G/…). Old regime only; ignored in new. */
   chapterVIA?: number
@@ -265,11 +269,18 @@ export function computeYearTax(
   const std = isSalaried ? Math.min(rr.standardDeduction, gross) : 0
   const exemptAllowances = rr.allowsDeductions ? Math.max(0, income.exemptAllowances || 0) : 0
   const chapterVIA = rr.allowsDeductions ? Math.max(0, income.chapterVIA || 0) : 0
-  const otherSlab = Math.max(0, income.otherSlabIncome || 0)
+  // Other slab-head income can be NEGATIVE — a house-property loss (home-loan interest) set off
+  // against salary. Old regime allows that set-off up to ₹2L; new regime disallows it (the loss
+  // can't reduce salary), so a negative is floored at 0 there. Positive other income always adds.
+  const otherSlabRaw = income.otherSlabIncome || 0
+  const otherSlab = rr.allowsDeductions
+    ? Math.max(otherSlabRaw, -HOUSE_LOSS_SETOFF_CAP)
+    : Math.max(0, otherSlabRaw)
 
-  // Gross Total Income: salary net of standard deduction & exemptions, plus other slab-rate heads.
+  // Gross Total Income: salary net of standard deduction & exemptions, plus other slab-rate heads
+  // (which may be a loss). Floored at 0 — a loss beyond income can't make GTI negative here.
   const salaryAfterExempt = Math.max(0, gross - std - exemptAllowances)
-  const grossTotalIncome = salaryAfterExempt + otherSlab
+  const grossTotalIncome = Math.max(0, salaryAfterExempt + otherSlab)
   const taxableIncome = Math.max(0, grossTotalIncome - chapterVIA)
 
   const basicTax = slabTax(taxableIncome, rr.slabs)

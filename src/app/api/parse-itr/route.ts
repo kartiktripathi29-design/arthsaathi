@@ -3,7 +3,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { createRequire } from 'module'
-import { computeSavings, isSupportedFY, type IncomeComponents, type Regime, type SeniorStatus } from '@/lib/tax-history'
+import { computeSavings, computeYearTax, isSupportedFY, type IncomeComponents, type Regime, type SeniorStatus } from '@/lib/tax-history'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 export const maxDuration = 60
@@ -200,7 +200,7 @@ export async function POST(req: NextRequest) {
     // (or other junk) when it can't read it, and that must not surface as a label downstream.
     const ay = /\d{4}/.test(parsed.assessmentYear || '') ? String(parsed.assessmentYear) : ''
     const fy = fyFromAY(ay)
-    const filedRegime: Regime = parsed.filedRegime === 'old' ? 'old' : 'new'
+    const modelRegime: Regime = parsed.filedRegime === 'old' ? 'old' : 'new'
     const senior: SeniorStatus = ['senior', 'super_senior'].includes(seniorStatus) ? seniorStatus : 'normal'
     const components: IncomeComponents = {
       grossSalary: Number(parsed.grossSalary) || 0,
@@ -215,6 +215,28 @@ export async function POST(req: NextRequest) {
     // Without gross salary we can't honestly recompute the alternate regime — gate the savings calc.
     const canComputeSavings = !!fySupported && components.grossSalary > 0 && !missing.includes('grossSalary')
 
+    // Which regime was actually filed? The A20 "opting out of 115BAC" checkbox is read by the model
+    // and is easy to misread (Yes/No OCR), and it flips the entire comparison. The return's own
+    // reported total tax is ground truth: recompute both regimes and, when one clearly reproduces the
+    // reported tax, trust THAT as the filed regime over the checkbox. Only overrides on a clear match.
+    const reportedTax = Number(parsed.reportedTotalTax) || 0
+    let filedRegime: Regime = modelRegime
+    let regimeSource: 'document' | 'reported_tax' = 'document'
+    if (canComputeSavings && reportedTax > 0) {
+      const oldT = computeYearTax(fy, 'old', components, senior)?.totalTax
+      const newT = computeYearTax(fy, 'new', components, senior)?.totalTax
+      if (oldT != null && newT != null) {
+        const dOld = Math.abs(oldT - reportedTax)
+        const dNew = Math.abs(newT - reportedTax)
+        const tol = Math.max(5000, reportedTax * 0.05) // "clearly matches" the return's tax
+        const inferred: Regime | null = dOld <= dNew && dOld <= tol ? 'old'
+          : dNew < dOld && dNew <= tol ? 'new'
+          : null
+        if (inferred && inferred !== modelRegime) { filedRegime = inferred; regimeSource = 'reported_tax' }
+        else if (inferred) { regimeSource = 'reported_tax' }
+      }
+    }
+
     const savings = canComputeSavings ? computeSavings(fy, filedRegime, components, senior) : null
 
     return NextResponse.json({
@@ -226,6 +248,7 @@ export async function POST(req: NextRequest) {
         documentType: parsed.documentType || 'unknown',
         itrForm: parsed.itrForm || 'unknown',
         filedRegime,
+        regimeSource,
         components,
         reported: {
           grossTotalIncome: Number(parsed.reportedGrossTotalIncome) || 0,

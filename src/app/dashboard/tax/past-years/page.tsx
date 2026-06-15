@@ -16,6 +16,7 @@ interface ParsedReturn {
   documentType: string
   itrForm: string
   filedRegime: 'old' | 'new'
+  regimeSource?: 'document' | 'reported_tax'
   components: { grossSalary: number; exemptAllowances?: number; otherSlabIncome?: number; chapterVIA?: number; isSalaried?: boolean }
   reported: { grossTotalIncome: number; totalIncome: number; totalTax: number; refundOrPayable: number }
   missing: string[]
@@ -308,6 +309,7 @@ function SavingsView({ r, s }: { r: ParsedReturn; s: SavingsResult }) {
           <p style={{ fontSize: 11, color: C.faint, margin: '0 0 2px', lineHeight: 1.55 }}>
             We recompute your filed tax as {fmt(s.asFiled.totalTax)}; the return reports {fmt(r.reported.totalTax)}.
             {off ? ' The gap is usually special-rate capital gains or reliefs we don’t model — treat the saving as indicative.' : ' These line up.'}
+            {r.regimeSource === 'reported_tax' && ` We read the filed regime as ${regimeLabel(s.filedRegime).toLowerCase()} from the tax on your return.`}
           </p>
         )
       })()}
