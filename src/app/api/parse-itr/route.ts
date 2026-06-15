@@ -3,7 +3,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { createRequire } from 'module'
-import { computeSavings, computeYearTax, isSupportedFY, type IncomeComponents, type Regime, type SeniorStatus } from '@/lib/tax-history'
+import { normalizeReturn } from '@/lib/itr-parse'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 export const maxDuration = 60
@@ -118,15 +118,6 @@ Field rules:
 - missing: list any of ["grossSalary","exemptAllowances","filedRegime","assessmentYear"] that you could not determine from the document. An ITR-V acknowledgement usually exposes only totals — if so, you will likely add "grossSalary" and "exemptAllowances".
 - All amounts are annual integer rupees. Use 0 (not null) for unknown numerics.`
 
-// "AY 2025-26" → "FY 2024-25". The engine is FY-keyed.
-function fyFromAY(ay: string): string {
-  const m = (ay || '').match(/(\d{4})-(\d{2,4})/)
-  if (!m) return ''
-  const ayStart = parseInt(m[1], 10)
-  const fyStart = ayStart - 1
-  return `FY ${fyStart}-${(fyStart + 1).toString().slice(2)}`
-}
-
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -195,73 +186,9 @@ export async function POST(req: NextRequest) {
     if (!jsonMatch) throw new Error('Could not extract return data')
     const parsed = JSON.parse(jsonMatch[0])
 
-    // ── Normalize into engine inputs ──────────────────────────────────────────
-    // Only keep an assessment year that actually carries a 4-digit year — the model emits "unknown"
-    // (or other junk) when it can't read it, and that must not surface as a label downstream.
-    const ay = /\d{4}/.test(parsed.assessmentYear || '') ? String(parsed.assessmentYear) : ''
-    const fy = fyFromAY(ay)
-    const modelRegime: Regime = parsed.filedRegime === 'old' ? 'old' : 'new'
-    const senior: SeniorStatus = ['senior', 'super_senior'].includes(seniorStatus) ? seniorStatus : 'normal'
-    const components: IncomeComponents = {
-      grossSalary: Number(parsed.grossSalary) || 0,
-      exemptAllowances: Number(parsed.exemptAllowances) || 0,
-      otherSlabIncome: Number(parsed.otherSlabIncome) || 0,
-      chapterVIA: Number(parsed.chapterVIA) || 0,
-      isSalaried: parsed.isSalaried !== false,
-    }
-
-    const missing: string[] = Array.isArray(parsed.missing) ? parsed.missing : []
-    const fySupported = fy && isSupportedFY(fy)
-    // Without gross salary we can't honestly recompute the alternate regime — gate the savings calc.
-    const canComputeSavings = !!fySupported && components.grossSalary > 0 && !missing.includes('grossSalary')
-
-    // Which regime was actually filed? The A20 "opting out of 115BAC" checkbox is read by the model
-    // and is easy to misread (Yes/No OCR), and it flips the entire comparison. The return's own
-    // reported total tax is ground truth: recompute both regimes and, when one clearly reproduces the
-    // reported tax, trust THAT as the filed regime over the checkbox. Only overrides on a clear match.
-    const reportedTax = Number(parsed.reportedTotalTax) || 0
-    let filedRegime: Regime = modelRegime
-    let regimeSource: 'document' | 'reported_tax' = 'document'
-    if (canComputeSavings && reportedTax > 0) {
-      const oldT = computeYearTax(fy, 'old', components, senior)?.totalTax
-      const newT = computeYearTax(fy, 'new', components, senior)?.totalTax
-      if (oldT != null && newT != null) {
-        const dOld = Math.abs(oldT - reportedTax)
-        const dNew = Math.abs(newT - reportedTax)
-        const tol = Math.max(5000, reportedTax * 0.05) // "clearly matches" the return's tax
-        const inferred: Regime | null = dOld <= dNew && dOld <= tol ? 'old'
-          : dNew < dOld && dNew <= tol ? 'new'
-          : null
-        if (inferred && inferred !== modelRegime) { filedRegime = inferred; regimeSource = 'reported_tax' }
-        else if (inferred) { regimeSource = 'reported_tax' }
-      }
-    }
-
-    const savings = canComputeSavings ? computeSavings(fy, filedRegime, components, senior) : null
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        fy,
-        ay,
-        fySupported: !!fySupported,
-        documentType: parsed.documentType || 'unknown',
-        itrForm: parsed.itrForm || 'unknown',
-        filedRegime,
-        regimeSource,
-        components,
-        reported: {
-          grossTotalIncome: Number(parsed.reportedGrossTotalIncome) || 0,
-          totalIncome: Number(parsed.reportedTotalIncome) || 0,
-          totalTax: Number(parsed.reportedTotalTax) || 0,
-          refundOrPayable: Number(parsed.reportedRefundOrPayable) || 0,
-        },
-        missing,
-        canComputeSavings,
-        savings,
-        notes: parsed.notes || '',
-      },
-    })
+    // All tax math + regime inference is pure and lives in the helper (unit-tested in itr-parse.test).
+    const data = normalizeReturn(parsed, seniorStatus)
+    return NextResponse.json({ success: true, data })
   } catch (error: any) {
     console.error('ITR parse error:', error)
     return NextResponse.json({ error: error.message || 'Failed to parse return' }, { status: 500 })
