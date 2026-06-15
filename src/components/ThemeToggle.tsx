@@ -55,45 +55,63 @@ export function useThemedBase(resolved: 'light' | 'dark') {
   }, [resolved])
 }
 
-// Sliding pill switch that toggles light ↔ dark. The knob carries the active glyph (sun in light,
-// moon in dark) and slides across a track that tints teal in dark. Token-only colors so it flips
-// correctly in both modes. Binary by design — first load still follows the OS via the host's
-// 'system' default; tapping sets an explicit light/dark choice. Shared by the landing, auth pages and
-// dashboard. (`theme` kept in the signature so every call site stays unchanged; the switch reflects
-// `resolved`.) Relies on a `.btn-ghost` hover rule on the host page for the hover tint; fine without.
+// Appearance control: an "Auto" chip + a sliding pill switch.
+//   - Auto chip → follow the OS (theme 'system'); highlighted teal when active.
+//   - Slider → an explicit light ↔ dark choice; the knob carries the active glyph and slides across a
+//     track that tints teal in dark. It always reflects the RESOLVED appearance, so in Auto mode it
+//     shows whatever the OS currently is; tapping it switches to an explicit choice (turning Auto off).
+// Token-only colors so it flips correctly in both modes. Shared by the landing, auth pages and the
+// dashboard top bar. Relies on a `.btn-ghost` hover rule on the host page for the hover tint; fine
+// without. (`theme` distinguishes the explicit-vs-system state the slider alone can't show.)
 export function ThemeToggle({ theme, setTheme, resolved }: { theme: ThemeMode; setTheme: (t: ThemeMode) => void; resolved: 'light' | 'dark' }) {
-  void theme // retained for call-site compatibility; the switch is driven by `resolved`
   const isDark = resolved === 'dark'
+  const isAuto = theme === 'system'
   const W = 52, H = 28, KNOB = 22, PAD = 2
 
   return (
-    <button onClick={() => setTheme(isDark ? 'light' : 'dark')} className="btn-ghost"
-      role="switch" aria-checked={isDark} aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`} title="Appearance"
-      style={{
-        position: 'relative', width: W, height: H, flexShrink: 0, padding: 0, cursor: 'pointer',
-        borderRadius: H / 2, border: `1px solid ${T.hairline}`,
-        background: isDark ? T.teal : T.sand, transition: 'background .2s ease',
-      }}>
-      {/* Track glyphs — the inactive side shows faintly; the knob covers the active side. */}
-      <span aria-hidden="true" style={{ position: 'absolute', left: 6, top: 0, bottom: 0, display: 'flex', alignItems: 'center', color: isDark ? T.ivory : T.muted, opacity: isDark ? 0.45 : 0 }}>
-        <SunGlyph />
-      </span>
-      <span aria-hidden="true" style={{ position: 'absolute', right: 6, top: 0, bottom: 0, display: 'flex', alignItems: 'center', color: isDark ? T.ivory : T.muted, opacity: isDark ? 0 : 0.45 }}>
-        <MoonGlyph />
-      </span>
-      {/* Knob — slides left (light) / right (dark) and carries the active glyph. */}
-      <span style={{
-        position: 'absolute', top: PAD, left: isDark ? W - KNOB - PAD : PAD,
-        width: KNOB, height: KNOB, borderRadius: '50%',
-        background: T.card, border: `1px solid ${T.hairline}`,
-        boxShadow: '0 1px 3px rgba(0,0,0,0.28)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: isDark ? T.ivory : T.teal,
-        transition: 'left .2s ease',
-      }}>
-        {isDark ? <MoonGlyph /> : <SunGlyph />}
-      </span>
-    </button>
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+      {/* Auto / follow-system chip */}
+      <button onClick={() => setTheme('system')} className="btn-ghost"
+        aria-pressed={isAuto} title="Follow system appearance"
+        style={{
+          height: H, padding: '0 9px', flexShrink: 0, cursor: 'pointer',
+          borderRadius: H / 2, border: `1px solid ${isAuto ? T.teal : T.hairline}`,
+          background: isAuto ? T.tint : 'transparent', color: isAuto ? T.teal : T.muted,
+          fontFamily: 'inherit', fontSize: 11, fontWeight: 600, letterSpacing: '0.01em',
+          transition: 'all .15s ease',
+        }}>
+        Auto
+      </button>
+
+      {/* Light/dark slider */}
+      <button onClick={() => setTheme(isDark ? 'light' : 'dark')} className="btn-ghost"
+        role="switch" aria-checked={isDark} aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`} title="Appearance"
+        style={{
+          position: 'relative', width: W, height: H, flexShrink: 0, padding: 0, cursor: 'pointer',
+          borderRadius: H / 2, border: `1px solid ${T.hairline}`,
+          background: isDark ? T.teal : T.sand, transition: 'background .2s ease',
+        }}>
+        {/* Track glyphs — the inactive side shows faintly; the knob covers the active side. */}
+        <span aria-hidden="true" style={{ position: 'absolute', left: 6, top: 0, bottom: 0, display: 'flex', alignItems: 'center', color: isDark ? T.ivory : T.muted, opacity: isDark ? 0.45 : 0 }}>
+          <SunGlyph />
+        </span>
+        <span aria-hidden="true" style={{ position: 'absolute', right: 6, top: 0, bottom: 0, display: 'flex', alignItems: 'center', color: isDark ? T.ivory : T.muted, opacity: isDark ? 0 : 0.45 }}>
+          <MoonGlyph />
+        </span>
+        {/* Knob — slides left (light) / right (dark) and carries the active glyph. */}
+        <span style={{
+          position: 'absolute', top: PAD, left: isDark ? W - KNOB - PAD : PAD,
+          width: KNOB, height: KNOB, borderRadius: '50%',
+          background: T.card, border: `1px solid ${T.hairline}`,
+          boxShadow: '0 1px 3px rgba(0,0,0,0.28)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: isDark ? T.ivory : T.teal,
+          transition: 'left .2s ease',
+        }}>
+          {isDark ? <MoonGlyph /> : <SunGlyph />}
+        </span>
+      </button>
+    </div>
   )
 }
 
