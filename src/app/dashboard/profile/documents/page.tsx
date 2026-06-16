@@ -1,9 +1,10 @@
 'use client'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { seedIfMissing, verifyIdentity, setStoredIdentity } from '@/lib/identity'
 import { confirmDialog, passwordDialog } from '@/components/Dialog'
+import { GuideStrip } from '@/components/GuideStrip'
 
 import { tokens as T } from '@/lib/tokens'
 
@@ -98,6 +99,21 @@ export default function DocumentsPage() {
   const aisRef = useRef<HTMLInputElement>(null)
   const form26Ref = useRef<HTMLInputElement>(null)
   const offerRef = useRef<HTMLInputElement>(null)
+
+  // Guide strip — orientation + the how-to-download-AIS/26AS steps people actually get stuck on.
+  // Lightly data-aware: if an AIS was already read on a prior visit, acknowledge it. (localStorage is
+  // read in an effect, not in render, so SSR doesn't touch it.)
+  const [hasAis, setHasAis] = useState(false)
+  useEffect(() => {
+    try { setHasAis(!!JSON.parse(localStorage.getItem('as_ais') || 'null')) } catch { /* ignore */ }
+  }, [])
+  const guideLines: ReactNode[] = [
+    hasAis
+      ? <>Your AIS is already read — its interest, dividends and capital gains will flow into Other earnings. Add a salary slip here to build your year.</>
+      : <>Start with a salary slip — or, if you’ve just changed jobs and have no slip yet, your offer letter. AIS and Form 26AS are optional, but adding them makes your refund / amount-owed exact instead of estimated.</>,
+    <>To get them, log in to the <a href="https://www.incometax.gov.in" target="_blank" rel="noopener noreferrer" style={{ color: C.primary, fontWeight: 600 }}>Income Tax portal</a>: open <strong>AIS</strong> in the top menu for your Annual Information Statement, and <strong>e-File → Income Tax Returns → View Form 26AS</strong> for Form 26AS. Pick the year you’re filing for and download the PDF.</>,
+    <>Those downloads are password-locked. The password is your <strong>PAN in lowercase + date of birth as DDMMYYYY</strong> (e.g. abcde1234f01011990). ArthVo only uses it to open the file.</>,
+  ]
 
   const readFileAsBase64 = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
@@ -389,6 +405,8 @@ export default function DocumentsPage() {
           Start by uploading your salary slip — or, if you’ve just changed jobs and have no slip yet, your offer letter. AIS and Form 26AS are optional.
         </p>
       </div>
+
+      <GuideStrip tone={hasAis ? 'good' : 'calm'} lines={guideLines} />
 
       {/* Salary Slips - Required (multi-file) */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 16 }}>

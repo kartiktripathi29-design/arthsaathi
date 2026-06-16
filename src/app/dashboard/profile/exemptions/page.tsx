@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { computeAnnualHraExemption, type HraMonth } from '@/lib/salary-analytics'
 import { getSalaryFacts } from '@/lib/salary-facts'
+import { GuideStrip } from '@/components/GuideStrip'
 
 import { tokens as T } from '@/lib/tokens'
 
@@ -291,10 +292,32 @@ export default function ExemptionsPage() {
   const toggle = (key: string) => setExpanded(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
   const update = (k: keyof ExemptionsState, v: any) => setS(prev => ({ ...prev, [k]: v }))
 
+  // Guide strip — narrates the allowances picture (HRA detected vs claimed, old-regime caveat).
+  const guide: { tone: 'calm' | 'attention' | 'good'; lines: string[] } = (() => {
+    if (!salary) return { tone: 'calm', lines: [
+      `Allowances are parts of your pay that are completely tax-free — but only under the old regime.`,
+      `Upload a salary slip on Documents first, so ArthVo can read your HRA and pre-fill what it can here.`,
+    ] }
+    if (salary.hra > 0 && s.rentPaid === 0) return { tone: 'attention', lines: [
+      `Your slip shows HRA of ${fmt(salary.hra)}/month, but no rent is entered yet — so none of it is being counted as tax-free.`,
+      `Open House rent below and add your monthly rent to see how much becomes exempt. (Old regime only.)`,
+    ] }
+    if (totalAnnualExempt > 0) return { tone: 'good', lines: [
+      `You’ve claimed ${fmt(totalAnnualExempt)} of tax-free allowances${hraAnnualExemption > 0 ? ` (HRA ${fmt(hraAnnualExemption)})` : ''}.`,
+      `These lower your tax only under the old regime — the new regime ignores Section 10 allowances. Your Tax weighs both regimes for you.`,
+    ] }
+    return { tone: 'calm', lines: [
+      `Allowances here are tax-free income under the old regime — the biggest one is usually HRA.`,
+      `Open House rent and enter your monthly rent to see your exempt amount. Fill only what applies to you.`,
+    ] }
+  })()
+
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '20px 0' }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Allowances</h1>
       <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>Income that is completely tax-free — <span style={{ whiteSpace: 'nowrap' }}>Old Regime only · Section 10</span></p>
+
+      <GuideStrip tone={guide.tone} lines={guide.lines} />
 
       {salary && (salary.hra > 0 || detectedConveyance > 0) && (
         <div style={{ background: C.wl, border: `1px solid ${C.wm}`, borderRadius: 8, padding: 16, marginBottom: 20 }}>

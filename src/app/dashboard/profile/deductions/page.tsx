@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { computeSec80G, type DonationCat } from '@/lib/deductions'
 import { getSalaryFacts } from '@/lib/salary-facts'
+import { GuideStrip } from '@/components/GuideStrip'
 
 import { tokens as T } from '@/lib/tokens'
 
@@ -166,17 +167,23 @@ export default function DeductionsPage() {
   const totalDeductions = sec80C + sec80D + sec24b + secNps + sec80TTA + sec80TTB + sec80E + sec80G
   const taxSavingsOld = totalDeductions * 0.2 // rough estimate at 20% slab
 
+  // Guide strip — narrates deductions claimed + the old-regime caveat (replaces the static banner).
+  const guide: { tone: 'calm' | 'attention' | 'good'; lines: string[] } = totalDeductions > 0
+    ? { tone: 'good', lines: [
+        `You’ve claimed ${fmt(totalDeductions)} in deductions${sec80C > 0 ? ` — 80C counts ${fmt(sec80C)} of its ₹1,50,000 limit` : ''}.`,
+        `These cut tax only under the old regime. Your Tax compares it against the new regime (no deductions, lower rates) and picks the cheaper one. Only invest what makes financial sense — tax saving is a bonus, not the goal.`,
+      ] }
+    : { tone: 'calm', lines: [
+        `Deductions are investments and expenses that lower your taxable income — under the old regime only.`,
+        `Tap any card below (80C, health insurance, home loan, NPS…) and enter what you actually have. Fill only what applies to you.`,
+      ] }
+
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '20px 0' }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Deductions</h1>
       <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>Tax-saving investments and expenses. <span style={{ whiteSpace: 'nowrap' }}>(These only reduce tax in Old Regime)</span></p>
 
-      {/* Context Banner */}
-      <div style={{ background: C.wl, border: `1px solid ${C.wm}`, borderRadius: 8, padding: 16, marginBottom: 24 }}>
-        <p style={{ fontSize: 12, color: C.text, margin: 0, lineHeight: 1.6 }}>
-          You've claimed <strong>{fmt(sec80C + ded.homeLoanInterest + ded.nps)}</strong> total. Only invest what makes financial sense — <span style={{ whiteSpace: 'nowrap' }}>tax saving is a bonus, not the goal.</span>
-        </p>
-      </div>
+      <GuideStrip tone={guide.tone} lines={guide.lines} />
 
       {/* Section 80C */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 16, overflow: 'hidden' }}>

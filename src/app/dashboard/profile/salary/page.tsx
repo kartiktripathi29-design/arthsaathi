@@ -12,6 +12,7 @@ import {
   extractHraBasis,
   type Anomaly,
 } from '@/lib/salary-analytics'
+import { GuideStrip } from '@/components/GuideStrip'
 
 import { tokens as T } from '@/lib/tokens'
 
@@ -1706,6 +1707,27 @@ export default function SalaryPageCompleteFinal() {
         FY {fyStartYear}-{fyStartYear + 1} (Apr {fyStartYear} – Mar {fyStartYear + 1})
         {wizard.intent === 'forecast' ? ' · Forecast' : ''}
       </p>
+
+      {/* Guide strip — narrates how the year was built (months of data → projection vs actual). */}
+      {(() => {
+        const months = slips.length
+        const g: { tone: 'calm' | 'attention' | 'good'; lines: string[] } =
+          wizard.intent === 'forecast'
+            ? { tone: 'calm', lines: [
+                `You’re modelling a what-if — projected annual gross ${fmt(annualGross)}. Nothing here changes your saved salary.`,
+                `When the numbers look right, head to Your Tax to see the impact on what you’ll owe.`,
+              ] }
+          : months >= 12
+            ? { tone: 'good', lines: [
+                `All 12 months are in — this is your actual year: gross ${fmt(annualGross)}, take-home ${fmt(annualNet)}.`,
+                `Tap any month to check or correct its breakup, then continue to Other earnings.`,
+              ] }
+            : { tone: 'calm', lines: [
+                `Built from ${months} month${months === 1 ? '' : 's'} of slips and projected across the full year: gross ${fmt(annualGross)}, take-home ${fmt(annualNet)}.`,
+                `Add the remaining months’ slips on Documents to sharpen this from a projection into an exact total. Tap any month to check its breakup.`,
+              ] }
+        return <GuideStrip tone={g.tone} lines={g.lines} />
+      })()}
 
       {/* Preview Modal - Salary Breakup */}
       {previewMonth && previewEmploymentId && (

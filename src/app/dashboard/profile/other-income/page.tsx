@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
 import { tokens as T } from '@/lib/tokens'
+import { GuideStrip } from '@/components/GuideStrip'
 
 const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, bg:T.paper, card:T.card, border:T.hairline, text:T.ink, muted:T.muted, green:T.green, ivory:T.ivory, slip:T.slip, danger:'#B94040' }
 const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`
@@ -207,18 +208,67 @@ export default function OtherIncomePage() {
   const aisHasIncome = aisInterest > 0 || aisDividends > 0 || aisCG > 0
   const hasAisImported = entries.some(e => (e as any)._fromAis)
 
+  // ─── Guide strip ──────────────────────────────────────────────────────────
+  // Proactive, data-aware narration (not advice): reads the real figures already on this page and
+  // tells the user what we found, what needs attention, and where it goes. No LLM, no fabricated
+  // numbers — every figure is real and every sentence is pre-written, so it stays inside the
+  // "clarity-not-advice / no fabricated numbers" principle. The reactive "Ask ArthVo" chat can't do
+  // this: it's deliberately number-blind (sends only yes/no flags) and forbidden from judging amounts.
+  const enteredIntDiv = entries.filter(e => e.type === 'interest')
+    .reduce((s, e) => s + (e.fdInterest || 0) + (e.savingsInterest || 0) + (e.dividends || 0), 0)
+  const enteredCGraw = entries.filter(e => e.type === 'equity').reduce((s, e) => {
+    const rows: EquityRow[] = Array.isArray(e.rows) && e.rows.length ? e.rows : equityRowsFromLegacy(e)
+    return s + rows.reduce((a, r) => a + Math.max(0, r.ltcg || 0) + Math.max(0, r.stcg || 0), 0)
+  }, 0)
+  const totalTaxable = entries.reduce((s, e) => s + getTaxablePreview(e), 0)
+
+  const guide: { tone: 'calm' | 'attention' | 'good'; lines: string[] } = (() => {
+    const human = (xs: string[]) => xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}` : (xs[0] || '')
+    if (aisData && aisHasIncome) {
+      const parts: string[] = []
+      if (aisInterest > 0) parts.push(`interest ${fmt(aisInterest)}`)
+      if (aisDividends > 0) parts.push(`dividends ${fmt(aisDividends)}`)
+      if (aisCG > 0) parts.push(`capital gains ${fmt(aisCG)}`)
+      if (!hasAisImported) {
+        return { tone: 'attention', lines: [
+          `Your AIS lists ${human(parts)}. None of it is in your return yet.`,
+          `Use “Import from AIS” just below to bring it in — then add anything AIS can’t see (freelance, crypto, F&O, rent) by hand.`,
+        ] }
+      }
+      const flags: string[] = []
+      if ((aisInterest + aisDividends) - enteredIntDiv > 1000) flags.push(`interest & dividends (AIS ${fmt(aisInterest + aisDividends)}, you’ve entered ${fmt(enteredIntDiv)})`)
+      if (aisCG - enteredCGraw > 1000) flags.push(`capital gains (AIS ${fmt(aisCG)}, you’ve entered ${fmt(enteredCGraw)})`)
+      if (flags.length) {
+        return { tone: 'attention', lines: [
+          `Imported — but your entries are lower than AIS for ${human(flags)}.`,
+          `Worth a look: AIS can lag your own records, or a source may be missing. Edit any “From AIS” row below to reconcile.`,
+        ] }
+      }
+      return { tone: 'good', lines: [
+        `Your AIS income is in and lines up with what’s entered.`,
+        `Add anything AIS can’t see — freelance, crypto, F&O or rent — below.`,
+      ] }
+    }
+    if (entries.length > 0) {
+      return { tone: 'calm', lines: [
+        `You’ve added ${fmt(totalTaxable)} taxable across ${entries.length} source${entries.length > 1 ? 's' : ''}.`,
+        `Upload your AIS or 26AS on Documents and we’ll cross-check it against what the tax department already has on file.`,
+      ] }
+    }
+    return { tone: 'calm', lines: [
+      `This page is optional — if salary is your only income, you can move straight on.`,
+      `Otherwise add interest, investments, trading or freelance below. Each has its own tax rule, and ArthVo applies the right one for you.`,
+    ] }
+  })()
+
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '20px 0' }}>
       <style>{OI_MOBILE_CSS}</style>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Other earnings</h1>
       <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>Income beyond salary: freelance, investments, trading, interest. <span style={{ whiteSpace: 'nowrap' }}>(Optional — skip if salary-only)</span></p>
 
-      {/* Banner */}
-      <div style={{ background: C.wl, border: `1px solid ${C.wm}`, borderRadius: 8, padding: 16, marginBottom: 24 }}>
-        <p style={{ fontSize: 12, color: C.text, margin: 0, lineHeight: 1.6 }}>
-          All income here is added to your salary for tax calculation. Each type has different tax rules — fill in what applies to you.
-        </p>
-      </div>
+      {/* Guide strip — data-aware narration of this page's state (replaces the old static banner) */}
+      <GuideStrip tone={guide.tone} lines={guide.lines} />
 
       {/* AIS prefill / reconciliation — shown when an AIS/26AS was parsed on the Documents page */}
       {aisData && aisHasIncome && (

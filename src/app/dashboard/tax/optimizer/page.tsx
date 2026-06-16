@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { computeSec80G } from '@/lib/deductions'
 import { getSalaryFacts } from '@/lib/salary-facts'
 import { slabBreakdown, type SeniorStatus } from '@/lib/tax-slabs'
+import { GuideStrip } from '@/components/GuideStrip'
 
 import { tokens as T } from '@/lib/tokens'
 
@@ -550,6 +551,32 @@ export default function TaxOptimizerPage() {
       <style>{OPT_MOBILE_CSS}</style>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Your Tax</h1>
       <p style={{ fontSize: 13, color: C.muted, margin: '0 0 16px' }}>Your tax picture for FY 2025-26</p>
+
+      {/* Guide strip — a confidence / completeness note. It does NOT restate the verdict hero below;
+          it tells the user how solid the figure is and what would make it exact (TDS source, salary basis). */}
+      {(() => {
+        const g: { tone: 'calm' | 'attention' | 'good'; lines: string[] } =
+          calc.tdsSource === 'none'
+            ? { tone: 'attention', lines: [
+                `This weighs both regimes on the income you’ve entered — but no tax-paid (TDS) is on record yet, so there’s no refund / amount-owed figure.`,
+                `Upload your AIS or Form 26AS on Documents to get the exact TDS and a real refund / payable number.`,
+              ] }
+          : calc.tdsSource === 'estimated'
+            ? { tone: 'attention', lines: [
+                `The regime comparison is solid, but your refund / amount-owed uses an estimated TDS — not your actual tax credit.`,
+                `Upload your AIS or Form 26AS on Documents and ArthVo will use the exact TDS the department has on record.`,
+              ] }
+          : calc.salarySource === 'slip-average'
+            ? { tone: 'attention', lines: [
+                `Your salary here is projected from one month’s slip × 12, so this is an estimate.`,
+                `Add the rest of the year’s slips on Documents to turn the projection into an exact, month-by-month figure.`,
+              ] }
+            : { tone: 'good', lines: [
+                `Computed from everything you’ve entered — salary, other income, allowances and deductions — with TDS from your ${calc.tdsSource === 'ais' ? 'AIS / 26AS' : 'salary slips'}.`,
+                `Tap any line under “Income & components” below to see exactly how it’s worked out, or edit it at the source.`,
+              ] }
+        return <GuideStrip tone={g.tone} lines={g.lines} />
+      })()}
 
       {/* ── Verdict hero — leads with the recommendation: regime · saving · refund/payable · ITR.
            Pure presentation of values already computed in `calc` (no math here). ── */}
