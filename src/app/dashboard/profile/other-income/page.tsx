@@ -271,27 +271,18 @@ export default function OtherIncomePage() {
       {/* Guide strip — data-aware narration of this page's state (replaces the old static banner) */}
       <GuideStrip tone={guide.tone} lines={guide.lines} />
 
-      {/* AIS prefill / reconciliation — shown when an AIS/26AS was parsed on the Documents page */}
+      {/* AIS import — just the action; the guide strip above narrates what was found / the state. */}
       {aisData && aisHasIncome && (
-        <div style={{ background: C.slip.fill, border: `1px solid ${C.slip.border}`, borderRadius: 8, padding: 16, marginBottom: 24 }}>
-          <p style={{ fontSize: 12, fontWeight: 600, color: C.fg, margin: '0 0 6px' }}>Found in your AIS — interest, dividends and capital gains.</p>
-          <p style={{ fontSize: 12, color: C.text, margin: '0 0 10px', lineHeight: 1.6 }}>
-            <span style={{ whiteSpace: 'nowrap' }}>Interest <strong>{fmt(aisInterest)}</strong></span> · <span style={{ whiteSpace: 'nowrap' }}>Dividends <strong>{fmt(aisDividends)}</strong></span> · <span style={{ whiteSpace: 'nowrap' }}>Capital gains <strong>{fmt(aisCG)}</strong></span>
+        <div style={{ background: C.slip.fill, border: `1px solid ${C.slip.border}`, borderRadius: 8, padding: '12px 16px', marginBottom: 24, display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', justifyContent: 'space-between' }}>
+          <p style={{ fontSize: 12, color: C.text, margin: 0 }}>
+            {hasAisImported ? 'AIS income is imported into the entries below (rows marked “From AIS”).' : 'Bring your AIS interest, dividends & capital gains in automatically.'}
           </p>
-          {hasAisImported && (
-            <p style={{ fontSize: 11, color: C.green, margin: '0 0 10px', lineHeight: 1.5 }}>
-              ✓ Imported into the entries below (rows marked “From AIS”). Edit any of them to adjust, or re-import to refresh from the latest AIS.
-            </p>
-          )}
           <button
             onClick={handleImportFromAis}
-            style={{ padding: '9px 16px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+            style={{ padding: '9px 16px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
           >
             {hasAisImported ? 'Re-import from AIS' : 'Import from AIS'}
           </button>
-          <p style={{ fontSize: 10.5, color: C.muted, margin: '8px 0 0', lineHeight: 1.5 }}>
-            We map AIS capital gains to the right asset type (equity / debt MF / unlisted) and apply the correct rate. Review the imported rows — AIS figures can lag or differ from your records. Add freelance, crypto, F&O and rent manually below.
-          </p>
         </div>
       )}
 

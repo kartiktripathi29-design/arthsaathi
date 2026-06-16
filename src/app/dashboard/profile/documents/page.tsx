@@ -399,12 +399,7 @@ export default function DocumentsPage() {
 
   return (
     <div style={{ maxWidth: 800, margin: '0 auto' }}>
-      <div style={{ marginBottom: 24 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, color: C.fg, margin: '0 0 6px' }}>Upload your documents</h2>
-        <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>
-          Start by uploading your salary slip — or, if you’ve just changed jobs and have no slip yet, your offer letter. AIS and Form 26AS are optional.
-        </p>
-      </div>
+      <h2 style={{ fontSize: 20, fontWeight: 700, color: C.fg, margin: '0 0 12px' }}>Upload your documents</h2>
 
       <GuideStrip tone={hasAis ? 'good' : 'calm'} lines={guideLines} />
 
