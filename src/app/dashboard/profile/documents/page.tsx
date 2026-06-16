@@ -108,8 +108,11 @@ export default function DocumentsPage() {
     })
 
   // Parse an AIS / Form 26AS document via /api/parse-ais and return the parsed object (with
-  // totalTaxCredit, TDS entries, etc.), or null on skip/failure. Portal AIS PDFs are usually
-  // password-protected (PAN + DOB) — if so, prompt once and retry. Optional, so never throws.
+  // totalTaxCredit, TDS entries, etc.), or null on skip/failure. Portal AIS/26AS PDFs are
+  // password-protected (PAN-lowercase + DOB-DDMMYYYY). The server returns 422 'incorrect_password'
+  // BOTH when no password is supplied and when a wrong one is — so we loop: keep re-prompting (with a
+  // clearer "that didn't work" message on retries) until the file opens or the user cancels. Optional,
+  // so never throws.
   const parseAisDoc = async (file: File): Promise<any | null> => {
     const base64 = await readFileAsBase64(file)
     const mediaType = file.type || 'application/pdf'
@@ -119,18 +122,21 @@ export default function DocumentsPage() {
       body: JSON.stringify({ base64Data: base64, mediaType, password }),
     })
     let res = await call()
-    if (res.status === 422) {
+    let attempt = 0
+    while (res.status === 422) {
       const j = await res.json().catch(() => ({} as any))
-      if (j?.error === 'incorrect_password') {
-        const pwd = await passwordDialog({
-          title: 'Password-protected document',
-          message: `"${file.name}" is password-protected.\n\nThe AIS / 26AS password is usually your PAN in lowercase + date of birth as DDMMYYYY (e.g. abcde1234f01011990).\n\nEnter it to read the document, or cancel to skip.`,
-          confirmLabel: 'Unlock',
-          placeholder: 'Document password',
-        })
-        if (!pwd) return null
-        res = await call(pwd)
-      }
+      if (j?.error !== 'incorrect_password') break
+      attempt++
+      const pwd = await passwordDialog({
+        title: attempt === 1 ? 'Password-protected document' : 'That password didn’t work',
+        message: attempt === 1
+          ? `"${file.name}" is password-protected.\n\nThe AIS / 26AS password is your PAN in lowercase + date of birth as DDMMYYYY — e.g. abcde1234f01011990 (all letters lowercase, 8-digit DOB, no spaces).\n\nEnter it to read the document, or cancel to skip.`
+          : `That didn’t open "${file.name}".\n\nDouble-check the format: every PAN letter in lowercase, date of birth as DDMMYYYY (e.g. 01081990), and no spaces. It’s the same password the Income-Tax portal shows when you download the AIS.\n\nTry again, or cancel to skip.`,
+        confirmLabel: 'Unlock',
+        placeholder: 'Document password',
+      })
+      if (!pwd) return null
+      res = await call(pwd)
     }
     if (!res.ok) return null
     const j = await res.json().catch(() => null)
