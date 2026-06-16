@@ -311,6 +311,11 @@ export default function ExemptionsPage() {
       `Open House rent and enter your monthly rent to see your exempt amount. Fill only what applies to you.`,
     ] }
   })()
+  // Fold the one non-obvious slip fact into the guide's detail (under ⓘ) rather than a separate box:
+  // conveyance shown on a slip is taxable now — it's subsumed by the standard deduction.
+  if (detectedConveyance > 0) guide.lines.push(
+    `Heads up: the Conveyance ${fmt(detectedConveyance)}/month on your slip is taxable now — it’s folded into the standard deduction, so there’s nothing extra to claim here.`,
+  )
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '20px 0' }}>
@@ -318,26 +323,6 @@ export default function ExemptionsPage() {
       <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>Income that is completely tax-free — <span style={{ whiteSpace: 'nowrap' }}>Old Regime only · Section 10</span></p>
 
       <GuideStrip tone={guide.tone} lines={guide.lines} />
-
-      {salary && (salary.hra > 0 || detectedConveyance > 0) && (
-        <div style={{ background: C.wl, border: `1px solid ${C.wm}`, borderRadius: 8, padding: 16, marginBottom: 20 }}>
-          <p style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>💡 What your tax consultant isn't telling you</p>
-          {salary.hra > 0 && (
-            <p style={{ fontSize: 11.5, color: C.text, margin: '0 0 6px', lineHeight: 1.55 }}>
-              Your HRA isn't automatically tax-free — only the <strong>least of three</strong> amounts is, and only if you <strong>actually pay rent</strong>.
-              {hraReceivedVaried
-                ? <> Since your pay changed mid-year, we worked it out <strong>month-by-month</strong> ({fmt(hraAnnualReceived)} total) — the honest way, not "one slip × 12".</>
-                : <> Enter your rent below to see exactly how much.</>}
-            </p>
-          )}
-          {detectedConveyance > 0 && (
-            <p style={{ fontSize: 11.5, color: C.text, margin: 0, lineHeight: 1.55 }}>
-              That <strong>Conveyance {fmt(detectedConveyance)}/mo</strong> on your slip? Taxable now — it's baked into the standard deduction, so there's nothing extra to claim.
-            </p>
-          )}
-          <p style={{ fontSize: 10.5, color: C.muted, margin: '8px 0 0' }}>Everything below is optional — fill only what applies to you.</p>
-        </div>
-      )}
 
       {/* HRA — kept as the rich existing flow */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 16, overflow: 'hidden' }}>
