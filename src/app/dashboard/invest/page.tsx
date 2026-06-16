@@ -50,10 +50,12 @@ function buildPlan(goals: Set<GoalKey>, risk: Risk, free: number, monthlyExp: nu
   const debtAmt   = Math.round(free * r.debt)
   const liquidAmt = Math.round(free * r.liquid)
 
-  const GREEN = { catColor:'#2A7A4A', catBg:'#E8F5EE' }
+  // Category accents map onto existing token families (each has a dark-mode value), so the badges
+  // theme correctly instead of staying light on a dark page.
+  const GREEN = { catColor:T.slip.text, catBg:T.slip.fill }
   const WHEAT = { catColor:C.fg, catBg:C.wl }
-  const AMBER = { catColor:'#8A6A1A', catBg:'#FBF4E0' }
-  const BLUE  = { catColor:'#2A5A8A', catBg:'#EEF4FD' }
+  const AMBER = { catColor:T.caution.text, catBg:T.caution.fill }
+  const BLUE  = { catColor:T.teal, catBg:T.tint }
 
   if (goals.has('emergency')) {
     const target = monthlyExp * 6
@@ -233,7 +235,7 @@ export default function InvestPage() {
 
           {/* Generate button */}
           <button onClick={generate} disabled={goals.size===0||!freeToSpend}
-            style={{ width:'100%', padding:'12px', background:goals.size>0&&freeToSpend?C.fg:'#C8D4C8', color:goals.size>0&&freeToSpend?C.wheat:'#8A9A8A', border:'none', borderRadius:5, fontSize:13, fontWeight:600, cursor:goals.size>0&&freeToSpend?'pointer':'not-allowed', fontFamily:'inherit', marginBottom:16 }}>
+            style={{ width:'100%', padding:'12px', background:goals.size>0&&freeToSpend?C.fg:C.border, color:goals.size>0&&freeToSpend?C.wheat:C.muted, border:'none', borderRadius:5, fontSize:13, fontWeight:600, cursor:goals.size>0&&freeToSpend?'pointer':'not-allowed', fontFamily:'inherit', marginBottom:16 }}>
             {generated ? '↺ Regenerate plan with new settings' : 'Generate my investment plan →'}
           </button>
 
@@ -252,7 +254,7 @@ export default function InvestPage() {
                 </div>
 
                 {/* Table header */}
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 110px 130px 100px', gap:8, padding:'8px 14px', background:'#FAFAF8', borderBottom:`1px solid ${C.border}`, fontSize:10, fontWeight:700, color:C.muted, letterSpacing:'0.06em', textTransform:'uppercase' as const }}>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 110px 130px 100px', gap:8, padding:'8px 14px', background:C.wl, borderBottom:`1px solid ${C.border}`, fontSize:10, fontWeight:700, color:C.muted, letterSpacing:'0.06em', textTransform:'uppercase' as const }}>
                   <span>Investment & Goal</span>
                   <span style={{ textAlign:'right' }}>Recommended</span>
                   <span style={{ textAlign:'right' }}>Your Amount</span>
@@ -262,7 +264,7 @@ export default function InvestPage() {
                 {plan.map((item, i) => {
                   const diff = item.userAmount - item.recommended
                   return (
-                    <div key={item.id} style={{ display:'grid', gridTemplateColumns:'1fr 110px 130px 100px', gap:8, padding:'12px 14px', borderBottom: i<plan.length-1 ? `1px solid #FAF7F2` : 'none', alignItems:'center' }}>
+                    <div key={item.id} style={{ display:'grid', gridTemplateColumns:'1fr 110px 130px 100px', gap:8, padding:'12px 14px', borderBottom: i<plan.length-1 ? `1px solid ${C.border}` : 'none', alignItems:'center' }}>
                       <div>
                         <p style={{ fontSize:13, fontWeight:500, color:C.text, margin:'0 0 3px' }}>{item.label}</p>
                         <div style={{ display:'flex', gap:6, alignItems:'center', marginBottom:4 }}>
@@ -275,7 +277,7 @@ export default function InvestPage() {
                       <div style={{ display:'flex', justifyContent:'flex-end' }}>
                         <AmtInput value={item.userAmount} onChange={v => updateAmount(item.id, v)} />
                       </div>
-                      <div style={{ textAlign:'right', fontSize:12, fontWeight:500, color: diff===0?C.muted : diff>0?'#2A7A4A' : C.danger }}>
+                      <div style={{ textAlign:'right', fontSize:12, fontWeight:500, color: diff===0?C.muted : diff>0?T.green : C.danger }}>
                         {diff===0 ? '—' : diff>0 ? `+${fmt(diff)}` : `−${fmt(Math.abs(diff))}`}
                       </div>
                     </div>
@@ -283,7 +285,7 @@ export default function InvestPage() {
                 })}
 
                 {/* Total row */}
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 110px 130px 100px', gap:8, padding:'11px 14px', background:'#FAFAF8', borderTop:`1px solid ${C.border}` }}>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 110px 130px 100px', gap:8, padding:'11px 14px', background:C.wl, borderTop:`1px solid ${C.border}` }}>
                   <span style={{ fontSize:13, fontWeight:700, color:C.text }}>Total</span>
                   <span style={{ fontSize:13, fontWeight:700, color:C.fg, textAlign:'right' }}>{fmt(totalRec)}</span>
                   <span style={{ fontSize:13, fontWeight:700, color:totalUser<=freeToSpend?C.fg:C.danger, textAlign:'right', paddingRight:4 }}>{fmt(totalUser)}</span>
@@ -301,7 +303,7 @@ export default function InvestPage() {
               )}
 
               {/* Buffer callout */}
-          <div style={{ background:'#FAFAF8', border:`1px solid ${C.border}`, borderRadius:5, padding:'9px 14px', fontSize:12, color:C.muted, marginBottom:12, lineHeight:1.65 }}>
+          <div style={{ background:C.wl, border:`1px solid ${C.border}`, borderRadius:5, padding:'9px 14px', fontSize:12, color:C.muted, marginBottom:12, lineHeight:1.65 }}>
             <strong style={{ color:C.text }}>Why not all of your free money?</strong> ArthVo allocates 70% of your truly free amount (` + fmt(Math.round(freeToSpend * 0.3)) + ` kept as buffer for fuel, medical, surprise expenses and daily life).
           </div>
 

@@ -267,7 +267,7 @@ export default function DNAPage() {
             { text:p.strength },
             { text:p.insight },
           ].map((r,i,arr) => (
-            <div key={i} style={{ display:'flex', alignItems:'flex-start', padding:'12px 14px', borderBottom:i<arr.length-1?`1px solid #FAF7F2`:'none', fontSize:13.5, color:C.text, lineHeight:1.7 }}>
+            <div key={i} style={{ display:'flex', alignItems:'flex-start', padding:'12px 14px', borderBottom:i<arr.length-1?`1px solid ${C.border}`:'none', fontSize:13.5, color:C.text, lineHeight:1.7 }}>
               <span>{r.text}</span>
             </div>
           ))}
