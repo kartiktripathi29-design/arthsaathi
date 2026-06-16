@@ -57,7 +57,7 @@ export function useThemedBase(resolved: 'light' | 'dark') {
 
 // Appearance control: an "Auto" chip + a sliding pill switch.
 //   - Auto chip → follow the OS (theme 'system'); highlighted teal when active.
-//   - Slider → an explicit light ↔ dark choice; the knob carries the active glyph and slides across a
+//   - Slider → an explicit light / dark choice; the knob carries the active glyph and slides across a
 //     track that tints teal in dark. It always reflects the RESOLVED appearance, so in Auto mode it
 //     shows whatever the OS currently is; tapping it switches to an explicit choice (turning Auto off).
 // Token-only colors so it flips correctly in both modes. Shared by the landing, auth pages and the

@@ -1,7 +1,7 @@
 'use client'
 // CA-ready "Computation of Income" statement. Renders from the full snapshot the Your Tax page
 // persists (av_tax_computation), so the numbers match Your Tax exactly without re-deriving anything.
-// Print-friendly (matches the Form-12B pattern): a 🖨️ button saves it as a clean PDF; chrome is
+// Print-friendly (matches the Form-12B pattern): a print button saves it as a clean PDF; chrome is
 // hidden in print. Display only — no computation here.
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -156,8 +156,8 @@ export default function ComputationPage() {
           ))}
         </div>
         <div style={{ flex: 1 }} />
-        <button onClick={copyText} style={{ padding: '8px 14px', background: 'transparent', color: C.fg, border: `1px solid ${C.fg}`, borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>📋 Copy as text</button>
-        <button onClick={() => window.print()} style={{ padding: '8px 16px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>🖨️ Print / Save PDF</button>
+        <button onClick={copyText} style={{ padding: '8px 14px', background: 'transparent', color: C.fg, border: `1px solid ${C.fg}`, borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Copy as text</button>
+        <button onClick={() => window.print()} style={{ padding: '8px 16px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Print / Save PDF</button>
       </div>
 
       {/* Document */}

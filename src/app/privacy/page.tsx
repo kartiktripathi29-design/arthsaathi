@@ -26,7 +26,7 @@ export default function PrivacyPage() {
 
         {/* Summary box */}
         <div style={{ background: T.tint, border: `1px solid ${T.slip.border}`, borderRadius: 14, padding: '20px 24px', marginBottom: 36 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: T.teal, marginBottom: 10 }}>📋 Summary in plain English</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: T.teal, marginBottom: 10 }}>Summary in plain English</div>
           {[
             '✓ Your salary slip is processed by AI to extract numbers — it is NOT saved anywhere',
             '✓ We do not sell your data to anyone, ever',
@@ -122,7 +122,7 @@ export default function PrivacyPage() {
 
         {/* Footer note */}
         <div style={{ background: T.caution.fill, border: `1px solid ${T.caution.border}`, borderRadius: 12, padding: '16px 20px', fontSize: 13, color: T.caution.text, lineHeight: 1.7 }}>
-          ⚠️ <strong>Disclaimer:</strong> ArthVo is an informational tool, not a registered investment adviser. Tax calculations are illustrative — consult a CA for ITR filing.
+          <strong>Disclaimer:</strong> ArthVo is an informational tool, not a registered investment adviser. Tax calculations are illustrative — consult a CA for ITR filing.
         </div>
 
         <div style={{ marginTop: 32, textAlign: 'center' }}>

@@ -102,7 +102,7 @@ export default function DashboardPage() {
           <p style={{ fontSize: 13, fontWeight: 700, color: C.ink, margin: '0 0 2px' }}>Handing this to a tax consultant?</p>
           <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>Download a clean Computation of Income statement they can verify and file from.</p>
         </div>
-        <Link href="/dashboard/tax/computation" style={{ padding: '10px 18px', background: C.fg, color: C.onTeal, borderRadius: 8, fontSize: 13, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>📄 Computation for your CA →</Link>
+        <Link href="/dashboard/tax/computation" style={{ padding: '10px 18px', background: C.fg, color: C.onTeal, borderRadius: 8, fontSize: 13, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>Computation for your CA →</Link>
       </Card>
 
       {/* Charts */}

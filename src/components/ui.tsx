@@ -57,7 +57,7 @@ export function Badge({ children, color = 'blue' }: { children: React.ReactNode;
 }
 
 // ─── Info Box ─────────────────────────────────────────────────────────────
-export function InfoBox({ icon = 'ℹ️', children, variant = 'info' }: { icon?: string; children: React.ReactNode; variant?: 'info' | 'success' | 'warning' | 'danger' }) {
+export function InfoBox({ icon = '', children, variant = 'info' }: { icon?: string; children: React.ReactNode; variant?: 'info' | 'success' | 'warning' | 'danger' }) {
   const styles = {
     info:    { bg: T.tint, border: T.slip.border, text: T.teal },
     success: { bg: '#E9F7EF', border: '#A9DFBF', text: '#1E5631' },

@@ -96,8 +96,8 @@ export default function BackupRestore() {
 
   const ManualButtons = ({ primary }: { primary: boolean }) => (
     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-      <button onClick={download} disabled={busy} style={primary ? btnPrimary : btnGhost}>⬇ {autoOn ? 'Export a copy' : 'Download backup'}</button>
-      <button onClick={() => fileRef.current?.click()} disabled={busy} style={btnGhost}>⬆ Restore from file</button>
+      <button onClick={download} disabled={busy} style={primary ? btnPrimary : btnGhost}>{autoOn ? 'Export a copy' : 'Download backup'}</button>
+      <button onClick={() => fileRef.current?.click()} disabled={busy} style={btnGhost}>Restore from file</button>
       <input ref={fileRef} type="file" accept="application/json,.json" style={{ display: 'none' }}
         onChange={(e) => { const f = e.target.files?.[0]; if (f) onPick(f); e.target.value = '' }} />
     </div>
@@ -106,7 +106,7 @@ export default function BackupRestore() {
   if (autoOn) {
     return (
       <div style={{ background: C.goodBg, border: `1px solid ${C.goodBorder}`, borderRadius: 8, padding: 16 }}>
-        <p style={{ fontSize: 13, fontWeight: 700, color: C.good, margin: '0 0 4px' }}>🔒 Your data is backed up automatically</p>
+        <p style={{ fontSize: 13, fontWeight: 700, color: C.good, margin: '0 0 4px' }}>Your data is backed up automatically</p>
         <p style={{ fontSize: 11.5, color: T.green, margin: '0 0 8px', lineHeight: 1.5 }}>
           It’s saved to your account, encrypted, and synced across your devices — clearing this browser or switching
           devices won’t lose anything. Your PAN and Aadhaar are masked and never stored in full.

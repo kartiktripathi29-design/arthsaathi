@@ -970,7 +970,7 @@ export default function TaxOptimizerPage() {
 
       {/* Hand-off to a tax consultant */}
       <div style={{ marginBottom: 16, padding: '12px 14px', background: C.wl, border: `1px solid ${C.wm}`, borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-        <p style={{ fontSize: 12.5, color: C.text, margin: 0 }}>📄 Need to hand this to a CA? Download a clean computation statement.</p>
+        <p style={{ fontSize: 12.5, color: C.text, margin: 0 }}>Need to hand this to a CA? Download a clean computation statement.</p>
         <Link href="/dashboard/tax/computation" style={{ padding: '8px 16px', background: C.fg, color: T.onTeal, borderRadius: 6, fontSize: 13, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>Computation for your CA →</Link>
       </div>
 

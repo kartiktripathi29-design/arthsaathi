@@ -148,7 +148,7 @@ interface MonthData {
   // 'actual'   = uploaded slip for this exact month
   // 'inferred' = filled in from another month's slip per the confirmed pattern (v7 ◆ marker)
   // 'edited'   = user manually changed values
-  // 'projected'= forecast (Forecast intent — gets the 🔮 dashed-border render)
+  // 'projected'= forecast (Forecast intent — gets the dashed-border render)
   source: 'actual' | 'inferred' | 'edited' | 'projected'
   earnings?: Earning[]
   deductionsList?: Earning[]
@@ -595,7 +595,7 @@ export default function SalaryPageCompleteFinal() {
         ? prev
         : { ...prev, forecastChanges: [change, ...prev.forecastChanges] }
     )
-    toast(`Offer letter loaded — choose “Plan ahead / forecast” to add ${change.offer!.employerName} as a job switch.`, { icon: '📄', duration: 6000 })
+    toast(`Offer letter loaded — choose “Plan ahead / forecast” to add ${change.offer!.employerName} as a job switch.`, { duration: 6000 })
   }, [slips, slipsWithMeta, fyStartYear])
 
   // Land returning users on their already-built timeline instead of restarting the wizard. We restore
@@ -649,7 +649,7 @@ export default function SalaryPageCompleteFinal() {
       const net = slip.netSalary || slip.basicSalary || 0
       const earnings = (slip.components || []).filter((c: any) => c.type === 'earning')
       const deductionsList = (slip.components || []).filter((c: any) => c.type === 'deduction')
-      // Forecast: everything in the future FY is projected (🔮). Validate: 'actual' iff exact match, else 'inferred' (◆).
+      // Forecast: everything in the future FY is projected. Validate: 'actual' iff exact match, else 'inferred' (◆).
       const source: MonthData['source'] = wizard.intent === 'forecast'
         ? 'projected'
         : (mk === src.monthKey ? 'actual' : 'inferred')
@@ -1515,12 +1515,12 @@ export default function SalaryPageCompleteFinal() {
                     {fc.kind === 'job_switch' && (
                       <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${C.border}` }}>
                         <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: C.wl, border: `1px solid ${C.border}`, borderRadius: 6, cursor: 'pointer', fontSize: 11.5, fontWeight: 600, color: C.fg, fontFamily: 'inherit' }}>
-                          📄 Upload offer letter to prefill
+                          Upload offer letter to prefill
                           <input type="file" accept=".pdf,.doc,.docx,image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) applyOfferLetter(idx, f); e.target.value = '' }} />
                         </label>
                         {offerStatus?.idx === idx && (
                           <p style={{ fontSize: 10.5, margin: '6px 0 0', color: offerStatus.state === 'error' ? C.danger : offerStatus.state === 'done' ? C.green : C.muted }}>
-                            {offerStatus.state === 'loading' ? '⏳ ' : offerStatus.state === 'done' ? '✓ ' : '⚠ '}{offerStatus.msg}
+                            {offerStatus.state === 'done' ? '✓ ' : ''}{offerStatus.msg}
                           </p>
                         )}
                         {/* Regime the new employer should withhold TDS under (the employee declares this). */}
@@ -2020,9 +2020,9 @@ export default function SalaryPageCompleteFinal() {
                     : m.source === 'inferred' ? '#1F4E7A'
                     : isForecastCell ? T.caution.text
                     : C.muted
-                  const icon = isForecastCell ? '🔮'
+                  const icon = isForecastCell ? '◇'
                     : m.source === 'actual' ? '●'
-                    : m.source === 'edited' ? '✎'
+                    : m.source === 'edited' ? '◐'
                     : m.source === 'inferred' ? '◆'
                     : '○'
                   const anomaly = anomalyByMonth.get(m.monthKey)
@@ -2071,10 +2071,10 @@ export default function SalaryPageCompleteFinal() {
               {/* Legend */}
               <div style={{ display: 'flex', gap: 12, fontSize: 10.5, color: C.muted, marginBottom: 14, flexWrap: 'wrap' }}>
                 <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: C.fg, marginRight: 4, verticalAlign: 'middle' }} /><strong style={{ color: C.fg }}>●</strong> Actual (from slip)</span>
-                <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: C.wm, marginRight: 4, verticalAlign: 'middle' }} /><strong style={{ color: C.fg }}>✎</strong> Edited (you changed it)</span>
+                <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: C.wm, marginRight: 4, verticalAlign: 'middle' }} /><strong style={{ color: C.fg }}>◐</strong> Edited (you changed it)</span>
                 <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#CFE0F0', border: '1px solid #7AA8D1', marginRight: 4, verticalAlign: 'middle' }} /><strong style={{ color: '#1F4E7A' }}>◆</strong> Inferred (from another slip)</span>
                 {wizard.intent === 'forecast' && (
-                  <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: T.caution.fill, border: `2px dashed ${T.caution.text}`, marginRight: 4, verticalAlign: 'middle' }} />🔮 Forecast</span>
+                  <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: T.caution.fill, border: `2px dashed ${T.caution.text}`, marginRight: 4, verticalAlign: 'middle' }} />◇ Forecast</span>
                 )}
                 <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: T.caution.text, marginRight: 4, verticalAlign: 'middle' }} />! Anomaly</span>
               </div>
@@ -2258,7 +2258,7 @@ export default function SalaryPageCompleteFinal() {
         if (warnings.length === 0) return null
         return (
           <div style={{ background: T.caution.fill, border: `1px solid ${T.caution.border}`, borderRadius: 8, padding: 14, marginBottom: 16 }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: T.caution.text, margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>⚠ Please verify</p>
+            <p style={{ fontSize: 11, fontWeight: 700, color: T.caution.text, margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Please verify</p>
             {warnings.map((w, i) => (
               <p key={i} style={{ fontSize: 12, color: C.text, margin: i === 0 ? 0 : '4px 0 0', lineHeight: 1.4 }}>• {w}</p>
             ))}

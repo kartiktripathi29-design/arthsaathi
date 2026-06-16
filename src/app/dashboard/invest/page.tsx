@@ -15,7 +15,6 @@ type GoalKey = 'emergency' | 'house' | 'marriage' | 'child' | 'retirement' | 'fi
 
 interface InvestRow {
   id: string
-  icon: string
   label: string
   category: string
   catColor: string
@@ -26,16 +25,16 @@ interface InvestRow {
   userAmount: number
 }
 
-const GOALS: { key: GoalKey; icon: string; label: string; sub: string }[] = [
-  { key:'emergency', icon:'🆘', label:'Emergency Fund', sub:'6 months expenses' },
-  { key:'house',     icon:'🏠', label:'Buy a House', sub:'Down payment goal' },
-  { key:'marriage',  icon:'💍', label:'Marriage', sub:'Wedding expenses' },
-  { key:'child',     icon:'👶', label:'Child Education', sub:'Future education fund' },
-  { key:'retirement',icon:'🌅', label:'Retirement', sub:'Long-term corpus' },
-  { key:'fire',      icon:'⚡', label:'Early Retirement', sub:'FIRE — before 50' },
-  { key:'travel',    icon:'✈️', label:'Travel Fund', sub:'Experiences' },
-  { key:'wealth',    icon:'📈', label:'Wealth Building', sub:'General growth' },
-  { key:'tax',       icon:'🏛️', label:'Tax Saving', sub:'80C deductions' },
+const GOALS: { key: GoalKey; label: string; sub: string }[] = [
+  { key:'emergency', label:'Emergency Fund', sub:'6 months expenses' },
+  { key:'house',     label:'Buy a House', sub:'Down payment goal' },
+  { key:'marriage',  label:'Marriage', sub:'Wedding expenses' },
+  { key:'child',     label:'Child Education', sub:'Future education fund' },
+  { key:'retirement',label:'Retirement', sub:'Long-term corpus' },
+  { key:'fire',      label:'Early Retirement', sub:'FIRE — before 50' },
+  { key:'travel',    label:'Travel Fund', sub:'Experiences' },
+  { key:'wealth',    label:'Wealth Building', sub:'General growth' },
+  { key:'tax',       label:'Tax Saving', sub:'80C deductions' },
 ]
 
 const RISK_CONFIG = {
@@ -58,35 +57,35 @@ function buildPlan(goals: Set<GoalKey>, risk: Risk, free: number, monthlyExp: nu
 
   if (goals.has('emergency')) {
     const target = monthlyExp * 6
-    rows.push({ id:uid(), icon:'🆘', label:'Liquid Fund (Emergency)', category:'SAFETY', ...AMBER, goal:'Emergency Fund', note:`Target: 6 months (${fmt(target)}). Keep accessible.`, recommended:Math.round(free*0.15), userAmount:Math.round(free*0.15) })
+    rows.push({ id:uid(), label:'Liquid Fund (Emergency)', category:'SAFETY', ...AMBER, goal:'Emergency Fund', note:`Target: 6 months (${fmt(target)}). Keep accessible.`, recommended:Math.round(free*0.15), userAmount:Math.round(free*0.15) })
   }
   if (goals.has('retirement') || goals.has('fire')) {
-    rows.push({ id:uid(), icon:'📈', label:'Nifty 50 Index Fund (SIP)', category:'EQUITY', ...GREEN, goal:goals.has('fire')?'Early Retirement':'Retirement', note:'Lowest cost equity. Core long-term holding.', recommended:Math.round(equityAmt*0.5), userAmount:Math.round(equityAmt*0.5) })
-    if (risk !== 'conservative') rows.push({ id:uid(), icon:'📊', label:'Mid Cap Fund (SIP)', category:'EQUITY', ...GREEN, goal:goals.has('fire')?'Early Retirement':'Retirement', note:'Higher growth, moderate risk. 7–10 yr horizon.', recommended:Math.round(equityAmt*0.3), userAmount:Math.round(equityAmt*0.3) })
-    rows.push({ id:uid(), icon:'🏦', label:'NPS (80CCD(1B))', category:'PENSION', ...BLUE, goal:'Retirement', note:'Extra ₹50,000 deduction over 80C. Tax-efficient.', recommended:Math.round(free*0.08), userAmount:Math.round(free*0.08) })
+    rows.push({ id:uid(), label:'Nifty 50 Index Fund (SIP)', category:'EQUITY', ...GREEN, goal:goals.has('fire')?'Early Retirement':'Retirement', note:'Lowest cost equity. Core long-term holding.', recommended:Math.round(equityAmt*0.5), userAmount:Math.round(equityAmt*0.5) })
+    if (risk !== 'conservative') rows.push({ id:uid(), label:'Mid Cap Fund (SIP)', category:'EQUITY', ...GREEN, goal:goals.has('fire')?'Early Retirement':'Retirement', note:'Higher growth, moderate risk. 7–10 yr horizon.', recommended:Math.round(equityAmt*0.3), userAmount:Math.round(equityAmt*0.3) })
+    rows.push({ id:uid(), label:'NPS (80CCD(1B))', category:'PENSION', ...BLUE, goal:'Retirement', note:'Extra ₹50,000 deduction over 80C. Tax-efficient.', recommended:Math.round(free*0.08), userAmount:Math.round(free*0.08) })
   }
   if (goals.has('house')) {
-    rows.push({ id:uid(), icon:'🏠', label:'Debt Fund / RD', category:'DEBT', ...WHEAT, goal:'House Down Payment', note:'Stable returns for 3–5 yr goal. Low risk.', recommended:Math.round(debtAmt*0.6), userAmount:Math.round(debtAmt*0.6) })
+    rows.push({ id:uid(), label:'Debt Fund / RD', category:'DEBT', ...WHEAT, goal:'House Down Payment', note:'Stable returns for 3–5 yr goal. Low risk.', recommended:Math.round(debtAmt*0.6), userAmount:Math.round(debtAmt*0.6) })
   }
   if (goals.has('marriage')) {
-    rows.push({ id:uid(), icon:'💍', label:'Short-term Debt Fund', category:'DEBT', ...WHEAT, goal:'Marriage', note:'Capital protection with better returns than FD.', recommended:Math.round(debtAmt*0.4), userAmount:Math.round(debtAmt*0.4) })
+    rows.push({ id:uid(), label:'Short-term Debt Fund', category:'DEBT', ...WHEAT, goal:'Marriage', note:'Capital protection with better returns than FD.', recommended:Math.round(debtAmt*0.4), userAmount:Math.round(debtAmt*0.4) })
   }
   if (goals.has('child')) {
-    rows.push({ id:uid(), icon:'👶', label:'Sukanya Samriddhi / PPF', category:'DEBT', ...BLUE, goal:'Child Education', note:'Government backed. Tax free returns.', recommended:Math.round(free*0.1), userAmount:Math.round(free*0.1) })
+    rows.push({ id:uid(), label:'Sukanya Samriddhi / PPF', category:'DEBT', ...BLUE, goal:'Child Education', note:'Government backed. Tax free returns.', recommended:Math.round(free*0.1), userAmount:Math.round(free*0.1) })
   }
   if (goals.has('tax') || goals.has('wealth')) {
-    rows.push({ id:uid(), icon:'🛡️', label:'ELSS Fund (80C)', category:'TAX SAVING', ...GREEN, goal:'Tax Saving', note:'Saves up to ₹46,800/yr. 3-year lock-in.', recommended:Math.min(12500, Math.round(free*0.15)), userAmount:Math.min(12500, Math.round(free*0.15)) })
+    rows.push({ id:uid(), label:'ELSS Fund (80C)', category:'TAX SAVING', ...GREEN, goal:'Tax Saving', note:'Saves up to ₹46,800/yr. 3-year lock-in.', recommended:Math.min(12500, Math.round(free*0.15)), userAmount:Math.min(12500, Math.round(free*0.15)) })
   }
   if (goals.has('travel')) {
-    rows.push({ id:uid(), icon:'✈️', label:'Flexi-cap Mutual Fund', category:'EQUITY', ...GREEN, goal:'Travel Fund', note:'Moderate horizon (2–3 years). Liquid when needed.', recommended:Math.round(free*0.08), userAmount:Math.round(free*0.08) })
+    rows.push({ id:uid(), label:'Flexi-cap Mutual Fund', category:'EQUITY', ...GREEN, goal:'Travel Fund', note:'Moderate horizon (2–3 years). Liquid when needed.', recommended:Math.round(free*0.08), userAmount:Math.round(free*0.08) })
   }
 
   // If no goals or result empty, show default moderate plan
   if (rows.length === 0) {
     rows.push(
-      { id:uid(), icon:'📈', label:'Nifty 50 Index Fund (SIP)', category:'EQUITY', ...GREEN, goal:'Wealth Building', note:'Core long-term holding.', recommended:Math.round(free*0.35), userAmount:Math.round(free*0.35) },
-      { id:uid(), icon:'🆘', label:'Liquid Fund (Emergency)', category:'SAFETY', ...AMBER, goal:'Emergency Fund', note:'Target: 6 months expenses.', recommended:Math.round(free*0.2), userAmount:Math.round(free*0.2) },
-      { id:uid(), icon:'🛡️', label:'ELSS Fund (80C)', category:'TAX SAVING', ...GREEN, goal:'Tax Saving', note:'Saves up to ₹46,800 in tax.', recommended:Math.round(free*0.15), userAmount:Math.round(free*0.15) },
+      { id:uid(), label:'Nifty 50 Index Fund (SIP)', category:'EQUITY', ...GREEN, goal:'Wealth Building', note:'Core long-term holding.', recommended:Math.round(free*0.35), userAmount:Math.round(free*0.35) },
+      { id:uid(), label:'Liquid Fund (Emergency)', category:'SAFETY', ...AMBER, goal:'Emergency Fund', note:'Target: 6 months expenses.', recommended:Math.round(free*0.2), userAmount:Math.round(free*0.2) },
+      { id:uid(), label:'ELSS Fund (80C)', category:'TAX SAVING', ...GREEN, goal:'Tax Saving', note:'Saves up to ₹46,800 in tax.', recommended:Math.round(free*0.15), userAmount:Math.round(free*0.15) },
     )
   }
   return rows
@@ -191,13 +190,12 @@ export default function InvestPage() {
               <p style={{ fontSize:12.5, color:C.muted, margin:'0 0 12px' }}>This determines which funds we recommend</p>
               <div style={{ display:'flex', gap:10 }}>
                 {([
-                  ['conservative', '🛡️', 'Conservative', 'FDs, debt funds, capital safety'],
-                  ['moderate',     '⚖️', 'Moderate',     'Mix of equity + debt'],
-                  ['aggressive',   '🚀', 'Aggressive',   'Mostly equity, high growth'],
-                ] as const).map(([key, icon, label, sub]) => (
+                  ['conservative', 'Conservative', 'FDs, debt funds, capital safety'],
+                  ['moderate',     'Moderate',     'Mix of equity + debt'],
+                  ['aggressive',   'Aggressive',   'Mostly equity, high growth'],
+                ] as const).map(([key, label, sub]) => (
                   <button key={key} onClick={() => { setRisk(key); setGenerated(false) }}
                     style={{ flex:1, padding:'12px 10px', borderRadius:5, border:`1.5px solid ${risk===key?C.fg:C.border}`, background:risk===key?C.wl:C.card, cursor:'pointer', fontFamily:'inherit', textAlign:'left' as const }}>
-                    <div style={{ fontSize:18, marginBottom:5 }}>{icon}</div>
                     <div style={{ fontSize:13, fontWeight:600, color:risk===key?C.fg:C.text, marginBottom:2 }}>{label}</div>
                     <div style={{ fontSize:11, color:C.muted }}>{sub}</div>
                   </button>
@@ -223,7 +221,7 @@ export default function InvestPage() {
                         {sel && <span style={{ fontSize:9, color:C.wheat, fontWeight:700 }}>✓</span>}
                       </div>
                       <div>
-                        <p style={{ fontSize:12, fontWeight:sel?600:400, color:sel?C.fg:C.text, margin:0 }}>{g.icon} {g.label}</p>
+                        <p style={{ fontSize:12, fontWeight:sel?600:400, color:sel?C.fg:C.text, margin:0 }}>{g.label}</p>
                         <p style={{ fontSize:10, color:C.muted, margin:0 }}>{g.sub}</p>
                       </div>
                     </button>
@@ -236,7 +234,7 @@ export default function InvestPage() {
           {/* Generate button */}
           <button onClick={generate} disabled={goals.size===0||!freeToSpend}
             style={{ width:'100%', padding:'12px', background:goals.size>0&&freeToSpend?C.fg:'#C8D4C8', color:goals.size>0&&freeToSpend?C.wheat:'#8A9A8A', border:'none', borderRadius:5, fontSize:13, fontWeight:600, cursor:goals.size>0&&freeToSpend?'pointer':'not-allowed', fontFamily:'inherit', marginBottom:16 }}>
-            {generated ? '↺ Regenerate plan with new settings' : '✨ Generate my investment plan →'}
+            {generated ? '↺ Regenerate plan with new settings' : 'Generate my investment plan →'}
           </button>
 
           {/* Step 3: Plan table */}
@@ -266,7 +264,7 @@ export default function InvestPage() {
                   return (
                     <div key={item.id} style={{ display:'grid', gridTemplateColumns:'1fr 110px 130px 100px', gap:8, padding:'12px 14px', borderBottom: i<plan.length-1 ? `1px solid #FAF7F2` : 'none', alignItems:'center' }}>
                       <div>
-                        <p style={{ fontSize:13, fontWeight:500, color:C.text, margin:'0 0 3px' }}>{item.icon} {item.label}</p>
+                        <p style={{ fontSize:13, fontWeight:500, color:C.text, margin:'0 0 3px' }}>{item.label}</p>
                         <div style={{ display:'flex', gap:6, alignItems:'center', marginBottom:4 }}>
                           <span style={{ fontSize:10, padding:'1px 7px', borderRadius:3, background:item.catBg, color:item.catColor, fontWeight:600, border:`1px solid ${item.catBg}` }}>{item.category}</span>
                           <span style={{ fontSize:10, color:C.muted }}>→ {item.goal}</span>
@@ -298,19 +296,19 @@ export default function InvestPage() {
               {/* Over-budget warning */}
               {totalUser > freeToSpend && (
                 <div style={{ background:'#FBF0F0', border:`1px solid #F0CECE`, borderRadius:5, padding:'9px 14px', fontSize:12.5, color:C.danger, marginBottom:12 }}>
-                  ⚠ You've allocated {fmt(totalUser - freeToSpend)} more than your free-to-invest amount. Reduce some amounts.
+                  You've allocated {fmt(totalUser - freeToSpend)} more than your free-to-invest amount. Reduce some amounts.
                 </div>
               )}
 
               {/* Buffer callout */}
           <div style={{ background:'#FAFAF8', border:`1px solid ${C.border}`, borderRadius:5, padding:'9px 14px', fontSize:12, color:C.muted, marginBottom:12, lineHeight:1.65 }}>
-            💡 <strong style={{ color:C.text }}>Why not all of your free money?</strong> ArthVo allocates 70% of your truly free amount (` + fmt(Math.round(freeToSpend * 0.3)) + ` kept as buffer for fuel, medical, surprise expenses and daily life).
+            <strong style={{ color:C.text }}>Why not all of your free money?</strong> ArthVo allocates 70% of your truly free amount (` + fmt(Math.round(freeToSpend * 0.3)) + ` kept as buffer for fuel, medical, surprise expenses and daily life).
           </div>
 
           {/* Deviation insight */}
               {deviations.length > 0 && (
                 <div style={{ background:C.wl, border:`1px solid ${C.wm}`, borderRadius:5, padding:'10px 14px', fontSize:12.5, color:C.fg, lineHeight:1.65, marginBottom:12 }}>
-                  💡 You've changed {deviations.length} item{deviations.length>1?'s':''} from the recommendation.{' '}
+                  You've changed {deviations.length} item{deviations.length>1?'s':''} from the recommendation.{' '}
                   {deviations.filter(d=>d.userAmount<d.recommended).map(d=>`${d.label} is underfunded by ${fmt(d.recommended-d.userAmount)}.`).join(' ')}
                 </div>
               )}

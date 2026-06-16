@@ -47,10 +47,10 @@ export default function DecidePage() {
   const verdict = !freeToSpend ? 'unknown' : leftAfter < 0 ? 'no' : pctOfFree <= 10 ? 'yes' : pctOfFree <= 25 ? 'maybe' : 'no'
 
   const verdictConfig = {
-    yes:     { emoji:'✅', title:'Yes, go ahead', color:C.fg, bg:C.wl, border:C.wm, sub:`${fmt(priceNum)} is ${pctOfFree.toFixed(1)}% of your monthly budget. Comfortable.` },
-    maybe:   { emoji:'🤔', title:'Possible, but think twice', color:'#7A5A1A', bg:'#FFFAEE', border:'#F0D898', sub:`This is ${pctOfFree.toFixed(1)}% of your free budget. Not dangerous, but not small.` },
-    no:      { emoji:'❌', title:'Not the best time', color:C.danger, bg:'#FBF0F0', border:'#F0CECE', sub:`This would leave you with ${fmt(Math.max(0,leftAfter))} this month. Too tight.` },
-    unknown: { emoji:'📊', title:'Add your profile first', color:C.fg, bg:C.wl, border:C.wm, sub:'Complete My Profile to get a personalised verdict.' },
+    yes:     { title:'Yes, go ahead', color:C.fg, bg:C.wl, border:C.wm, sub:`${fmt(priceNum)} is ${pctOfFree.toFixed(1)}% of your monthly budget. Comfortable.` },
+    maybe:   { title:'Possible, but think twice', color:'#7A5A1A', bg:'#FFFAEE', border:'#F0D898', sub:`This is ${pctOfFree.toFixed(1)}% of your free budget. Not dangerous, but not small.` },
+    no:      { title:'Not the best time', color:C.danger, bg:'#FBF0F0', border:'#F0CECE', sub:`This would leave you with ${fmt(Math.max(0,leftAfter))} this month. Too tight.` },
+    unknown: { title:'Add your profile first', color:C.fg, bg:C.wl, border:C.wm, sub:'Complete My Profile to get a personalised verdict.' },
   }[verdict]
 
   const emiOptions = [
@@ -117,7 +117,6 @@ export default function DecidePage() {
         <div>
           {/* Verdict card */}
           <div style={{ background:verdictConfig.bg, border:`1.5px solid ${verdictConfig.border}`, borderRadius:6, padding:'18px 20px', textAlign:'center', marginBottom:16 }}>
-            <div style={{ fontSize:36, marginBottom:8 }}>{verdictConfig.emoji}</div>
             <div style={{ fontSize:20, fontWeight:700, color:verdictConfig.color, letterSpacing:'-0.02em', marginBottom:6 }}>{verdictConfig.title}</div>
             <div style={{ fontSize:13, color:C.muted, lineHeight:1.65 }}>{verdictConfig.sub}</div>
             {freeToSpend > 0 && (
@@ -171,7 +170,7 @@ export default function DecidePage() {
                 )
               })}
               <div style={{ background:C.fg, borderRadius:5, padding:'12px 16px', marginBottom:14, fontSize:13, color:'rgba(230,207,167,0.85)', lineHeight:1.7 }}>
-                💡 <span style={{ color:C.wheat, fontWeight:600 }}>Bottom line:</span>{' '}
+                <span style={{ color:C.wheat, fontWeight:600 }}>Bottom line:</span>{' '}
                 {verdict==='yes' ? `Buy it. Pay in full — you save ${fmt(calcEMI(priceNum,3,0)*3-priceNum+149)} vs No-cost EMI. Enjoy guilt-free.` :
                  verdict==='maybe' ? 'Consider waiting 2 weeks to see how your expenses pan out. If you must buy, pay in full.' :
                  'Not the right time. Wait until next month when expenses ease.'}

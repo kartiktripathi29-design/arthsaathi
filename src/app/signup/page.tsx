@@ -104,7 +104,7 @@ export default function SignupPage() {
       provider: 'email',
       createdAt: new Date().toISOString(),
     })
-    toast.success('Account created! Welcome to ArthVo 🎉')
+    toast.success('Account created! Welcome to ArthVo')
     router.push('/dashboard')
   }
 
@@ -166,7 +166,7 @@ export default function SignupPage() {
     <Shell>
       {!CONFIGURED && (
         <div style={{ background: T.caution.fill, border: `1px solid ${T.caution.border}`, borderRadius: 10, padding: '10px 14px', marginBottom: 18, fontSize: 12, color: T.caution.text, lineHeight: 1.5 }}>
-          ⚠️ Auth isn’t configured here — this is a local placeholder signup (no real OTP).
+          Auth isn’t configured here — this is a local placeholder signup (no real OTP).
         </div>
       )}
 

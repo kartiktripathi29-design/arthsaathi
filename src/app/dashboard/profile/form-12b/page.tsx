@@ -144,10 +144,10 @@ function Form12BContent() {
 
         {/* Page header — hidden in print */}
         <div className="page-header" style={{ maxWidth:800, margin:'0 auto 16px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <h2 style={{ margin:0, fontSize:15, color:C.fg }}>📄 Form 12B · {employment.employerName}</h2>
+          <h2 style={{ margin:0, fontSize:15, color:C.fg }}>Form 12B · {employment.employerName}</h2>
           <div style={{ display:'flex', gap:8 }}>
             <button onClick={() => router.push('/dashboard/profile?tab=salary')} style={{ padding:'8px 14px', borderRadius:5, border:`1px solid ${C.border}`, background:'#fff', fontSize:12, fontFamily:'inherit', cursor:'pointer', color:C.fg }}>← Back to Profile</button>
-            <button onClick={() => window.print()} style={{ padding:'8px 14px', borderRadius:5, border:`1px solid ${C.fg}`, background:C.fg, color:C.wheat, fontSize:12, fontFamily:'inherit', cursor:'pointer', fontWeight:600 }}>🖨️ Print Form 12B</button>
+            <button onClick={() => window.print()} style={{ padding:'8px 14px', borderRadius:5, border:`1px solid ${C.fg}`, background:C.fg, color:C.wheat, fontSize:12, fontFamily:'inherit', cursor:'pointer', fontWeight:600 }}>Print Form 12B</button>
           </div>
         </div>
 

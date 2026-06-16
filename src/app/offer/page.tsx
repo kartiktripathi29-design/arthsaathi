@@ -132,14 +132,13 @@ export default function OfferParserPage() {
                   border: `2px dashed ${dragOver ? T.teal : T.hairline}`, borderRadius: 14,
                   background: dragOver ? T.tint : T.card, padding: '48px 24px', transition: 'all .15s',
                 }}>
-                <div style={{ fontSize: 34, marginBottom: 10 }}>📄</div>
                 <div style={{ fontSize: 15, fontWeight: 600, color: T.ink, marginBottom: 4 }}>Drop your offer letter here, or click to browse</div>
                 <div style={{ fontSize: 12.5, color: T.muted }}>PDF, Word (.docx) or image · password-protected PDFs supported</div>
                 <input type="file" accept=".pdf,.doc,.docx,image/*" style={{ display: 'none' }}
                   onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = '' }} />
               </label>
               {status === 'error' && (
-                <p style={{ marginTop: 14, fontSize: 13, color: '#DC2626', textAlign: 'center' }}>⚠ {error}</p>
+                <p style={{ marginTop: 14, fontSize: 13, color: '#DC2626', textAlign: 'center' }}>{error}</p>
               )}
               <p style={{ marginTop: 18, fontSize: 11.5, color: T.faint, textAlign: 'center', lineHeight: 1.6 }}>
                 Your file is parsed on the fly and not stored. Figures are extracted as written — we never invent numbers.
@@ -149,7 +148,7 @@ export default function OfferParserPage() {
 
           {status === 'parsing' && (
             <div style={{ textAlign: 'center', padding: '56px 0', color: T.muted, fontSize: 14 }}>
-              ⏳ Reading your offer letter…
+              Reading your offer letter…
             </div>
           )}
 

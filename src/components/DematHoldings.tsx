@@ -79,8 +79,8 @@ function TaxBadge({ transactions }: { transactions: Transaction[] }) {
   if (!ltcg && !stcg) return <span style={{ fontSize: 10, color: '#7A8A7E', background: '#F5ECD8', padding: '2px 6px', borderRadius: 3 }}>No tx data</span>;
   return (
     <span style={{ display: 'flex', gap: 4 }}>
-      {ltcg && <span style={{ fontSize: 10, fontWeight: 600, color: '#2A7A4A', background: '#EEF2EE', padding: '2px 6px', borderRadius: 3, border: '1px solid #C8D8C8' }}>🟢 LTCG</span>}
-      {stcg && <span style={{ fontSize: 10, fontWeight: 600, color: '#B94040', background: '#FBF0F0', padding: '2px 6px', borderRadius: 3, border: '1px solid #F0CECE' }}>🔴 STCG</span>}
+      {ltcg && <span style={{ fontSize: 10, fontWeight: 600, color: '#2A7A4A', background: '#EEF2EE', padding: '2px 6px', borderRadius: 3, border: '1px solid #C8D8C8' }}>LTCG</span>}
+      {stcg && <span style={{ fontSize: 10, fontWeight: 600, color: '#B94040', background: '#FBF0F0', padding: '2px 6px', borderRadius: 3, border: '1px solid #F0CECE' }}>STCG</span>}
     </span>
   );
 }
@@ -104,15 +104,15 @@ function buildBreakdown(data: any): BreakdownRow[] {
 
   if (allEquities.length > 0) {
     const totalVal = allEquities.reduce((s, e) => s + (e.value || 0), 0);
-    rows.push({ icon: '📊', label: 'Equities', count: allEquities.length, value: totalVal, holdings: allEquities });
+    rows.push({ icon: '', label: 'Equities', count: allEquities.length, value: totalVal, holdings: allEquities });
   }
   if (allDematMFs.length > 0) {
     const totalVal = allDematMFs.reduce((s, e) => s + (e.value || 0), 0);
-    rows.push({ icon: '📈', label: 'Demat Mutual Funds', count: allDematMFs.length, value: totalVal, holdings: allDematMFs });
+    rows.push({ icon: '', label: 'Demat Mutual Funds', count: allDematMFs.length, value: totalVal, holdings: allDematMFs });
   }
   if (allGSecs.length > 0) {
     const totalVal = allGSecs.reduce((s, e) => s + (e.value || 0), 0);
-    rows.push({ icon: '🏛️', label: 'Govt Securities / SGB', count: allGSecs.length, value: totalVal, holdings: allGSecs });
+    rows.push({ icon: '', label: 'Govt Securities / SGB', count: allGSecs.length, value: totalVal, holdings: allGSecs });
   }
 
   // Non-demat MFs from mutual_funds array
@@ -121,14 +121,14 @@ function buildBreakdown(data: any): BreakdownRow[] {
     (folio.schemes || []).forEach((scheme: any) => allMFs.push(scheme));
   });
   if (allMFs.length > 0 && s.mutual_funds?.total_value > 0) {
-    rows.push({ icon: '💼', label: 'Mutual Funds (Non-Demat)', count: allMFs.length, value: s.mutual_funds.total_value, holdings: allMFs });
+    rows.push({ icon: '', label: 'Mutual Funds (Non-Demat)', count: allMFs.length, value: s.mutual_funds.total_value, holdings: allMFs });
   }
 
   if (s.nps?.total_value > 0) {
-    rows.push({ icon: '🏦', label: 'NPS', count: s.nps.count || 1, value: s.nps.total_value, holdings: [] });
+    rows.push({ icon: '', label: 'NPS', count: s.nps.count || 1, value: s.nps.total_value, holdings: [] });
   }
   if (s.insurance?.total_value > 0) {
-    rows.push({ icon: '🛡️', label: 'Life Insurance', count: s.insurance.count || 0, value: s.insurance.total_value, holdings: [] });
+    rows.push({ icon: '', label: 'Life Insurance', count: s.insurance.count || 0, value: s.insurance.total_value, holdings: [] });
   }
 
   return rows;
@@ -219,7 +219,6 @@ function BreakdownSection({ row, C }: { row: BreakdownRow; C: any }) {
         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 16px', borderBottom: `1px solid #FAF7F2`, fontSize: 12.5, cursor: row.holdings.length > 0 ? 'pointer' : 'default', background: open ? '#F5ECD8' : '#fff', transition: 'background 0.15s' }}
       >
         <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span>{row.icon}</span>
           <span style={{ color: C.text, fontWeight: open ? 600 : 400 }}>{row.label}</span>
           {row.count > 0 && <span style={{ fontSize: 10.5, color: C.muted }}>({row.count})</span>}
           {row.holdings.length > 0 && <span style={{ fontSize: 10, color: C.muted }}>{open ? '▲' : '▼'}</span>}
@@ -238,7 +237,7 @@ function BreakdownSection({ row, C }: { row: BreakdownRow; C: any }) {
               style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 16px 8px 32px', borderBottom: `1px solid #FAF7F2`, fontSize: 12, cursor: 'pointer', background: isExpanded ? '#FFF8EE' : '#FDFAF6' }}
             >
               <span style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: 10 }}>{isExpanded ? '▼' : '▶'}</span>
+                <span style={{ fontSize: 10 }}>{isExpanded ? '▼' : '▸'}</span>
                 <span style={{ color: C.text, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, maxWidth: 240 }}>{holding.name}</span>
                 <TaxBadge transactions={holding.transactions || []} />
               </span>
@@ -330,7 +329,7 @@ export default function DematHoldings({ existingHoldings, onSuccess }: DematHold
     <div style={{ marginBottom: 14 }}>
       {/* Main card */}
       <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: holdings?.breakdown?.length ? '8px 8px 0 0' : 8, padding: 16, display: 'flex', gap: 14, alignItems: 'center' }}>
-        <div style={{ width: 42, height: 42, borderRadius: '50%', background: holdings ? '#EEF2EE' : C.wl, border: `2px solid ${holdings ? C.fg : C.wm}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>🏛️</div>
+        <div style={{ width: 42, height: 42, borderRadius: '50%', background: holdings ? '#EEF2EE' : C.wl, border: `2px solid ${holdings ? C.fg : C.wm}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}></div>
         <div style={{ flex: 1 }}>
           {holdings ? (
             <>
@@ -342,7 +341,7 @@ export default function DematHoldings({ existingHoldings, onSuccess }: DematHold
             <>
               <p style={{ fontSize: 13, fontWeight: 600, color: C.text, margin: '0 0 3px' }}>Fetch Demat &amp; MF Holdings</p>
               <p style={{ fontSize: 11, color: C.muted, margin: '0 0 2px', lineHeight: 1.55 }}>CDSL · NSDL · CAMS · KFintech — all in one fetch</p>
-              <p style={{ fontSize: 10.5, color: C.muted, margin: 0 }}>💡 OTP sent to your CDSL-registered mobile</p>
+              <p style={{ fontSize: 10.5, color: C.muted, margin: 0 }}>OTP sent to your CDSL-registered mobile</p>
             </>
           )}
           {errorMsg && <p style={{ fontSize: 11, color: '#B94040', margin: '4px 0 0', background: '#FBF0F0', padding: '4px 8px', borderRadius: 4 }}>{errorMsg}</p>}

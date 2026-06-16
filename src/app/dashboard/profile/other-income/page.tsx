@@ -135,12 +135,12 @@ export default function OtherIncomePage() {
   }, [])
 
   const types = [
-    { key: 'freelance', icon: '💼', label: 'Freelance / Consulting', desc: 'Consulting or side work — declare 50% as profit (simpler) or actual income minus expenses.' },
-    { key: 'equity', icon: '📈', label: 'Stocks & mutual funds', desc: 'Shares or funds you bought and later sold. Taxed as capital gains.' },
-    { key: 'crypto', icon: '₿', label: 'Crypto', desc: 'Crypto, NFTs and other virtual digital assets. Flat 30% — losses can\'t be offset.' },
-    { key: 'fno', icon: '📊', label: 'Trading (intraday & F&O)', desc: 'Intraday or F&O. Taxed as business income, not capital gains.' },
-    { key: 'interest', icon: '🏦', label: 'Interest & dividends', desc: 'FD interest, savings interest and dividends. Taxed at your slab rate.' },
-    { key: 'other', icon: '➕', label: 'Anything else', desc: 'Rent, royalties, gifts — taxed at your slab rate.' },
+    { key: 'freelance', label: 'Freelance / Consulting', desc: 'Consulting or side work — declare 50% as profit (simpler) or actual income minus expenses.' },
+    { key: 'equity', label: 'Stocks & mutual funds', desc: 'Shares or funds you bought and later sold. Taxed as capital gains.' },
+    { key: 'crypto', label: 'Crypto', desc: 'Crypto, NFTs and other virtual digital assets. Flat 30% — losses can\'t be offset.' },
+    { key: 'fno', label: 'Trading (intraday & F&O)', desc: 'Intraday or F&O. Taxed as business income, not capital gains.' },
+    { key: 'interest', label: 'Interest & dividends', desc: 'FD interest, savings interest and dividends. Taxed at your slab rate.' },
+    { key: 'other', label: 'Anything else', desc: 'Rent, royalties, gifts — taxed at your slab rate.' },
   ]
 
   const getTaxablePreview = (entry: OtherIncomeEntry) => {

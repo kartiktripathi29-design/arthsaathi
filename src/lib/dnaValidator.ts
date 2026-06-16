@@ -154,11 +154,10 @@ export function validateDNA(claimed: DNAType, data: FinancialData): ValidationRe
 
   // Evolved summary
   const typeNames: Record<DNAType, string> = { E:'Free Spirit', B:'Balancer', P:'Protector', O:'Maximiser' }
-  const typeEmojis: Record<DNAType, string> = { E:'🌊', B:'🌿', P:'🏔️', O:'⚡' }
 
   const evolvedSummary = shifted
-    ? `You answered like a ${typeEmojis[claimed]} ${typeNames[claimed]}, but your spending shows ${typeEmojis[evolvedType]} ${typeNames[evolvedType]} patterns. That gap is exactly where ArthVo works.`
-    : `Your spending confirms it — you\'re a ${typeEmojis[claimed]} ${typeNames[claimed]} through and through. Your plan is built around that.`
+    ? `You answered like a ${typeNames[claimed]}, but your spending shows ${typeNames[evolvedType]} patterns. That gap is exactly where ArthVo works.`
+    : `Your spending confirms it — you\'re a ${typeNames[claimed]} through and through. Your plan is built around that.`
 
   return { claimedType: claimed, evolvedType, matchScore, shifted, signals, gaps, positives, evolvedSummary }
 }

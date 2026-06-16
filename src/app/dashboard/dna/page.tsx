@@ -10,98 +10,98 @@ const QUESTIONS = [
   {
     q: "It's the last week of the month. You have ₹8,000 left. What do you do?",
     opts: [
-      { icon:'🎉', text:'Enjoy it — month end plans with friends, a nice dinner. Money is meant to be spent.', type:'E' },
-      { icon:'⚖️', text:'Split it — some for fun, some I move to savings before I can spend it.', type:'B' },
-      { icon:'🏰', text:'Keep it safe. What if something comes up? I don\'t spend until I know I\'m covered.', type:'P' },
-      { icon:'📊', text:'Already accounted for. My SIP went out on the 1st. This ₹8K is just liquidity.', type:'O' },
+      { text:'Enjoy it — month end plans with friends, a nice dinner. Money is meant to be spent.', type:'E' },
+      { text:'Split it — some for fun, some I move to savings before I can spend it.', type:'B' },
+      { text:'Keep it safe. What if something comes up? I don\'t spend until I know I\'m covered.', type:'P' },
+      { text:'Already accounted for. My SIP went out on the 1st. This ₹8K is just liquidity.', type:'O' },
     ]
   },
   {
     q: "A friend just made ₹3L profit from a stock tip. Your honest first reaction?",
     opts: [
-      { icon:'🤩', text:'FOMO immediately. Ask them for the next tip. I want in too.', type:'E' },
-      { icon:'🤔', text:'Happy for them, but wonder if I should be doing more with my money too.', type:'B' },
-      { icon:'😬', text:'Nervous for them honestly. What if it goes wrong next time? I\'d rather be safe.', type:'P' },
-      { icon:'🧠', text:'Curious about their thesis. One stock tip isn\'t a strategy — what\'s their full portfolio?', type:'O' },
+      { text:'FOMO immediately. Ask them for the next tip. I want in too.', type:'E' },
+      { text:'Happy for them, but wonder if I should be doing more with my money too.', type:'B' },
+      { text:'Nervous for them honestly. What if it goes wrong next time? I\'d rather be safe.', type:'P' },
+      { text:'Curious about their thesis. One stock tip isn\'t a strategy — what\'s their full portfolio?', type:'O' },
     ]
   },
   {
     q: "If you had an extra ₹50,000 right now — a bonus, a gift — what would actually happen to it?",
     opts: [
-      { icon:'✈️', text:'Trip. Already planned in my head before the money even lands.', type:'E' },
-      { icon:'🔀', text:'Half for something fun, half toward a goal. I\'d feel guilty doing only one.', type:'B' },
-      { icon:'🏦', text:'FD or savings account. Having a cushion matters more than any purchase.', type:'P' },
-      { icon:'📈', text:'Straight to investments. I\'d research where it fits my portfolio before doing anything else.', type:'O' },
+      { text:'Trip. Already planned in my head before the money even lands.', type:'E' },
+      { text:'Half for something fun, half toward a goal. I\'d feel guilty doing only one.', type:'B' },
+      { text:'FD or savings account. Having a cushion matters more than any purchase.', type:'P' },
+      { text:'Straight to investments. I\'d research where it fits my portfolio before doing anything else.', type:'O' },
     ]
   },
   {
     q: "When you think about money, which of these feels most true for you?",
     opts: [
-      { icon:'🌊', text:'"I work hard and I deserve to enjoy it. The future will figure itself out."', type:'E' },
-      { icon:'🌿', text:'"I want to live well now AND be secure later. I just haven\'t figured out the balance."', type:'B' },
-      { icon:'🏔️', text:'"My family\'s security is everything. I\'ll sacrifice comfort now for peace of mind later."', type:'P' },
-      { icon:'⚡', text:'"Every rupee should be working. Idle money bothers me."', type:'O' },
+      { text:'"I work hard and I deserve to enjoy it. The future will figure itself out."', type:'E' },
+      { text:'"I want to live well now AND be secure later. I just haven\'t figured out the balance."', type:'B' },
+      { text:'"My family\'s security is everything. I\'ll sacrifice comfort now for peace of mind later."', type:'P' },
+      { text:'"Every rupee should be working. Idle money bothers me."', type:'O' },
     ]
   },
   {
     q: "How do you feel about your financial situation right now, honestly?",
     opts: [
-      { icon:'😅', text:'Could be better. I earn well but somehow month end always sneaks up on me.', type:'E' },
-      { icon:'😐', text:'Okay. Not bad, not great. I know I should be doing more but it feels overwhelming.', type:'B' },
-      { icon:'😊', text:'Stable. I don\'t take risks so I don\'t have big gains but I sleep well at night.', type:'P' },
-      { icon:'🎯', text:'On track. I have a plan and I check it regularly. Room to optimise but I\'m intentional.', type:'O' },
+      { text:'Could be better. I earn well but somehow month end always sneaks up on me.', type:'E' },
+      { text:'Okay. Not bad, not great. I know I should be doing more but it feels overwhelming.', type:'B' },
+      { text:'Stable. I don\'t take risks so I don\'t have big gains but I sleep well at night.', type:'P' },
+      { text:'On track. I have a plan and I check it regularly. Room to optimise but I\'m intentional.', type:'O' },
     ]
   },
   {
     q: "Your company offers ESOPs. How do you react?",
     opts: [
-      { icon:'😶', text:'Sounds complicated. I\'ll deal with it when they vest — if they vest.', type:'E' },
-      { icon:'🙋', text:'I want to understand it. I\'ll ask HR or Google it, but I\'m not sure where to start.', type:'B' },
-      { icon:'⚠️', text:'Bit nervous — what if the company doesn\'t do well? I\'d rather have the cash.', type:'P' },
-      { icon:'🔢', text:'I immediately calculate vesting schedule, tax implications and what it adds to my net worth.', type:'O' },
+      { text:'Sounds complicated. I\'ll deal with it when they vest — if they vest.', type:'E' },
+      { text:'I want to understand it. I\'ll ask HR or Google it, but I\'m not sure where to start.', type:'B' },
+      { text:'Bit nervous — what if the company doesn\'t do well? I\'d rather have the cash.', type:'P' },
+      { text:'I immediately calculate vesting schedule, tax implications and what it adds to my net worth.', type:'O' },
     ]
   },
   {
     q: "Someone asks: \"Should I buy a car on a 5-year loan or wait 2 years and buy in cash?\" What do you say?",
     opts: [
-      { icon:'🚗', text:'Buy now. Time you enjoy the car matters. EMIs are manageable if income is steady.', type:'E' },
-      { icon:'🤷', text:'Depends on the EMI vs their monthly income — I\'d want to know more before advising.', type:'B' },
-      { icon:'⏳', text:'Wait. Debt is stress. The peace of buying something you truly own is underrated.', type:'P' },
-      { icon:'🧮', text:'Calculate total interest cost vs opportunity cost of waiting. The math usually says wait.', type:'O' },
+      { text:'Buy now. Time you enjoy the car matters. EMIs are manageable if income is steady.', type:'E' },
+      { text:'Depends on the EMI vs their monthly income — I\'d want to know more before advising.', type:'B' },
+      { text:'Wait. Debt is stress. The peace of buying something you truly own is underrated.', type:'P' },
+      { text:'Calculate total interest cost vs opportunity cost of waiting. The math usually says wait.', type:'O' },
     ]
   },
   {
     q: "What does \"financial success\" look like to you at 45?",
     opts: [
-      { icon:'🌍', text:'I\'ve seen the world, built memories, and still have enough to be comfortable.', type:'E' },
-      { icon:'🏡', text:'Home paid off, kids\' education secured, and a decent corpus growing quietly.', type:'B' },
-      { icon:'🛡️', text:'Zero debt, 2 years of expenses in liquid savings, family fully insured. That\'s enough.', type:'P' },
-      { icon:'🏆', text:'Option to retire. Not that I necessarily will — but the choice should be mine.', type:'O' },
+      { text:'I\'ve seen the world, built memories, and still have enough to be comfortable.', type:'E' },
+      { text:'Home paid off, kids\' education secured, and a decent corpus growing quietly.', type:'B' },
+      { text:'Zero debt, 2 years of expenses in liquid savings, family fully insured. That\'s enough.', type:'P' },
+      { text:'Option to retire. Not that I necessarily will — but the choice should be mine.', type:'O' },
     ]
   },
   {
     q: "Market crashes 30% in a month. Your portfolio is down ₹2L. What do you do?",
     opts: [
-      { icon:'😱', text:'Panic a little. Probably check it obsessively and wonder if I should pull out.', type:'E' },
-      { icon:'😬', text:'Uncomfortable but I stay put. I know I shouldn\'t sell but it doesn\'t feel great.', type:'B' },
-      { icon:'😰', text:'This is why I stay in FDs. I can\'t handle seeing my money disappear even temporarily.', type:'P' },
-      { icon:'🛒', text:'This is a sale. I look at what to buy more of while prices are low.', type:'O' },
+      { text:'Panic a little. Probably check it obsessively and wonder if I should pull out.', type:'E' },
+      { text:'Uncomfortable but I stay put. I know I shouldn\'t sell but it doesn\'t feel great.', type:'B' },
+      { text:'This is why I stay in FDs. I can\'t handle seeing my money disappear even temporarily.', type:'P' },
+      { text:'This is a sale. I look at what to buy more of while prices are low.', type:'O' },
     ]
   },
   {
     q: "Last one. What made you open ArthVo today?",
     opts: [
-      { icon:'😬', text:'Honestly? A little guilt. I know I should be doing more with money and I keep putting it off.', type:'E' },
-      { icon:'🔍', text:'Curiosity. I want to understand where I actually stand — no fluff, just clarity.', type:'B' },
-      { icon:'😟', text:'Some anxiety. A big expense is coming up and I\'m not sure I\'m prepared.', type:'P' },
-      { icon:'🎯', text:'Optimization. I\'m already doing okay — I want to do significantly better.', type:'O' },
+      { text:'Honestly? A little guilt. I know I should be doing more with money and I keep putting it off.', type:'E' },
+      { text:'Curiosity. I want to understand where I actually stand — no fluff, just clarity.', type:'B' },
+      { text:'Some anxiety. A big expense is coming up and I\'m not sure I\'m prepared.', type:'P' },
+      { text:'Optimization. I\'m already doing okay — I want to do significantly better.', type:'O' },
     ]
   },
 ]
 
 const PROFILES: Record<string, any> = {
   E: {
-    emoji:'🌊', name:'The Free Spirit', color:'#2A5A8A',
+    name:'The Free Spirit', color:'#2A5A8A',
     tagline:'You live fully. You earn well. The future is a conversation you keep postponing — and ArthVo gets that.',
     traits:['Experience-first','Generous','Present-focused','Impulse-aware'],
     shadow:'Month-end surprises are your pattern. Not because you can\'t manage — because no one showed you how to automate the boring parts so the fun parts feel guilt-free.',
@@ -111,7 +111,7 @@ const PROFILES: Record<string, any> = {
     nudge:'Your plan will automate everything — so you never have to choose between living today and building tomorrow.',
   },
   B: {
-    emoji:'🌿', name:'The Balancer', color:'#2A7A4A',
+    name:'The Balancer', color:'#2A7A4A',
     tagline:'You want it all — the life today and the security tomorrow. The frustrating part is nobody told you it\'s actually possible.',
     traits:['Balanced instincts','Growth-oriented','Slightly overwhelmed','High potential'],
     shadow:'You\'re doing several things adequately but nothing optimally. A SIP here, an FD there, a bit of FOMO. The result is financial scatter — not disaster, just untapped.',
@@ -121,7 +121,7 @@ const PROFILES: Record<string, any> = {
     nudge:'Your plan will consolidate everything into one clear direction — so you stop second-guessing and start compounding.',
   },
   P: {
-    emoji:'🏔️', name:'The Protector', color:'#8A4A1A',
+    name:'The Protector', color:'#8A4A1A',
     tagline:'Security isn\'t just a financial preference for you — it\'s a value. And that foundation is something most people never build.',
     traits:['Family-first','Risk-averse','Disciplined','Conservative'],
     shadow:'The quiet risk you\'re taking is inflation. Your FDs return 7%. Inflation runs at 6%. Your money is barely growing. Safety without growth is its own kind of risk.',
@@ -131,7 +131,7 @@ const PROFILES: Record<string, any> = {
     nudge:'Your plan will keep you safe AND help your money grow — without asking you to take risks that don\'t feel like you.',
   },
   O: {
-    emoji:'⚡', name:'The Maximiser', color:C.fg,
+    name:'The Maximiser', color:C.fg,
     tagline:'You\'ve already figured out that money is a tool. Now you want the sharpest version of that tool.',
     traits:['Analytically wired','High financial literacy','Systems-thinker','Efficiency-obsessed'],
     shadow:'Your blind spot is over-optimisation paralysis — researching the perfect move so long that good moves don\'t get made. The best plan executed beats the perfect plan delayed.',
@@ -219,8 +219,7 @@ export default function DNAPage() {
         <p style={{ fontSize:17, fontWeight:700, color:C.text, margin:'0 0 20px', lineHeight:1.45, letterSpacing:'-0.01em' }}>{q.q}</p>
         {q.opts.map((opt,i) => (
           <button key={i} onClick={() => answer(opt.type)}
-            style={{ width:'100%', padding:'13px 16px', border:`1.5px solid ${selected===opt.type?C.fg:C.border}`, borderRadius:8, background:selected===opt.type?C.wl:C.card, textAlign:'left', cursor:'pointer', fontFamily:'inherit', fontSize:13.5, color:selected===opt.type?C.fg:C.text, marginBottom:9, transition:'all 0.15s', display:'flex', alignItems:'flex-start', gap:12, lineHeight:1.5 }}>
-            <span style={{ fontSize:18, flexShrink:0 }}>{opt.icon}</span>
+            style={{ width:'100%', padding:'13px 16px', border:`1.5px solid ${selected===opt.type?C.fg:C.border}`, borderRadius:8, background:selected===opt.type?C.wl:C.card, textAlign:'left', cursor:'pointer', fontFamily:'inherit', fontSize:13.5, color:selected===opt.type?C.fg:C.text, marginBottom:9, transition:'all 0.15s', display:'flex', alignItems:'flex-start', lineHeight:1.5 }}>
             <span>{opt.text}</span>
           </button>
         ))}
@@ -230,7 +229,6 @@ export default function DNAPage() {
 
   if (step === 'processing') return (
     <div style={{ fontFamily:'"Sora",-apple-system,sans-serif', maxWidth:600, textAlign:'center', paddingTop:40 }}>
-      <p style={{ fontSize:40, margin:'0 0 16px' }}>🧬</p>
       <h2 style={{ fontSize:18, fontWeight:700, color:C.text, margin:'0 0 6px' }}>Reading your Financial DNA…</h2>
       <p style={{ fontSize:13, color:C.muted, margin:'0 0 24px' }}>Cross-referencing answers with behavioural patterns</p>
       <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8, padding:16, textAlign:'left', maxWidth:400, margin:'0 auto' }}>
@@ -249,7 +247,6 @@ export default function DNAPage() {
         {/* Hero */}
         <div style={{ background:p.color, borderRadius:10, padding:'24px 22px', textAlign:'center', marginBottom:14 }}>
           <p style={{ fontSize:10, color:'rgba(255,255,255,0.4)', letterSpacing:'0.1em', margin:'0 0 10px' }}>YOUR FINANCIAL DNA</p>
-          <div style={{ fontSize:48, margin:'0 0 10px' }}>{p.emoji}</div>
           <p style={{ fontSize:24, fontWeight:800, color:'#fff', margin:'0 0 6px', letterSpacing:'-0.02em' }}>{p.name}</p>
           <p style={{ fontSize:13.5, color:'rgba(255,255,255,0.65)', margin:'0 0 16px', lineHeight:1.65, maxWidth:380, marginLeft:'auto', marginRight:'auto' }}>{p.tagline}</p>
           <div style={{ display:'flex', justifyContent:'center', gap:6, flexWrap:'wrap' as const }}>
@@ -258,7 +255,7 @@ export default function DNAPage() {
             ))}
           </div>
           {p.secondary && p.secondary.name !== p.name && (
-            <p style={{ fontSize:11, color:'rgba(255,255,255,0.35)', margin:'12px 0 0' }}>Secondary trait: {p.secondary.emoji} {p.secondary.name}</p>
+            <p style={{ fontSize:11, color:'rgba(255,255,255,0.35)', margin:'12px 0 0' }}>Secondary trait: {p.secondary.name}</p>
           )}
         </div>
 
@@ -266,12 +263,11 @@ export default function DNAPage() {
         <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8, overflow:'hidden', marginBottom:12 }}>
           <div style={{ padding:'9px 14px', background:C.wl, borderBottom:`1px solid ${C.border}`, fontSize:10, fontWeight:700, color:C.fg, letterSpacing:'0.07em', textTransform:'uppercase' as const }}>What this means for you</div>
           {[
-            { icon:'🪞', text:p.shadow },
-            { icon:'💪', text:p.strength },
-            { icon:'💡', text:p.insight },
+            { text:p.shadow },
+            { text:p.strength },
+            { text:p.insight },
           ].map((r,i,arr) => (
-            <div key={i} style={{ display:'flex', gap:12, alignItems:'flex-start', padding:'12px 14px', borderBottom:i<arr.length-1?`1px solid #FAF7F2`:'none', fontSize:13.5, color:C.text, lineHeight:1.7 }}>
-              <span style={{ fontSize:18, flexShrink:0 }}>{r.icon}</span>
+            <div key={i} style={{ display:'flex', alignItems:'flex-start', padding:'12px 14px', borderBottom:i<arr.length-1?`1px solid #FAF7F2`:'none', fontSize:13.5, color:C.text, lineHeight:1.7 }}>
               <span>{r.text}</span>
             </div>
           ))}

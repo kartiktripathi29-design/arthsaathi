@@ -47,12 +47,12 @@ function Donut({ exp, sav, free, total }: { exp:number; sav:number; free:number;
 }
 
 const OTHER_TYPES = [
-  { key:'dividend', icon:'📈', label:'Dividend Income', sub:'Shares / mutual funds' },
-  { key:'fd', icon:'🏦', label:'FD / Savings Interest', sub:'Bank deposits' },
-  { key:'ltcg', icon:'📊', label:'Capital Gains', sub:'MF, shares, property' },
-  { key:'rental', icon:'🏠', label:'Rental Income', sub:'From property you own' },
-  { key:'freelance', icon:'💻', label:'Freelance / Consulting', sub:'Professional income' },
-  { key:'other', icon:'💼', label:'Other earnings', sub:'Any other taxable income' },
+  { key:'dividend', label:'Dividend Income', sub:'Shares / mutual funds' },
+  { key:'fd', label:'FD / Savings Interest', sub:'Bank deposits' },
+  { key:'ltcg', label:'Capital Gains', sub:'MF, shares, property' },
+  { key:'rental', label:'Rental Income', sub:'From property you own' },
+  { key:'freelance', label:'Freelance / Consulting', sub:'Professional income' },
+  { key:'other', label:'Other earnings', sub:'Any other taxable income' },
 ]
 
 const fileToBase64 = (f:File): Promise<string> => new Promise((res,rej) => { const r=new FileReader(); r.onload=()=>res((r.result as string).split(',')[1]); r.onerror=rej; r.readAsDataURL(f) })
@@ -162,34 +162,34 @@ interface BucketDef {
 
 const REVIEW_BUCKETS: Record<string, BucketDef[]> = {
   income: [
-    { id:'salary', icon:'💰', label:'Salary', megas:['salary'], descMatch:['SALARY','SAL CR','SAL/','PAYROLL','STIPEND'] },
-    { id:'bonus', icon:'🎁', label:'Bonus', megas:[], brandMatch:['Bonus/Incentive'], descMatch:['BONUS','BONU','PERF BONUS','INCENTIVE','AWARD','DIWALI BONUS','PROJECT BONUS','JOINING BONUS','ANNUAL BONUS'] },
-    { id:'freelance', icon:'💼', label:'Freelance / other income', megas:[], brandMatch:['Freelance Income'], descMatch:['FREELANCE','CONSULTING FEE','PROFESSIONAL FEE','CONTRACT PAYMENT'] },
-    { id:'self_transfer', icon:'🔄', label:'Self-transfers (not income)', megas:[], descMatch:['SELF TRANSFER','SELF TRF','OWN A/C','OWN ACCOUNT'] },
-    { id:'transfers', icon:'👤', label:'Person transfers', megas:['transfer'] },
-    { id:'dividends', icon:'💸', label:'Dividend / interest', megas:['interest','cashback'], descMatch:['INTEREST','INT.PD','INT CR','INT.COLL','DIVIDEND','DIV CR','FD INTEREST','CASHBACK','CASH BACK','REFUND'] },
+    { id:'salary', icon:'', label:'Salary', megas:['salary'], descMatch:['SALARY','SAL CR','SAL/','PAYROLL','STIPEND'] },
+    { id:'bonus', icon:'', label:'Bonus', megas:[], brandMatch:['Bonus/Incentive'], descMatch:['BONUS','BONU','PERF BONUS','INCENTIVE','AWARD','DIWALI BONUS','PROJECT BONUS','JOINING BONUS','ANNUAL BONUS'] },
+    { id:'freelance', icon:'', label:'Freelance / other income', megas:[], brandMatch:['Freelance Income'], descMatch:['FREELANCE','CONSULTING FEE','PROFESSIONAL FEE','CONTRACT PAYMENT'] },
+    { id:'self_transfer', icon:'', label:'Self-transfers (not income)', megas:[], descMatch:['SELF TRANSFER','SELF TRF','OWN A/C','OWN ACCOUNT'] },
+    { id:'transfers', icon:'', label:'Person transfers', megas:['transfer'] },
+    { id:'dividends', icon:'', label:'Dividend / interest', megas:['interest','cashback'], descMatch:['INTEREST','INT.PD','INT CR','INT.COLL','DIVIDEND','DIV CR','FD INTEREST','CASHBACK','CASH BACK','REFUND'] },
   ],
   expenses: [
-    { id:'rent', icon:'🏠', label:'House rent', megas:[], descMatch:['RENT PAYMENT','HOUSE RENT'] },
-    { id:'emi', icon:'🏦', label:'EMIs / loans', megas:[], descMatch:['EMI-','EMI ','HOME LOAN','CAR LOAN','PERSONAL LOAN','EDUCATION LOAN','GOLD LOAN','CONSUMER DURABLE','LAPTOP LOAN','VEHICLE LOAN','BAJAJ FINANCE','BAJAJ FINSERV','BAJAJFIN','HDFC LTD','HDFCHL','HDFCCL','HDFCPL','HDFCGL','HDFCDL','HDFCLL','LOAN REPAY'] },
-    { id:'insurance', icon:'🛡', label:'Insurance', megas:['insurance'], descMatch:['LIC PREMIUM','LIC-','LIC ','NACH-LIC','NACH/LIC','STAR HEALTH','NACH-STAR','NACH/STAR','INSURANCE','MEDICLAIM','ICICI LOMBARD','HDFC ERGO','PREMIUM-POL','NIVA BUPA','CARE HEALTH','MAX LIFE','HDFC LIFE','SBI LIFE','TATA AIA','GO DIGIT','ACKO'] },
-    { id:'cc_payment', icon:'💳', label:'Credit card payments', megas:['cc_payment'], descMatch:['CC AUTOPAY','CC PAYMENT','CREDIT CARD','CRED MINT','CRED PAY','CRED CLUB','AMEX CC','SIMPLY SAVE CC','REGALIA CC'] },
-    { id:'fuel', icon:'⛽', label:'Fuel / transport', megas:['transport'] },
-    { id:'utilities', icon:'⚡', label:'Utilities', megas:['utilities'], descMatch:['ELECTRICITY','BESCOM','BWSSB','WATER BILL','BROADBAND','AIRTEL','JIO','RECHARGE','GAS CYLINDER','LPG'] },
-    { id:'food', icon:'🍽', label:'Food / dining', megas:['food'] },
-    { id:'shopping', icon:'🛍', label:'Shopping', megas:['shopping'] },
-    { id:'healthcare', icon:'💊', label:'Healthcare', megas:['healthcare'] },
-    { id:'entertainment', icon:'🎬', label:'Entertainment', megas:['entertainment'] },
-    { id:'home_services', icon:'🏠', label:'Home services', megas:[], descMatch:['URBAN COMPANY','URBAN CLAP','URBANCLAP','HOME CLEANING','PLUMBER','ELECTRICIAN'] },
-    { id:'tax', icon:'📋', label:'Tax payments', megas:[], descMatch:['ADVANCE TAX','INCOME TAX','TAX PAYMENT','TDS','CHALLAN','NSDL/ADTAX'] },
-    { id:'misc', icon:'📦', label:'Miscellaneous', megas:['misc'] },
+    { id:'rent', icon:'', label:'House rent', megas:[], descMatch:['RENT PAYMENT','HOUSE RENT'] },
+    { id:'emi', icon:'', label:'EMIs / loans', megas:[], descMatch:['EMI-','EMI ','HOME LOAN','CAR LOAN','PERSONAL LOAN','EDUCATION LOAN','GOLD LOAN','CONSUMER DURABLE','LAPTOP LOAN','VEHICLE LOAN','BAJAJ FINANCE','BAJAJ FINSERV','BAJAJFIN','HDFC LTD','HDFCHL','HDFCCL','HDFCPL','HDFCGL','HDFCDL','HDFCLL','LOAN REPAY'] },
+    { id:'insurance', icon:'', label:'Insurance', megas:['insurance'], descMatch:['LIC PREMIUM','LIC-','LIC ','NACH-LIC','NACH/LIC','STAR HEALTH','NACH-STAR','NACH/STAR','INSURANCE','MEDICLAIM','ICICI LOMBARD','HDFC ERGO','PREMIUM-POL','NIVA BUPA','CARE HEALTH','MAX LIFE','HDFC LIFE','SBI LIFE','TATA AIA','GO DIGIT','ACKO'] },
+    { id:'cc_payment', icon:'', label:'Credit card payments', megas:['cc_payment'], descMatch:['CC AUTOPAY','CC PAYMENT','CREDIT CARD','CRED MINT','CRED PAY','CRED CLUB','AMEX CC','SIMPLY SAVE CC','REGALIA CC'] },
+    { id:'fuel', icon:'', label:'Fuel / transport', megas:['transport'] },
+    { id:'utilities', icon:'', label:'Utilities', megas:['utilities'], descMatch:['ELECTRICITY','BESCOM','BWSSB','WATER BILL','BROADBAND','AIRTEL','JIO','RECHARGE','GAS CYLINDER','LPG'] },
+    { id:'food', icon:'', label:'Food / dining', megas:['food'] },
+    { id:'shopping', icon:'', label:'Shopping', megas:['shopping'] },
+    { id:'healthcare', icon:'', label:'Healthcare', megas:['healthcare'] },
+    { id:'entertainment', icon:'', label:'Entertainment', megas:['entertainment'] },
+    { id:'home_services', icon:'', label:'Home services', megas:[], descMatch:['URBAN COMPANY','URBAN CLAP','URBANCLAP','HOME CLEANING','PLUMBER','ELECTRICIAN'] },
+    { id:'tax', icon:'', label:'Tax payments', megas:[], descMatch:['ADVANCE TAX','INCOME TAX','TAX PAYMENT','TDS','CHALLAN','NSDL/ADTAX'] },
+    { id:'misc', icon:'', label:'Miscellaneous', megas:['misc'] },
   ],
   savings: [
-    { id:'sip', icon:'📈', label:'SIPs (mutual fund)', megas:[], descMatch:['MUTUAL FUND SIP','MUTUAL FUND','SIP-','SIP ','NACH/AXIS','NACH-AXIS','NACH/HDFC','NACH-HDFC','NACH/PPFAS','NACH-PPFAS','NACH/SBI MF','NACH-SBI MF','NACH/NIPPON','NACH-NIPPON','NACH/DSP','NACH-DSP','NACH/MIRAE','NACH-MIRAE','NACH/QUANT','NACH-QUANT','NACH/CANARA','NACH-CANARA','NACH-MUTUAL','BLUECHIP','MID CAP','PARAG PARIKH','FLEXI CAP','AXIS BLUECHIP','HDFC MID CAP'] },
-    { id:'stocks', icon:'📊', label:'Stock purchases', megas:[], descMatch:['ZERODHA','STOCK PURCHASE','GROWW','ANGELONE','ANGEL ONE','UPSTOX','DHAN ','KITE ','5PAISA'] },
-    { id:'elss', icon:'🛡', label:'ELSS / 80C', megas:['investments_elss'], descMatch:['ELSS','TAX SAVING','TAX SAVER'] },
-    { id:'ppf_nps', icon:'🏛', label:'PPF / NPS', megas:[], descMatch:['PPF','PPF DEPOSIT','NPS CONTRIBUTION','NPS TIER','NPS-','NATIONAL PENSION','PUBLIC PROVIDENT','NACH-PPF','NACH-NPS','NACH/PPF','NACH/NPS'] },
-    { id:'fd_rd', icon:'🏛', label:'FD / RD', megas:[], descMatch:['FD BOOKING','FIXED DEPOSIT','RECURRING DEPOSIT','RD INST','FD OPENING'] },
+    { id:'sip', icon:'', label:'SIPs (mutual fund)', megas:[], descMatch:['MUTUAL FUND SIP','MUTUAL FUND','SIP-','SIP ','NACH/AXIS','NACH-AXIS','NACH/HDFC','NACH-HDFC','NACH/PPFAS','NACH-PPFAS','NACH/SBI MF','NACH-SBI MF','NACH/NIPPON','NACH-NIPPON','NACH/DSP','NACH-DSP','NACH/MIRAE','NACH-MIRAE','NACH/QUANT','NACH-QUANT','NACH/CANARA','NACH-CANARA','NACH-MUTUAL','BLUECHIP','MID CAP','PARAG PARIKH','FLEXI CAP','AXIS BLUECHIP','HDFC MID CAP'] },
+    { id:'stocks', icon:'', label:'Stock purchases', megas:[], descMatch:['ZERODHA','STOCK PURCHASE','GROWW','ANGELONE','ANGEL ONE','UPSTOX','DHAN ','KITE ','5PAISA'] },
+    { id:'elss', icon:'', label:'ELSS / 80C', megas:['investments_elss'], descMatch:['ELSS','TAX SAVING','TAX SAVER'] },
+    { id:'ppf_nps', icon:'', label:'PPF / NPS', megas:[], descMatch:['PPF','PPF DEPOSIT','NPS CONTRIBUTION','NPS TIER','NPS-','NATIONAL PENSION','PUBLIC PROVIDENT','NACH-PPF','NACH-NPS','NACH/PPF','NACH/NPS'] },
+    { id:'fd_rd', icon:'', label:'FD / RD', megas:[], descMatch:['FD BOOKING','FIXED DEPOSIT','RECURRING DEPOSIT','RD INST','FD OPENING'] },
   ],
 }
 
@@ -850,29 +850,29 @@ function ProfileContent() {
   const [otherVals, setOtherVals] = useState<Record<string,number>>({})
 
   const [expenses, setExpenses] = useState([
-    { id:uid(), label:'Rent / Home loan EMI', amount:0, icon:'🏠' },
-    { id:uid(), label:'Car / Vehicle EMI', amount:0, icon:'🚗' },
-    { id:uid(), label:'Credit card bill', amount:0, icon:'💳' },
-    { id:uid(), label:'Groceries', amount:0, icon:'🛒' },
-    { id:uid(), label:'Electricity / Gas', amount:0, icon:'⚡' },
-    { id:uid(), label:'Internet + Phone', amount:0, icon:'📱' },
-    { id:uid(), label:'Life Insurance', amount:0, icon:'🛡️' },
-    { id:uid(), label:'Health Insurance', amount:0, icon:'🏥' },
+    { id:uid(), label:'Rent / Home loan EMI', amount:0, icon:'' },
+    { id:uid(), label:'Car / Vehicle EMI', amount:0, icon:'' },
+    { id:uid(), label:'Credit card bill', amount:0, icon:'' },
+    { id:uid(), label:'Groceries', amount:0, icon:'' },
+    { id:uid(), label:'Electricity / Gas', amount:0, icon:'' },
+    { id:uid(), label:'Internet + Phone', amount:0, icon:'' },
+    { id:uid(), label:'Life Insurance', amount:0, icon:'' },
+    { id:uid(), label:'Health Insurance', amount:0, icon:'' },
   ])
   const [variable, setVariable] = useState([
-    { id:uid(), label:'Fuel / Transport', amount:0, icon:'🚗' },
-    { id:uid(), label:'Dining out / Takeaway', amount:0, icon:'🍽️' },
-    { id:uid(), label:'Shopping / Clothing', amount:0, icon:'🛍️' },
-    { id:uid(), label:'Medicine / Healthcare', amount:0, icon:'💊' },
-    { id:uid(), label:'Entertainment / OTT', amount:0, icon:'🎬' },
-    { id:uid(), label:'Travel (monthly avg)', amount:0, icon:'✈️' },
-    { id:uid(), label:'Other variable spend', amount:0, icon:'📦' },
+    { id:uid(), label:'Fuel / Transport', amount:0, icon:'' },
+    { id:uid(), label:'Dining out / Takeaway', amount:0, icon:'' },
+    { id:uid(), label:'Shopping / Clothing', amount:0, icon:'' },
+    { id:uid(), label:'Medicine / Healthcare', amount:0, icon:'' },
+    { id:uid(), label:'Entertainment / OTT', amount:0, icon:'' },
+    { id:uid(), label:'Travel (monthly avg)', amount:0, icon:'' },
+    { id:uid(), label:'Other variable spend', amount:0, icon:'' },
   ])
   const [savings, setSavings] = useState([
-    { id:uid(), label:'SIP / Mutual Funds (regular)', amount:0, icon:'📈' },
-    { id:uid(), label:'ELSS — tax saving (80C)', amount:0, icon:'🛡️' },
-    { id:uid(), label:'Emergency Fund', amount:0, icon:'🆘' },
-    { id:uid(), label:'RD / FD', amount:0, icon:'🏦' },
+    { id:uid(), label:'SIP / Mutual Funds (regular)', amount:0, icon:'' },
+    { id:uid(), label:'ELSS — tax saving (80C)', amount:0, icon:'' },
+    { id:uid(), label:'Emergency Fund', amount:0, icon:'' },
+    { id:uid(), label:'RD / FD', amount:0, icon:'' },
   ])
 
   // ── Load from localStorage ──
@@ -991,7 +991,7 @@ function ProfileContent() {
       if (!salaryResult.hasGap) {
         toast.success(`Salary auto-detected: ${fmt(monthlyNet)}/mo from ${employerName}`, { duration: 4000 })
       } else {
-        toast(`Salary found for ${salaryResult.salaryMonths} of ${salaryResult.statementMonths} months`, { icon: '⚠️', duration: 5000 })
+        toast(`Salary found for ${salaryResult.salaryMonths} of ${salaryResult.statementMonths} months`, { duration: 5000 })
       }
     }
   }
@@ -1253,44 +1253,44 @@ function ProfileContent() {
       if (pk.startsWith('PERSON:') && !isCredit) {
         question = `You pay ${personName} ${fmt(group[0].amount)} ${group.length > 1 ? 'every month' : ''}. What is this?`
         options = [
-          { bucketId: 'rent', label: '🏠 Rent' },
-          { bucketId: 'transfers', label: '👤 Family / household' },
-          { bucketId: 'home_services', label: '🏠 Domestic help / services' },
-          { bucketId: 'misc', label: '📦 Something else' },
+          { bucketId: 'rent', label: 'Rent' },
+          { bucketId: 'transfers', label: 'Family / household' },
+          { bucketId: 'home_services', label: 'Domestic help / services' },
+          { bucketId: 'misc', label: 'Something else' },
         ]
       } else if (desc.includes('NACH') && !isCredit) {
         const entity = desc.replace(/^.*NACH[-/]/, '').split(/[-/]/)[0].trim()
         question = `Auto-debit (NACH) of ${fmt(group[0].amount)} to "${entity}". What is this for?`
         options = [
-          { bucketId: 'sip', label: '📈 Mutual fund SIP' },
-          { bucketId: 'emi', label: '🏦 EMI / loan repayment' },
-          { bucketId: 'insurance', label: '🛡 Insurance premium' },
-          { bucketId: 'ppf_nps', label: '🏛 PPF / NPS' },
-          { bucketId: 'utilities', label: '⚡ Utility bill' },
-          { bucketId: 'misc', label: '📦 Something else' },
+          { bucketId: 'sip', label: 'Mutual fund SIP' },
+          { bucketId: 'emi', label: 'EMI / loan repayment' },
+          { bucketId: 'insurance', label: 'Insurance premium' },
+          { bucketId: 'ppf_nps', label: 'PPF / NPS' },
+          { bucketId: 'utilities', label: 'Utility bill' },
+          { bucketId: 'misc', label: 'Something else' },
         ]
       } else if (isCredit && !desc.includes('SALARY') && !desc.includes('SELF') && !desc.includes('INTEREST')) {
         question = `Credit of ${fmt(first.amount)} — "${first.description?.substring(0, 40)}". What is this?`
         options = [
-          { bucketId: 'salary', label: '💰 Salary' },
-          { bucketId: 'bonus', label: '🎁 Bonus / incentive' },
-          { bucketId: 'freelance', label: '💼 Freelance / consulting' },
-          { bucketId: 'dividends', label: '💸 Dividend / interest' },
-          { bucketId: 'self_transfer', label: '🔄 Self-transfer (not income)' },
-          { bucketId: 'misc', label: '📦 Something else' },
+          { bucketId: 'salary', label: 'Salary' },
+          { bucketId: 'bonus', label: 'Bonus / incentive' },
+          { bucketId: 'freelance', label: 'Freelance / consulting' },
+          { bucketId: 'dividends', label: 'Dividend / interest' },
+          { bucketId: 'self_transfer', label: 'Self-transfer (not income)' },
+          { bucketId: 'misc', label: 'Something else' },
         ]
       } else {
         question = `${fmt(first.amount)} — "${first.description?.substring(0, 40)}". What category?`
         options = [
-          { bucketId: 'food', label: '🍽 Food / dining' },
-          { bucketId: 'shopping', label: '🛍 Shopping' },
-          { bucketId: 'fuel', label: '⛽ Fuel / transport' },
-          { bucketId: 'utilities', label: '⚡ Utilities' },
-          { bucketId: 'healthcare', label: '💊 Healthcare' },
-          { bucketId: 'entertainment', label: '🎬 Entertainment' },
-          { bucketId: 'home_services', label: '🏠 Home services' },
-          { bucketId: 'emi', label: '🏦 EMI / loan' },
-          { bucketId: 'misc', label: '📦 Other' },
+          { bucketId: 'food', label: 'Food / dining' },
+          { bucketId: 'shopping', label: 'Shopping' },
+          { bucketId: 'fuel', label: 'Fuel / transport' },
+          { bucketId: 'utilities', label: 'Utilities' },
+          { bucketId: 'healthcare', label: 'Healthcare' },
+          { bucketId: 'entertainment', label: 'Entertainment' },
+          { bucketId: 'home_services', label: 'Home services' },
+          { bucketId: 'emi', label: 'EMI / loan' },
+          { bucketId: 'misc', label: 'Other' },
         ]
       }
 
@@ -1429,7 +1429,7 @@ function ProfileContent() {
       // pendingMonthIntent only meaningful for single-slip uploads (from a clicked projected month).
       // For multi-slip files, the user uploaded a batch; per-month intent doesn't apply.
       if (slips.length === 1 && pendingMonthIntent && pendingMonthIntent !== slips[0].monthKey) {
-        toast(`Slip is for ${monthLabel(slips[0].monthKey)} — added there instead of ${monthLabel(pendingMonthIntent)}`, { icon: 'ℹ️', duration: 5000 })
+        toast(`Slip is for ${monthLabel(slips[0].monthKey)} — added there instead of ${monthLabel(pendingMonthIntent)}`, { duration: 5000 })
       }
       setPendingMonthIntent(null)
 
@@ -2171,7 +2171,6 @@ function ProfileContent() {
                       </>
                     ) : (
                       <>
-                        <span style={{ fontSize:22 }}>💼</span>
                         <p style={{ fontSize:13, fontWeight:600, color:C.text, margin:0 }}>Upload salary slip</p>
                         <p style={{ fontSize:10.5, color:C.muted, margin:0 }}>PDF, image, any format · any month of FY</p>
                       </>
@@ -2191,7 +2190,6 @@ function ProfileContent() {
                   <div style={{ ...S.upload(false), minHeight:108 }} onClick={() => { setUploadingAccountId(null); bankRef.current?.click() }}>
                     {loadingDoc==='bank' ? <p style={{ fontSize:13, color:C.fg }}>Reading…</p> : (
                       <>
-                        <span style={{ fontSize:22 }}>🏦</span>
                         <p style={{ fontSize:13, fontWeight:600, color:C.text, margin:0 }}>
                           {bankAccounts.length > 0 ? '+ Add another account' : 'Upload bank statement'}
                         </p>
@@ -2215,7 +2213,6 @@ function ProfileContent() {
                   <p style={{ fontSize:9, fontWeight:700, color:C.muted, letterSpacing:'0.07em', textTransform:'uppercase' as const, marginBottom:6 }}>Your bank accounts</p>
                   {bankAccounts.map((acc, idx) => (
                     <div key={acc.id} style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8, padding:14, marginBottom:10, display:'flex', gap:12, alignItems:'center' }}>
-                      <div style={{ width:40, height:40, borderRadius:8, background:C.wl, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0 }}>🏦</div>
                       <div style={{ flex:1 }}>
                         <p style={{ fontSize:13, fontWeight:600, color:C.text, margin:'0 0 2px' }}>{acc.bank}{acc.last4 ? ` ···${acc.last4}` : ''}</p>
                         <p style={{ fontSize:11, color:C.muted, margin:0 }}>{acc.txnCount} transactions · {acc.period.months} month{acc.period.months>1?'s':''}</p>
@@ -2241,7 +2238,6 @@ function ProfileContent() {
                 ) : creditCards.map(card => (
                   <div key={card.id} style={{ ...S.row, gap:8 }}>
                     <span style={{ display:'flex', alignItems:'center', gap:8 }}>
-                      <span style={{ fontSize:18 }}>💳</span>
                       <span><strong>{card.bank}</strong> · ending <strong style={{ fontFamily:'monospace', color:C.fg }}>{card.last4}</strong></span>
                     </span>
                     <button onClick={() => removeCreditCard(card.id)} style={{ fontSize:11, color:C.danger, background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', textDecoration:'underline' }}>Remove</button>
@@ -2270,7 +2266,6 @@ function ProfileContent() {
                     </>
                   ) : (
                     <>
-                      <span style={{ fontSize:24 }}>📑</span>
                       <p style={{ fontSize:13, fontWeight:600, color:C.text, margin:0 }}>AIS</p>
                       <p style={{ fontSize:10.5, color:C.muted, margin:0, lineHeight:1.5 }}>incometax.gov.in · password protected</p>
                     </>
@@ -2278,7 +2273,6 @@ function ProfileContent() {
                   <input ref={aisRef} type="file" accept=".pdf,image/*" style={{ display:'none' }} onChange={e=>e.target.files?.[0]&&handleAISFile(e.target.files[0],'ais')} />
                 </div>
                 <div style={S.upload(false)} onClick={() => !loadingDoc&&taxRef.current?.click()}>
-                  <span style={{ fontSize:24 }}>📋</span>
                   <p style={{ fontSize:13, fontWeight:600, color:C.text, margin:0 }}>Form 26AS</p>
                   <p style={{ fontSize:10.5, color:C.muted, margin:0, lineHeight:1.5 }}>Tax credit statement · no password</p>
                   <input ref={taxRef} type="file" accept=".pdf,image/*" style={{ display:'none' }} onChange={e=>e.target.files?.[0]&&handleAISFile(e.target.files[0],'26as')} />
@@ -2364,7 +2358,6 @@ function ProfileContent() {
                       return (
                         <div style={{ ...S.card, border:`1px solid #E6CFA7`, background:'#FFF8E8' }}>
                           <div style={{ padding:'12px 16px', display:'flex', gap:12, alignItems:'flex-start' }}>
-                            <span style={{ fontSize:14, lineHeight:1 }}>ℹ</span>
                             <div style={{ flex:1 }}>
                               <p style={{ fontSize:12, fontWeight:600, color:C.text, margin:'0 0 4px' }}>{empty.length} month{empty.length !== 1 ? 's' : ''} have no salary data ({rangeLabel})</p>
                               <p style={{ fontSize:11.5, color:C.muted, margin:'0 0 10px', lineHeight:1.55 }}>
@@ -2417,7 +2410,7 @@ function ProfileContent() {
                       return (
                         <div style={{ ...S.card, border:`1.5px solid #D85A30`, background:'#FFF8F4' }}>
                           <div style={{ padding:'10px 16px', background:'#FBEFEF', borderBottom:`1px solid ${C.border}`, display:'flex', alignItems:'center', gap:8 }}>
-                            <span style={{ fontSize:14 }}>⚠</span>
+                            <span style={{ fontSize:14 }}>△</span>
                             <span style={{ fontSize:11.5, fontWeight:700, color:'#A04020', letterSpacing:'0.04em', textTransform:'uppercase' as const }}>Multi-employer FY · TDS may be short</span>
                           </div>
                           <div style={{ padding:'14px 16px' }}>
@@ -2435,7 +2428,7 @@ function ProfileContent() {
                               </div>
                             </div>
                             <button onClick={() => setBreakdownExpanded(v => !v)} style={{ width:'100%', padding:'8px 10px', background:'transparent', border:`1px dashed ${C.border}`, borderRadius:4, fontSize:11, color:C.fg, cursor:'pointer', fontFamily:'inherit', marginBottom:10, textAlign:'left' as const, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                              <span>{breakdownExpanded ? '▼' : '▶'} How is {fmt(mte.combinedAnnualGross)} calculated?</span>
+                              <span>{breakdownExpanded ? '▼' : '▸'} How is {fmt(mte.combinedAnnualGross)} calculated?</span>
                               <span style={{ fontSize:10, color:C.muted }}>{breakdownExpanded ? 'hide' : 'audit the math'}</span>
                             </button>
                             {breakdownExpanded && (
@@ -2460,7 +2453,7 @@ function ProfileContent() {
                                 {mte.emptyMonths.length > 0 && (
                                   <div style={{ marginTop:8, padding:'8px 10px', background:'#FFF3DD', border:`1px solid #E6CFA7`, borderRadius:4 }}>
                                     <p style={{ fontSize:11, color:'#7A5A20', margin:0, lineHeight:1.5 }}>
-                                      <strong>⚠ {mte.emptyMonths.length} month{mte.emptyMonths.length !== 1 ? 's' : ''} have no income</strong> ({monthLabel(mte.emptyMonths[0])}{mte.emptyMonths.length > 1 ? ` – ${monthLabel(mte.emptyMonths[mte.emptyMonths.length - 1])}` : ''}). System assumed ₹0. If you were employed during this period, upload those slips for an accurate total.
+                                      <strong>△ {mte.emptyMonths.length} month{mte.emptyMonths.length !== 1 ? 's' : ''} have no income</strong> ({monthLabel(mte.emptyMonths[0])}{mte.emptyMonths.length > 1 ? ` – ${monthLabel(mte.emptyMonths[mte.emptyMonths.length - 1])}` : ''}). System assumed ₹0. If you were employed during this period, upload those slips for an accurate total.
                                     </p>
                                   </div>
                                 )}
@@ -2515,7 +2508,7 @@ function ProfileContent() {
                                 }
                               }} style={{ background:bg, color:fg, border:'none', borderRadius:4, padding:'10px 4px', fontSize:10, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
                                 <div style={{ fontSize:9.5, opacity:0.85 }}>{monthLabel(mk).split(' ')[0]}</div>
-                                <div style={{ fontSize:11, marginTop:2 }}>{status === 'actual' ? '●' : status === 'override' ? '✎' : '○'}</div>
+                                <div style={{ fontSize:11, marginTop:2 }}>{status === 'actual' ? '●' : status === 'override' ? '◐' : '○'}</div>
                               </button>
                             )
                           })}
@@ -2555,7 +2548,7 @@ function ProfileContent() {
                               ))}
                               <button onClick={() => setSalaryFlagsModal({ open: true, slipId: null, employmentId: emp.id })} style={{ fontSize:10.5, padding:'3px 8px', borderRadius:3, border:`1px solid ${C.border}`, background:C.card, color:C.fg, cursor:'pointer', fontFamily:'inherit' }}>Edit components</button>
                               {emp.toMonth !== null && (
-                                <a href={`/dashboard/profile/form-12b?empId=${emp.id}`} target="_blank" rel="noopener noreferrer" style={{ fontSize:10.5, padding:'3px 8px', borderRadius:3, border:`1px solid ${C.fg}`, background:C.fg, color:C.wheat, cursor:'pointer', fontFamily:'inherit', textDecoration:'none', fontWeight:600 }}>📄 Generate Form 12B →</a>
+                                <a href={`/dashboard/profile/form-12b?empId=${emp.id}`} target="_blank" rel="noopener noreferrer" style={{ fontSize:10.5, padding:'3px 8px', borderRadius:3, border:`1px solid ${C.fg}`, background:C.fg, color:C.wheat, cursor:'pointer', fontFamily:'inherit', textDecoration:'none', fontWeight:600 }}>Generate Form 12B →</a>
                               )}
                             </div>
                           </div>
@@ -2791,7 +2784,7 @@ function ProfileContent() {
                   {/* ── CLASSIFIED BUCKETS ── */}
                   {questions.length === 0 && (
                     <div style={{ ...S.insight, marginBottom:16, background:'#EEF2EE', borderColor:'#C8D8C8' }}>
-                      All transactions classified. Drag between buckets or click ✎ to reassign. Changes are remembered forever.
+                      All transactions classified. Drag between buckets or click ⇄ to reassign. Changes are remembered forever.
                     </div>
                   )}
                   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
@@ -2811,7 +2804,6 @@ function ProfileContent() {
                             >
                               <div style={S.bucketHead} onClick={() => { const s = new Set(openBuckets); s.has(bucket.id) ? s.delete(bucket.id) : s.add(bucket.id); setOpenBuckets(s) }}>
                                 <span style={{ display:'flex', alignItems:'center', gap:6 }}>
-                                  <span style={{ fontSize:14 }}>{bucket.icon}</span>
                                   <span style={{ fontWeight:500, color:C.text }}>{bucket.label}</span>
                                   <span style={{ fontSize:10, color:C.muted }}>{items.length}</span>
                                 </span>
@@ -2854,7 +2846,7 @@ function ProfileContent() {
                                           <span style={{ color:C.muted, fontSize:10 }}>{t.date}</span>
                                           <span title={t.description || ''} style={{ color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const, textTransform:'capitalize' as const }}>{(nature || t.description || '').toString().toLowerCase()}</span>
                                           <span style={{ textAlign:'right' as const, fontWeight:500, color: t.type==='credit' ? '#1D9E75' : '#D85A30' }}>{t.type==='credit'?'+':'−'}{fmt(t.amount)}</span>
-                                          <button onClick={() => setSingleCategoryModal({ open:true, transaction:t })} style={{ width:22, height:22, borderRadius:3, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted }}>✎</button>
+                                          <button onClick={() => setSingleCategoryModal({ open:true, transaction:t })} style={{ width:22, height:22, borderRadius:3, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted }}>⇄</button>
                                         </div>
                                       )
                                     }
@@ -2888,7 +2880,7 @@ function ProfileContent() {
                                                 <span title={t.description || ''} style={{ color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const, textTransform:'capitalize' as const }}>{((t._intel?.who || t.personName || t.brand || t.description || '').toString().toLowerCase())}</span>
                                                 <span style={{ color:C.muted, fontSize:10 }}>{t.date}</span>
                                                 <span style={{ textAlign:'right' as const, fontWeight:500, color: t.type==='credit' ? '#1D9E75' : '#D85A30' }}>{t.type==='credit'?'+':'−'}{fmt(t.amount)}</span>
-                                                <button onClick={() => setSingleCategoryModal({ open:true, transaction:t })} style={{ width:22, height:22, borderRadius:3, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted }}>✎</button>
+                                                <button onClick={() => setSingleCategoryModal({ open:true, transaction:t })} style={{ width:22, height:22, borderRadius:3, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted }}>⇄</button>
                                               </div>
                                             ))}
                                           </>
@@ -2917,7 +2909,7 @@ function ProfileContent() {
                                           <div style={{ textAlign:'right' as const, fontWeight:500, color: t.type==='credit' ? '#1D9E75' : '#D85A30' }}>
                                             {t.type==='credit'?'+':'−'}{fmt(t.amount)}
                                           </div>
-                                          <button onClick={e => { e.stopPropagation(); setSingleCategoryModal({ open:true, transaction:t }) }} style={{ width:22, height:22, borderRadius:3, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted, display:'flex', alignItems:'center', justifyContent:'center' }}>✎</button>
+                                          <button onClick={e => { e.stopPropagation(); setSingleCategoryModal({ open:true, transaction:t }) }} style={{ width:22, height:22, borderRadius:3, border:`0.5px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.muted, display:'flex', alignItems:'center', justifyContent:'center' }}>⇄</button>
                                         </div>
                                       ))}
                                       {items.length > 20 && <div style={{ padding:'6px 12px', fontSize:10, color:C.muted }}>+{items.length - 20} more</div>}
@@ -2926,7 +2918,7 @@ function ProfileContent() {
                                         <div style={{ display:'flex', alignItems:'center', gap:4, padding:'6px 12px', borderTop:`0.5px solid ${C.border}` }}>
                                           <select id={`sel_${bucket.id}`} defaultValue={bucket.id} style={{ flex:1, fontSize:11, padding:'3px 6px', borderRadius:4, border:`0.5px solid ${C.border}`, background:C.card, color:C.text, fontFamily:'inherit' }}>
                                             {ALL_BUCKET_LIST.map(b => (
-                                              <option key={b.id} value={b.id} disabled={b.id === bucket.id}>{b.icon} {b.label}</option>
+                                              <option key={b.id} value={b.id} disabled={b.id === bucket.id}>{b.label}</option>
                                             ))}
                                           </select>
                                           <button onClick={() => {
@@ -2974,7 +2966,6 @@ function ProfileContent() {
                           <div style={{ ...S.row, fontWeight:500 }}>
                             <span style={{ display:'flex', alignItems:'center', gap:8 }}>
                               <button onClick={() => setPnlExpanded(p=>({...p, [`inc_${line.mega}`]:!expanded}))} style={{ width:18, height:18, borderRadius:3, border:`1px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.fg, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontWeight:600 }}>{expanded?'−':'+'}</button>
-                              <span style={{ fontSize:14 }}>{line.icon}</span>
                               {line.label}
                             </span>
                             <span style={{ color:'#2A7A4A', fontWeight:600 }}>+{fmt(line.monthlyAvg)}/mo</span>
@@ -3009,7 +3000,6 @@ function ProfileContent() {
                           <div style={S.row}>
                             <span style={{ display:'flex', alignItems:'center', gap:8 }}>
                               <button onClick={() => setPnlExpanded(p=>({...p, [`exp_${line.mega}`]:!expanded}))} style={{ width:18, height:18, borderRadius:3, border:`1px solid ${C.border}`, background:'#fff', cursor:'pointer', fontSize:11, color:C.fg, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontWeight:600 }}>{expanded?'−':'+'}</button>
-                              <span style={{ fontSize:14 }}>{line.icon}</span>
                               {line.label}
                             </span>
                             <span style={{ color:C.danger, fontWeight:500 }}>−{fmt(line.monthlyAvg)}/mo</span>
@@ -3158,7 +3148,6 @@ function ProfileContent() {
                 const info = MEGA_CATEGORIES[key]
                 return (
                   <button key={key} onClick={() => reassignSingle(key)} style={{ padding:'10px 12px', background:info.bgColor, border:`1px solid ${info.borderColor}`, borderRadius:5, cursor:'pointer', fontFamily:'inherit', textAlign:'left' as const, display:'flex', alignItems:'center', gap:8 }}>
-                    <span style={{ fontSize:16 }}>{info.icon}</span>
                     <span style={{ fontSize:11.5, fontWeight:500, color:info.color }}>{info.label}</span>
                   </button>
                 )
@@ -3458,7 +3447,7 @@ function ProfileContent() {
             <div onClick={e=>e.stopPropagation()} style={{ background:'#fff', borderRadius:10, padding:20, maxWidth:620, width:'100%', maxHeight:'85vh', overflow:'auto', boxShadow:'0 12px 40px rgba(0,0,0,0.18)' }}>
               <p style={{ fontSize:16, fontWeight:700, color:C.text, margin:'0 0 4px' }}>Review parsed slips · {reviewSlipsModal.slips.length} found</p>
               <p style={{ fontSize:11.5, color:C.muted, margin:'0 0 14px', lineHeight:1.55 }}>
-                We extracted these slips from your file. <strong>AI parsing can misread dates</strong> on scans. Please verify before adding to your timeline. Anything with ⚠ looks unusual — please double-check the actual slip.
+                We extracted these slips from your file. <strong>AI parsing can misread dates</strong> on scans. Please verify before adding to your timeline. Anything with △ looks unusual — please double-check the actual slip.
               </p>
               <div style={{ display:'flex', flexDirection:'column' as const, gap:8, marginBottom:14 }}>
                 {reviewSlipsModal.slips.map((slip, idx) => {
@@ -3468,7 +3457,7 @@ function ProfileContent() {
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12 }}>
                         <div style={{ flex:1, minWidth:0 }}>
                           <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
-                            {isSus && <span title="Unusual month — please verify" style={{ fontSize:13 }}>⚠</span>}
+                            {isSus && <span title="Unusual month — please verify" style={{ fontSize:13 }}>△</span>}
                             <span style={{ fontSize:11, color:C.muted, textTransform:'uppercase' as const, letterSpacing:'0.04em' }}>Slip {idx + 1}</span>
                           </div>
                           <div style={{ display:'grid', gridTemplateColumns:'90px 1fr', gap:'4px 10px', fontSize:11.5 }}>
@@ -3692,7 +3681,7 @@ function ProfileContent() {
       {pwdModal.open && (
         <div style={{ position:'fixed', inset:0, background:'rgba(28,43,34,0.5)', zIndex:99, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }} onClick={() => setPwdModal({ open:false, type:null, file:null, error:'' })}>
           <div onClick={e=>e.stopPropagation()} style={{ background:'#fff', borderRadius:10, padding:20, maxWidth:400, width:'100%', boxShadow:'0 12px 40px rgba(0,0,0,0.18)' }}>
-            <p style={{ fontSize:16, fontWeight:700, color:C.text, margin:'0 0 4px' }}>🔐 {pwdModal.type==='bank'?'Bank Statement':pwdModal.type==='cas'?'CAS Statement':'AIS'} Password</p>
+            <p style={{ fontSize:16, fontWeight:700, color:C.text, margin:'0 0 4px' }}>{pwdModal.type==='bank'?'Bank Statement':pwdModal.type==='cas'?'CAS Statement':'AIS'} Password</p>
             {pwdModal.type==='bank' && (
               <div style={{ background:C.wl, border:`1px solid ${C.wm}`, borderRadius:5, padding:'10px 12px', marginBottom:14 }}>
                 <p style={{ fontSize:11, color:C.fg, margin:0, lineHeight:1.85 }}>

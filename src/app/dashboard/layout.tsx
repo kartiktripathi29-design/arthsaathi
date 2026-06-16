@@ -203,7 +203,7 @@ function Sidebar() {
           color: C.nav, fontSize: 12, cursor: 'pointer',
           textAlign: 'left', fontFamily: 'inherit', letterSpacing: '0.01em',
         }}>
-          ↪ Sign out
+          Sign out
         </button>
       </div>
     </aside>
@@ -307,7 +307,7 @@ function TopBar({ theme, setTheme, resolved }: { theme: ThemeMode; setTheme: (t:
                 width: '100%', textAlign: 'left', padding: '8px 10px', marginTop: 2,
                 background: 'transparent', border: 'none', borderTop: `1px solid ${T.hairline}`,
                 color: T.nav, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit',
-              }}>↪ Sign out</button>
+              }}>Sign out</button>
             </div>
           )}
         </div>

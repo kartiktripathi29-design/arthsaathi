@@ -2,7 +2,7 @@
 // rest, recoverable — NOT zero-knowledge). The whole user blob is encrypted here before it touches
 // the database; the same primitive field-encrypts PAN/Aadhaar.
 //
-// ⚠️ SERVER ONLY. This reads a secret from process.env and must never be imported into client code
+// SERVER ONLY. This reads a secret from process.env and must never be imported into client code
 // (the key would be inlined into the browser bundle). Import only from Route Handlers / server libs.
 
 import crypto from 'node:crypto'
