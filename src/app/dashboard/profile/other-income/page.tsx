@@ -235,13 +235,14 @@ export default function OtherIncomePage() {
           `Use “Import from AIS” just below to bring it in — then add anything AIS can’t see (freelance, crypto, F&O, rent) by hand.`,
         ] }
       }
-      const flags: string[] = []
-      if ((aisInterest + aisDividends) - enteredIntDiv > 1000) flags.push(`interest & dividends (AIS ${fmt(aisInterest + aisDividends)}, you’ve entered ${fmt(enteredIntDiv)})`)
-      if (aisCG - enteredCGraw > 1000) flags.push(`capital gains (AIS ${fmt(aisCG)}, you’ve entered ${fmt(enteredCGraw)})`)
-      if (flags.length) {
+      const flagNames: string[] = []
+      const flagDetail: string[] = []
+      if ((aisInterest + aisDividends) - enteredIntDiv > 1000) { flagNames.push('interest & dividends'); flagDetail.push(`interest & dividends — AIS ${fmt(aisInterest + aisDividends)} vs entered ${fmt(enteredIntDiv)}`) }
+      if (aisCG - enteredCGraw > 1000) { flagNames.push('capital gains'); flagDetail.push(`capital gains — AIS ${fmt(aisCG)} vs entered ${fmt(enteredCGraw)}`) }
+      if (flagNames.length) {
         return { tone: 'attention', lines: [
-          `Imported — but your entries are lower than AIS for ${human(flags)}.`,
-          `Worth a look: AIS can lag your own records, or a source may be missing. Edit any “From AIS” row below to reconcile.`,
+          `Your entries are lower than AIS for ${human(flagNames)}.`,
+          `${flagDetail.join('; ')}. AIS can lag your own records, or a source may be missing — edit any “From AIS” row below to reconcile.`,
         ] }
       }
       return { tone: 'good', lines: [

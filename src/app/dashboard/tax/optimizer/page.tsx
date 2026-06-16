@@ -572,8 +572,8 @@ export default function TaxOptimizerPage() {
                 `Add the rest of the year’s slips on Documents to turn the projection into an exact, month-by-month figure.`,
               ] }
             : { tone: 'good', lines: [
-                `Computed from everything you’ve entered — salary, other income, allowances and deductions — with TDS from your ${calc.tdsSource === 'ais' ? 'AIS / 26AS' : 'salary slips'}.`,
-                `Tap any line under “Income & components” below to see exactly how it’s worked out, or edit it at the source.`,
+                `Computed from your salary, other income, allowances and deductions.`,
+                `TDS is taken from your ${calc.tdsSource === 'ais' ? 'AIS / 26AS' : 'salary slips'}. Tap any line under “Income & components” below to see exactly how it’s worked out, or edit it at the source.`,
               ] }
         return <GuideStrip tone={g.tone} lines={g.lines} />
       })()}

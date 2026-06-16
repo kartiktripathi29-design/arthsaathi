@@ -299,15 +299,15 @@ export default function ExemptionsPage() {
       `Upload a salary slip on Documents first, so ArthVo can read your HRA and pre-fill what it can here.`,
     ] }
     if (salary.hra > 0 && s.rentPaid === 0) return { tone: 'attention', lines: [
-      `Your slip shows HRA of ${fmt(salary.hra)}/month, but no rent is entered yet — so none of it is being counted as tax-free.`,
-      `Open House rent below and add your monthly rent to see how much becomes exempt. (Old regime only.)`,
+      `Your slip shows HRA ${fmt(salary.hra)}/month, but no rent is entered yet.`,
+      `So none of it is counted as tax-free. Open House rent below and add your monthly rent to see how much becomes exempt. (Old regime only.)`,
     ] }
     if (totalAnnualExempt > 0) return { tone: 'good', lines: [
       `You’ve claimed ${fmt(totalAnnualExempt)} of tax-free allowances${hraAnnualExemption > 0 ? ` (HRA ${fmt(hraAnnualExemption)})` : ''}.`,
       `These lower your tax only under the old regime — the new regime ignores Section 10 allowances. Your Tax weighs both regimes for you.`,
     ] }
     return { tone: 'calm', lines: [
-      `Allowances here are tax-free income under the old regime — the biggest one is usually HRA.`,
+      `Allowances are tax-free income — old regime only, usually HRA.`,
       `Open House rent and enter your monthly rent to see your exempt amount. Fill only what applies to you.`,
     ] }
   })()

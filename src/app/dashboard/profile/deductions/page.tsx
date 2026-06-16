@@ -170,11 +170,11 @@ export default function DeductionsPage() {
   // Guide strip — narrates deductions claimed + the old-regime caveat (replaces the static banner).
   const guide: { tone: 'calm' | 'attention' | 'good'; lines: string[] } = totalDeductions > 0
     ? { tone: 'good', lines: [
-        `You’ve claimed ${fmt(totalDeductions)} in deductions${sec80C > 0 ? ` — 80C counts ${fmt(sec80C)} of its ₹1,50,000 limit` : ''}.`,
-        `These cut tax only under the old regime. Your Tax compares it against the new regime (no deductions, lower rates) and picks the cheaper one. Only invest what makes financial sense — tax saving is a bonus, not the goal.`,
+        `You’ve claimed ${fmt(totalDeductions)} in deductions — old regime only.`,
+        `${sec80C > 0 ? `80C counts ${fmt(sec80C)} of its ₹1,50,000 limit. ` : ''}Your Tax compares this against the new regime (no deductions, lower rates) and picks the cheaper one. Invest only what makes financial sense — tax saving is a bonus, not the goal.`,
       ] }
     : { tone: 'calm', lines: [
-        `Deductions are investments and expenses that lower your taxable income — under the old regime only.`,
+        `Deductions lower your taxable income — old regime only.`,
         `Tap any card below (80C, health insurance, home loan, NPS…) and enter what you actually have. Fill only what applies to you.`,
       ] }
 

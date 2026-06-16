@@ -1,33 +1,55 @@
-import type { ReactNode } from 'react'
+'use client'
+import { useState, type ReactNode } from 'react'
 import { tokens as T } from '@/lib/tokens'
 
-// ArthVo Guide strip — a small, proactive, data-aware narration block shown at the top of the
-// data-heavy flow pages. It reads the real figures the page already computed and tells the user, in
-// plain English, what was found / what needs attention / where it goes. It is NOT the "Ask ArthVo"
-// chat: there's no LLM, no fabricated numbers (every figure is real and every line is pre-written),
-// and no advice — it narrates facts and points to the next screen. This keeps it inside the locked
-// "clarity-not-advice / no fabricated numbers" principles while doing the orientation job the
-// reactive chat structurally can't (the chat is deliberately number-blind).
+// ArthVo Guide strip — a quiet, data-aware one-liner at the top of the data-heavy flow pages. It
+// reads the real figures the page already computed and says, in ONE short line, what was found /
+// what needs attention / where it goes. Any extra detail is hidden behind a "More" tap so nobody
+// gets a paragraph they didn't ask for (progressive disclosure).
+//
+// Not the "Ask ArthVo" chat: no LLM, no fabricated numbers (every figure is real, every line
+// pre-written), no advice — it narrates facts and points to the next screen.
 //
 // Tone → surface tokens (never raw hex; dark mode resolves via the same CSS vars):
-//   calm      — neutral wheat. Optional / on-track / nothing to flag.
-//   attention — amber caution. Something the user should look at (missing import, a mismatch).
-//   good      — green slip. Confirmed / reconciled / complete.
+//   calm — neutral wheat · attention — amber caution · good — green slip.
 export type GuideTone = 'calm' | 'attention' | 'good'
 
-const TONE: Record<GuideTone, { fill: string; border: string; eb: string }> = {
-  calm: { fill: T.sand, border: T.taupeLine, eb: T.muted },
-  attention: { fill: T.caution.fill, border: T.caution.border, eb: T.caution.text },
-  good: { fill: T.slip.fill, border: T.slip.border, eb: T.slip.text },
+const TONE: Record<GuideTone, { fill: string; border: string; accent: string }> = {
+  calm: { fill: T.sand, border: T.taupeLine, accent: T.muted },
+  attention: { fill: T.caution.fill, border: T.caution.border, accent: T.caution.text },
+  good: { fill: T.slip.fill, border: T.slip.border, accent: T.slip.text },
 }
 
+// `lines[0]` is the always-visible summary; lines[1..] (if any) are detail revealed on tap.
 export function GuideStrip({ tone, lines }: { tone: GuideTone; lines: ReactNode[] }) {
+  const [open, setOpen] = useState(false)
   const s = TONE[tone]
+  const [head, ...rest] = lines
+  const hasDetail = rest.length > 0
   return (
-    <div style={{ background: s.fill, border: `1px solid ${s.border}`, borderLeft: `3px solid ${s.eb}`, borderRadius: 8, padding: '14px 16px', marginBottom: 24 }}>
-      <p style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: s.eb, margin: '0 0 6px' }}>ArthVo Guide</p>
-      {lines.map((l, i) => (
-        <p key={i} style={{ fontSize: 12.5, color: T.ink, margin: i ? '6px 0 0' : 0, lineHeight: 1.6 }}>{l}</p>
+    <div style={{ background: s.fill, border: `1px solid ${s.border}`, borderLeft: `3px solid ${s.accent}`, borderRadius: 8, padding: '10px 14px', marginBottom: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+        <p style={{ flex: 1, fontSize: 12.5, color: T.ink, margin: 0, lineHeight: 1.55 }}>{head}</p>
+        {hasDetail && (
+          <button
+            onClick={() => setOpen(o => !o)}
+            aria-expanded={open}
+            aria-label={open ? 'Hide details' : 'More info'}
+            title={open ? 'Hide details' : 'More info'}
+            style={{
+              flexShrink: 0, width: 18, height: 18, borderRadius: '50%',
+              background: open ? s.accent : 'transparent', color: open ? s.fill : s.accent,
+              border: `1px solid ${s.accent}`, padding: 0, cursor: 'pointer',
+              fontFamily: 'Georgia, serif', fontSize: 12, fontStyle: 'italic', fontWeight: 700,
+              lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            i
+          </button>
+        )}
+      </div>
+      {open && rest.map((l, i) => (
+        <p key={i} style={{ fontSize: 12, color: T.ink, margin: '8px 0 0', lineHeight: 1.55 }}>{l}</p>
       ))}
     </div>
   )

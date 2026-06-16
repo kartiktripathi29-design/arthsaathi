@@ -109,10 +109,10 @@ export default function DocumentsPage() {
   }, [])
   const guideLines: ReactNode[] = [
     hasAis
-      ? <>Your AIS is already read — its interest, dividends and capital gains will flow into Other earnings. Add a salary slip here to build your year.</>
-      : <>Start with a salary slip — or, if you’ve just changed jobs and have no slip yet, your offer letter. AIS and Form 26AS are optional, but adding them makes your refund / amount-owed exact instead of estimated.</>,
-    <>To get them, log in to the <a href="https://www.incometax.gov.in" target="_blank" rel="noopener noreferrer" style={{ color: C.primary, fontWeight: 600 }}>Income Tax portal</a>: open <strong>AIS</strong> in the top menu for your Annual Information Statement, and <strong>e-File → Income Tax Returns → View Form 26AS</strong> for Form 26AS. Pick the year you’re filing for and download the PDF.</>,
-    <>Those downloads are password-locked. The password is your <strong>PAN in lowercase + date of birth as DDMMYYYY</strong> (e.g. abcde1234f01011990). ArthVo only uses it to open the file.</>,
+      ? <>AIS read — its income flows into Other earnings. Add a salary slip to build your year.</>
+      : <>Start with a salary slip. AIS &amp; 26AS are optional — they make your refund exact, not estimated.</>,
+    <>Download them at the <a href="https://www.incometax.gov.in" target="_blank" rel="noopener noreferrer" style={{ color: C.primary, fontWeight: 600 }}>Income Tax portal</a>: <strong>AIS</strong> (top menu) for the statement; <strong>e-File → Income Tax Returns → View Form 26AS</strong> for 26AS.</>,
+    <>PDF password = <strong>PAN in lowercase + DOB (DDMMYYYY)</strong>, e.g. abcde1234f01011990.</>,
   ]
 
   const readFileAsBase64 = (file: File): Promise<string> =>
