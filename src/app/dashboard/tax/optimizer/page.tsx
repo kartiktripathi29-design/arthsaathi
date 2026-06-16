@@ -711,7 +711,7 @@ export default function TaxOptimizerPage() {
         {calc.grossSalary > 0 && calc.totalExemptions > calc.grossSalary * 0.4 && (
           <div style={{ marginTop: 8, padding: '10px 12px', background: C.caution.fill, border: `1px solid ${C.wm}`, borderRadius: 4 }}>
             <p style={{ fontSize: 11, color: C.caution.text, margin: 0, lineHeight: 1.5 }}>
-              ⚠️ <strong>Exemptions {fmt(calc.totalExemptions)} are {Math.round(calc.totalExemptions / calc.grossSalary * 100)}% of gross salary</strong> — unusually high. Common causes: <strong>PF withdrawal</strong> or <strong>Gratuity</strong> entered while still employed (these only apply on retirement / separation), or <strong>Driver/Car/Daily-allowance</strong> entered without the employer actually providing those perks. <Link href="/dashboard/profile/exemptions" style={{ color: C.caution.text, textDecoration: 'underline' }}>Review exemptions →</Link>
+              <strong>Exemptions {fmt(calc.totalExemptions)} are {Math.round(calc.totalExemptions / calc.grossSalary * 100)}% of gross salary</strong> — unusually high. Common causes: <strong>PF withdrawal</strong> or <strong>Gratuity</strong> entered while still employed (these only apply on retirement / separation), or <strong>Driver/Car/Daily-allowance</strong> entered without the employer actually providing those perks. <Link href="/dashboard/profile/exemptions" style={{ color: C.caution.text, textDecoration: 'underline' }}>Review exemptions →</Link>
             </p>
           </div>
         )}
@@ -927,7 +927,7 @@ export default function TaxOptimizerPage() {
 
         {!calc.hraFilled && calc.grossSalary > 0 && (
           <div style={{ padding: '12px', background: C.caution.fill, border: `1px solid ${C.wm}`, borderRadius: 6, marginBottom: 12 }}>
-            <p style={{ fontSize: 11, color: C.caution.text, margin: 0, fontWeight: 500 }}>💡 You haven't entered rent details. If you pay rent, fill <Link href="/dashboard/profile/exemptions" style={{ color: C.caution.text, textDecoration: 'underline' }}>Allowances</Link> to claim HRA and save more.</p>
+            <p style={{ fontSize: 11, color: C.caution.text, margin: 0, fontWeight: 500 }}>You haven't entered rent details. If you pay rent, fill <Link href="/dashboard/profile/exemptions" style={{ color: C.caution.text, textDecoration: 'underline' }}>Allowances</Link> to claim HRA and save more.</p>
           </div>
         )}
 

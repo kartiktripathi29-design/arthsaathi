@@ -202,7 +202,7 @@ export default function DeductionsPage() {
             {pfAutoApplied && (
               <div style={{ marginBottom: 12, padding: '8px 10px', background: T.slip.fill, border: `1px solid ${T.slip.border}`, borderRadius: 4 }}>
                 <p style={{ fontSize: 11, color: C.green, margin: 0, lineHeight: 1.5 }}>
-                  💡 Auto-filled <strong>Employee PF</strong> = {fmt(pfAutoApplied.annual)} (from your salary slip × 12). Adjust below if needed.
+                  Auto-filled <strong>Employee PF</strong> = {fmt(pfAutoApplied.annual)} (from your salary slip × 12). Adjust below if needed.
                 </p>
               </div>
             )}
@@ -497,7 +497,7 @@ export default function DeductionsPage() {
 
             <div style={{ padding: '8px 10px', background: T.caution.fill, border: `1px solid ${T.caution.border}`, borderRadius: 4, marginTop: 12 }}>
               <p style={{ fontSize: 10.5, color: T.caution.text, margin: 0, lineHeight: 1.45 }}>
-                ⚠️ Cash donations above <strong>₹2,000</strong> are not eligible (must be via cheque/UPI/bank). 80G is <strong>not available under the new tax regime</strong>.
+                Cash donations above <strong>₹2,000</strong> are not eligible (must be via cheque/UPI/bank). 80G is <strong>not available under the new tax regime</strong>.
               </p>
             </div>
 

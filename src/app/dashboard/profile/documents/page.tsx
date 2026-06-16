@@ -380,7 +380,7 @@ export default function DocumentsPage() {
       setUploading(false)
       setUploadProgress('')
       if (failed.length > 0) {
-        toast(`${allSlips.length} slip(s) parsed. ${failed.length} file(s) failed:\n${failed.join('\n')}`, { icon: '⚠️', duration: 6000 })
+        toast(`${allSlips.length} slip(s) parsed. ${failed.length} file(s) failed:\n${failed.join('\n')}`, { duration: 6000 })
       }
       // AIS / 26AS are already parsed on attach (see processTaxDoc), so nothing to do here.
       router.push('/dashboard/profile/salary')

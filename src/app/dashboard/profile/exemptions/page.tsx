@@ -99,7 +99,7 @@ function DetectedHint({ monthly, rule, onUse }: { monthly: number; rule: string;
   return (
     <div style={{ marginTop: 10, padding: '10px 12px', background: T.tint, border: `1px solid ${T.hairline}`, borderRadius: 4 }}>
       <p style={{ fontSize: 11, color: C.text, margin: '0 0 4px' }}>
-        🔎 Detected in your slip: <strong>{fmt(monthly)}/month</strong> <span style={{ color: C.muted }}>(~{fmt(annual)}/year)</span>
+        Detected in your slip: <strong>{fmt(monthly)}/month</strong> <span style={{ color: C.muted }}>(~{fmt(annual)}/year)</span>
       </p>
       <p style={{ fontSize: 10.5, color: C.muted, margin: 0, lineHeight: 1.45 }}>{rule}</p>
       {onUse && (
@@ -386,7 +386,7 @@ export default function ExemptionsPage() {
             </label>
             <div style={{ padding: '8px 10px', background: T.caution.fill, border: `1px solid ${T.caution.border}`, borderRadius: 4, marginBottom: 12 }}>
               <p style={{ fontSize: 10.5, color: T.caution.text, margin: 0, lineHeight: 1.45 }}>
-                ⚠️ HRA exemption is <strong>not available under the new tax regime</strong>. This claim only applies if you opt for the old regime.
+                HRA exemption is <strong>not available under the new tax regime</strong>. This claim only applies if you opt for the old regime.
               </p>
             </div>
             {s.rentPaid > 0 ? (
@@ -439,7 +439,7 @@ export default function ExemptionsPage() {
               </div>
             ) : (
               <div style={{ padding: '10px 12px', background: T.caution.fill, border: `1px solid ${C.wm}`, borderRadius: 4 }}>
-                <p style={{ fontSize: 11, color: T.caution.text, margin: 0 }}>💡 Enter monthly rent to claim HRA exemption.</p>
+                <p style={{ fontSize: 11, color: T.caution.text, margin: 0 }}>Enter monthly rent to claim HRA exemption.</p>
               </div>
             )}
             <p style={{ fontSize: 10, color: C.faint, margin: '10px 0 0', lineHeight: 1.45 }}>HRA · u/s 10(13A) · Min of: actual HRA · rent − 10% basic · 50% (metro) / 40% basic · Old regime only</p>
