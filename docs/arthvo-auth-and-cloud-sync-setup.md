@@ -18,14 +18,15 @@ the app keeps running in its current mock mode until the Supabase env vars are p
   `http://localhost:3000` and your prod domain).
 
 ### 2. Set environment variables (`.env.local` for dev, host env for prod)
-See `.env.example` for the full list. The ones that turn things on:
+See `.env.example` for the full list. The ones that turn things on (do NOT quote `NEXT_PUBLIC_*`
+values — quotes leak into the client bundle and break value comparisons):
 ```
-NEXT_PUBLIC_SUPABASE_URL="https://YOUR-PROJECT.supabase.co"
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="sb_publishable_..."
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR-PROJECT.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 DATABASE_URL="postgresql://...:6543/postgres?pgbouncer=true"   # pooled (runtime)
 DIRECT_DATABASE_URL="postgresql://...:5432/postgres"           # direct (migrations)
 ARTHVO_DATA_ENC_KEY="<32 random bytes, base64>"                # cloud-sync encryption
-NEXT_PUBLIC_CLOUD_SYNC="0"                                     # keep 0 until ready
+NEXT_PUBLIC_CLOUD_SYNC=0                                       # keep 0 until ready (unquoted!)
 ```
 Generate the encryption key:
 ```
@@ -40,7 +41,8 @@ npx prisma migrate dev         # should report "already in sync", create NO new 
 ```
 
 ### 4. Turn cloud sync on (only after 1–3)
-Set `NEXT_PUBLIC_CLOUD_SYNC="1"` and redeploy.
+Set `NEXT_PUBLIC_CLOUD_SYNC=1` (unquoted) and redeploy. In Vercel, enter the value as `1` with no
+quotes — a quoted `"1"` reaches the browser as the literal string `"1"` and the feature stays off.
 
 ---
 
