@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { tokens as T } from '@/lib/tokens'
+import { oldRegimeDeductionSaving } from '@/lib/tax-slabs'
 
 const C = { fg: T.teal, bg: T.paper, card: T.card, border: T.hairline, ink: T.ink, muted: T.muted, green: T.green, sand: T.sand, tint: T.tint, onTeal: T.onTeal, taupe: T.taupe, wheatLine: T.taupeLine }
 const fmt = (n: number) => `₹${Math.abs(Math.round(n || 0)).toLocaleString('en-IN')}`
@@ -172,14 +173,33 @@ export default function DashboardPage() {
 
       {/* Savings opportunities — unused deduction headroom (only when the snapshot carries usage). */}
       {typeof ov.sec80C === 'number' && (() => {
+        // Deductions here only cut OLD-regime tax. When the new regime is recommended there's nothing
+        // actionable to claim — show why, instead of a misleading headroom figure.
+        if (ov.recommendation === 'new') {
+          return (
+            <Card style={{ marginBottom: 16 }}>
+              <h3 style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Where you can save more</h3>
+              <p style={{ fontSize: 12.5, color: C.muted, margin: 0, lineHeight: 1.6 }}>The new regime is your better option, and it doesn&apos;t use 80C, 80D, NPS or home-loan deductions — so there&apos;s nothing more to claim here. These only lower tax under the old regime.</p>
+            </Card>
+          )
+        }
         const items = [
           { label: 'Home-loan interest · 24(b)', limit: 200000, used: Math.max(0, ov.sec24b || 0) },
           { label: '80C investments', limit: 150000, used: Math.max(0, ov.sec80C || 0) },
-          { label: 'Health insurance · 80D', limit: 100000, used: Math.max(0, ov.sec80D || 0) },
+          // Cap respects senior-citizen status (carried in the snapshot as sec80DCap). Older
+          // snapshots written before that field existed fall back to the ₹1L both-senior maximum;
+          // they self-correct the next time the optimizer recomputes.
+          { label: 'Health insurance · 80D', limit: ov.sec80DCap ?? 100000, used: Math.max(0, ov.sec80D || 0) },
           { label: 'NPS · 80CCD(1B)', limit: 50000, used: Math.max(0, ov.nps || 0) },
         ]
         const open = items.filter(i => i.limit - i.used > 0)
-        const taxSaveable = open.reduce((s, i) => s + (i.limit - i.used) * 0.30, 0)
+        // Value each unused gap at the user's real marginal slab (rebate-aware) using the old-regime
+        // taxable income the snapshot now carries. Snapshots written before that field existed fall
+        // back to a flat 30% and self-correct once the optimizer recomputes.
+        const savedFor = (gap: number) => typeof ov.taxableOld === 'number'
+          ? oldRegimeDeductionSaving(ov.taxableOld, gap, ov.seniorStatus || 'normal')
+          : gap * 0.30
+        const taxSaveable = open.reduce((s, i) => s + savedFor(i.limit - i.used), 0)
         return (
           <Card style={{ marginBottom: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
@@ -204,7 +224,7 @@ export default function DashboardPage() {
                       <div style={{ height: 8, background: C.sand, borderRadius: 4, overflow: 'hidden' }}>
                         <div style={{ width: `${pct}%`, height: '100%', background: C.green }} />
                       </div>
-                      <p style={{ fontSize: 11, color: C.muted, margin: '5px 0 0' }}><strong style={{ color: C.fg }}>{fmt(gap)}</strong> unused · save ~{fmt(gap * 0.30)} in tax</p>
+                      <p style={{ fontSize: 11, color: C.muted, margin: '5px 0 0' }}><strong style={{ color: C.fg }}>{fmt(gap)}</strong> unused · save ~{fmt(savedFor(gap))} in tax</p>
                     </div>
                   )
                 })}
