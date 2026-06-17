@@ -24,6 +24,9 @@ export interface ProvisionalVerdictProps {
   footnote?: React.ReactNode
   noSalaryHref?: string
   noSalaryLabel?: string
+  // Optional secondary link beside the CTA (e.g. /start → the step-by-step wizard).
+  secondaryHref?: string
+  secondaryLabel?: string
   // Bump to force a re-read when salary is set/changed by a parent (e.g. the public /try salary gate).
   version?: number
 }
@@ -35,6 +38,8 @@ export default function ProvisionalVerdict({
   footnote = 'Provisional — capital gains, other income and exact TDS are added in “Your Tax”.',
   noSalaryHref = '/dashboard/profile/documents',
   noSalaryLabel = 'Add your slip →',
+  secondaryHref,
+  secondaryLabel,
   version = 0,
 }: ProvisionalVerdictProps) {
   const [v, setV] = useState<QuickVerdict | null>(null)
@@ -144,7 +149,8 @@ export default function ProvisionalVerdict({
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 12, justifyContent: secondaryHref ? 'space-between' : 'flex-end', alignItems: 'center', flexWrap: 'wrap' }}>
+        {secondaryHref ? <Link href={secondaryHref} style={{ fontSize: 12.5, color: T.teal, fontWeight: 600, textDecoration: 'none' }}>{secondaryLabel}</Link> : <span />}
         <Link href={ctaHref} style={{ padding: '12px 22px', background: T.teal, color: T.onTeal, borderRadius: 9, fontWeight: 700, fontSize: 14, textDecoration: 'none' }}>{ctaLabel}</Link>
       </div>
       {footnote && <p style={{ fontSize: 11, color: T.muted, fontStyle: 'italic', margin: '12px 0 0', textAlign: 'center' }}>{footnote}</p>}

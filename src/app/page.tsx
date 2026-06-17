@@ -255,7 +255,7 @@ export default function LandingPage() {
           <span style={{ color:T.green }}><span style={{ whiteSpace:'nowrap' }}>Settled.</span></span>
         </h2>
         <div style={{ display:'flex', gap:12, justifyContent:'center', flexWrap:'wrap' as const }}>
-          <Link href="/signup" className="btn-green"
+          <Link href="/try" className="btn-green"
             style={{ display:'inline-flex', alignItems:'center', gap:12, padding:'16px 40px', background:T.green, color:T.ivory, borderRadius:12, fontWeight:800, textDecoration:'none', fontSize:17, letterSpacing:'-0.01em' }}>
             See which one's yours →
           </Link>

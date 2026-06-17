@@ -383,7 +383,8 @@ export default function DocumentsPage() {
         toast(`${allSlips.length} slip(s) parsed. ${failed.length} file(s) failed:\n${failed.join('\n')}`, { duration: 6000 })
       }
       // AIS / 26AS are already parsed on attach (see processTaxDoc), so nothing to do here.
-      router.push('/dashboard/profile/salary')
+      // Wiring: straight to "here's what we read" to confirm the parse, then the provisional verdict.
+      router.push('/dashboard/tax/confirm')
     } catch (e: any) {
       console.error('[Documents] Outer error:', e)
       toast.error(e.message || 'Upload failed')

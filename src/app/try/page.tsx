@@ -19,28 +19,33 @@ export default function TryPage() {
   const [entered, setEntered] = useState(false)
   const [version, setVersion] = useState(0)
 
-  // Resume if a salary is already on the device (e.g. from a previous visit / the landing estimate).
-  useEffect(() => {
-    try {
-      const s = JSON.parse(localStorage.getItem('av_salary_summary') || 'null')
-      if (s && (s.annualGross || 0) > 0) { setSalary(String(Math.round(s.annualGross / 12))); setEntered(true) }
-    } catch {}
-  }, [])
-
   const seed = (monthlyStr: string) => {
     const m = num(monthlyStr)
     if (!m) return
     const annual = m * 12
     const now = new Date()
     const fyStartYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
-    // A salary-only seed — enough for the provisional range + the quick questions. (No slip yet.)
+    const basic = Math.round(m * 0.4), hra = Math.round(m * 0.2)
+    // Careful summary (drives the verdict) PLUS a light synthetic slip, so the "has data" gates pass
+    // after sign-up — the dashboard opens on their numbers instead of bouncing to a blank upload.
     writeJSON('av_salary_summary', {
       annualGross: annual, annualNet: Math.round(annual * 0.9), annualTDS: 0, fyStartYear,
-      hraBasis: Array.from({ length: 12 }, () => ({ basic: Math.round(m * 0.4), hra: Math.round(m * 0.2) })),
+      hraBasis: Array.from({ length: 12 }, () => ({ basic, hra })),
     })
-    setEntered(true)
-    setVersion(x => x + 1)
+    writeJSON('av_salary_timeline', [{ grossSalary: m, basicSalary: basic, hra, netSalary: Math.round(m * 0.9), month: '', year: String(fyStartYear), _synthetic: true }])
+    setSalary(String(m)); setEntered(true); setVersion(x => x + 1)
   }
+
+  // Resume from a salary carried in (?m= from the landing estimate) or one already on the device.
+  useEffect(() => {
+    try {
+      const mParam = new URLSearchParams(window.location.search).get('m')
+      if (mParam && num(mParam) > 0) { seed(mParam); return }
+      const s = JSON.parse(localStorage.getItem('av_salary_summary') || 'null')
+      if (s && (s.annualGross || 0) > 0) { setSalary(String(Math.round(s.annualGross / 12))); setEntered(true) }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <div style={{ minHeight: '100vh', background: T.paper, color: T.ink, fontFamily: '"Sora",-apple-system,sans-serif' }}>

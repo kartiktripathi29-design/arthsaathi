@@ -146,7 +146,7 @@ export default function BgDemo({ monthly }: { monthly?: number | null }) {
         </div>
 
         <div style={{ textAlign: 'center', marginTop: 14 }}>
-          <Link href="/signup" className="btn-green" style={{ display: 'inline-block', padding: '11px 22px', background: T.teal, color: T.ivory, borderRadius: 10, fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
+          <Link href={monthly && monthly > 0 ? `/try?m=${monthly}` : '/try'} className="btn-green" style={{ display: 'inline-block', padding: '11px 22px', background: T.teal, color: T.ivory, borderRadius: 10, fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
             See which one&apos;s yours →
           </Link>
         </div>

@@ -12,6 +12,8 @@ export default function StartPage() {
       ctaLabel="See the full breakdown →"
       noSalaryHref="/dashboard/profile/documents"
       noSalaryLabel="Add your slip →"
+      secondaryHref="/dashboard/tax/wizard"
+      secondaryLabel="Prefer one question at a time? Walk it step by step →"
     />
   )
 }
