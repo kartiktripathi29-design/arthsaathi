@@ -1746,11 +1746,12 @@ export default function SalaryPageCompleteFinal() {
                   <div style={{ marginBottom: 20 }}>
                     <h3 style={{ fontSize: 13, fontWeight: 600, color: C.fg, margin: '0 0 12px' }}>Earnings</h3>
                     <div style={{ background: C.wl, borderRadius: 6, overflow: 'hidden' }}>
-                      {(md.earnings && md.earnings.length > 0 ? md.earnings : [{ label: 'Gross Salary', amount: md.gross }]).map((e, i, arr) => {
+                      {/* Hide ₹0 earning lines (components not on this slip) — keep the original index so Edit still targets the right component. */}
+                      {(md.earnings && md.earnings.length > 0 ? md.earnings : [{ label: 'Gross Salary', amount: md.gross }]).map((e, i) => ({ e, i })).filter(({ e }) => (e.amount || 0) !== 0).map(({ e, i }, vi, arr) => {
                         const isEditing = overrideKey?.empId === previewEmploymentId && overrideKey?.monthKey === previewMonth && overrideKey?.kind === 'earning' && overrideKey?.index === i
                         const canOverride = !!(md.earnings && md.earnings.length > 0)
                         return (
-                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : 'none', gap: 10 }}>
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: vi < arr.length - 1 ? `1px solid ${C.border}` : 'none', gap: 10 }}>
                             <span style={{ fontSize: 12, color: C.text, flex: 1 }}>{e.label}</span>
                             {isEditing ? (
                               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -2143,7 +2144,7 @@ export default function SalaryPageCompleteFinal() {
                                 <div>
                                   <p style={{ fontSize: 10, fontWeight: 600, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase' }}>Earnings</p>
                                   <div style={{ background: C.wl, borderRadius: 4 }}>
-                                    {(m.earnings && m.earnings.length > 0 ? m.earnings : [{ label: 'Gross', amount: m.gross }]).map((e, i, arr) => (
+                                    {(m.earnings && m.earnings.length > 0 ? m.earnings : [{ label: 'Gross', amount: m.gross }]).filter(e => (e.amount || 0) !== 0).map((e, i, arr) => (
                                       <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : 'none', fontSize: 11 }}>
                                         <span style={{ color: C.text }}>{e.label}</span>
                                         <span style={{ fontWeight: 600, color: C.fg }}>{fmt(e.amount)}</span>
