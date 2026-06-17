@@ -1807,11 +1807,12 @@ export default function SalaryPageCompleteFinal() {
                   <div style={{ marginBottom: 20 }}>
                     <h3 style={{ fontSize: 13, fontWeight: 600, color: C.fg, margin: '0 0 12px' }}>Deductions</h3>
                     <div style={{ background: '#FBF0F0', borderRadius: 6, overflow: 'hidden' }}>
-                      {(md.deductionsList && md.deductionsList.length > 0 ? md.deductionsList : [{ label: 'Deductions', amount: md.deductions }]).map((d, i, arr) => {
+                      {/* Hide ₹0 deduction lines (e.g. PF/ESI not on this slip) — keep the original index so Edit still targets the right component. */}
+                      {(md.deductionsList && md.deductionsList.length > 0 ? md.deductionsList : [{ label: 'Deductions', amount: md.deductions }]).map((d, i) => ({ d, i })).filter(({ d }) => (d.amount || 0) !== 0).map(({ d, i }, vi, arr) => {
                         const isEditing = overrideKey?.empId === previewEmploymentId && overrideKey?.monthKey === previewMonth && overrideKey?.kind === 'deduction' && overrideKey?.index === i
                         const canOverride = !!(md.deductionsList && md.deductionsList.length > 0)
                         return (
-                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : 'none', gap: 10 }}>
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: vi < arr.length - 1 ? `1px solid ${C.border}` : 'none', gap: 10 }}>
                             <span style={{ fontSize: 12, color: C.text, flex: 1 }}>{d.label}</span>
                             {isEditing ? (
                               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -2153,7 +2154,7 @@ export default function SalaryPageCompleteFinal() {
                                 <div>
                                   <p style={{ fontSize: 10, fontWeight: 600, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase' }}>Deductions</p>
                                   <div style={{ background: '#FBF0F0', borderRadius: 4 }}>
-                                    {(m.deductionsList && m.deductionsList.length > 0 ? m.deductionsList : [{ label: 'Deductions', amount: m.deductions }]).map((d, i, arr) => (
+                                    {(m.deductionsList && m.deductionsList.length > 0 ? m.deductionsList : [{ label: 'Deductions', amount: m.deductions }]).filter(d => (d.amount || 0) !== 0).map((d, i, arr) => (
                                       <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : 'none', fontSize: 11 }}>
                                         <span style={{ color: C.text }}>{d.label}</span>
                                         <span style={{ fontWeight: 600, color: C.danger }}>−{fmt(d.amount)}</span>
