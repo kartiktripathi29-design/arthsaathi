@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { tokens as T } from '@/lib/tokens'
 import { GuideStrip } from '@/components/GuideStrip'
 
-const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, bg:T.paper, card:T.card, border:T.hairline, text:T.ink, muted:T.muted, green:T.green, ivory:T.ivory, slip:T.slip, danger:'#B94040' }
+const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, bg:T.paper, card:T.card, border:T.hairline, text:T.ink, muted:T.muted, green:T.green, ivory:T.ivory, slip:T.slip, danger: T.danger.text }
 const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`
 
 // Mobile-only layout overrides (≤767px). Desktop gets no rules here, so inline styles rule untouched.

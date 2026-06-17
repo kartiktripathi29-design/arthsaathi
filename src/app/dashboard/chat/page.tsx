@@ -5,7 +5,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { tokens as T } from '@/lib/tokens'
 
-const C = { fg: T.teal, wheat: T.taupe, wl: T.sand, wm: T.taupeLine, bg: T.paper, card: T.card, border: T.hairline, text: T.ink, muted: T.muted, danger: '#B94040' }
+const C = { fg: T.teal, wheat: T.taupe, wl: T.sand, wm: T.taupeLine, bg: T.paper, card: T.card, border: T.hairline, text: T.ink, muted: T.muted, danger: T.danger.text }
 
 interface Message { role: 'user' | 'assistant'; content: string }
 

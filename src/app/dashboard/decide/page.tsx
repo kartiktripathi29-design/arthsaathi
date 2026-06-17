@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 
 import { tokens as T } from '@/lib/tokens'
 
-const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, bg:T.paper, card:T.card, border:T.hairline, text:T.ink, muted:T.muted, danger:'#B94040' }
+const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, bg:T.paper, card:T.card, border:T.hairline, text:T.ink, muted:T.muted, danger:T.danger.text }
 const fmt = (n:number) => `₹${Math.round(n).toLocaleString('en-IN')}`
 const calcEMI = (p:number, months:number, annualRate:number) => {
   if (annualRate === 0) return p/months
@@ -49,7 +49,7 @@ export default function DecidePage() {
   const verdictConfig = {
     yes:     { title:'Yes, go ahead', color:C.fg, bg:C.wl, border:C.wm, sub:`${fmt(priceNum)} is ${pctOfFree.toFixed(1)}% of your monthly budget. Comfortable.` },
     maybe:   { title:'Possible, but think twice', color:'#7A5A1A', bg:'#FFFAEE', border:'#F0D898', sub:`This is ${pctOfFree.toFixed(1)}% of your free budget. Not dangerous, but not small.` },
-    no:      { title:'Not the best time', color:C.danger, bg:'#FBF0F0', border:'#F0CECE', sub:`This would leave you with ${fmt(Math.max(0,leftAfter))} this month. Too tight.` },
+    no:      { title:'Not the best time', color:C.danger, bg:T.danger.fill, border:T.danger.border, sub:`This would leave you with ${fmt(Math.max(0,leftAfter))} this month. Too tight.` },
     unknown: { title:'Add your profile first', color:C.fg, bg:C.wl, border:C.wm, sub:'Complete My Profile to get a personalised verdict.' },
   }[verdict]
 
@@ -57,7 +57,7 @@ export default function DecidePage() {
     { label:'Pay in full', months:0, rate:0, tag:'Best', tagCol:C.fg, tagBg:C.wl },
     { label:'No-cost EMI (3 months)', months:3, rate:0, tag:'Watch out', tagCol:'#7A5A1A', tagBg:'#FFFAEE' },
     { label:'6-month EMI @ 18%', months:6, rate:18, tag:'If needed', tagCol:'#2A5A8A', tagBg:'#EEF4FD' },
-    { label:'12-month EMI @ 24%', months:12, rate:24, tag:'Avoid', tagCol:C.danger, tagBg:'#FBF0F0' },
+    { label:'12-month EMI @ 24%', months:12, rate:24, tag:'Avoid', tagCol:C.danger, tagBg:T.danger.fill },
   ]
 
   const s = {
@@ -149,7 +149,7 @@ export default function DecidePage() {
                   <div key={i} style={{ background:i===0?C.wl:C.card, border:`1px solid ${i===0?C.wm:C.border}`, borderRadius:5, padding:'12px 14px', marginBottom:8 }}>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
                       <span style={{ fontSize:13, fontWeight:600, color:C.text }}>{opt.label}</span>
-                      <span style={{ fontSize:10, fontWeight:600, padding:'2px 8px', borderRadius:3, background:opt.tagBg, color:opt.tagCol, border:`1px solid ${opt.tagBg==='#FFFAEE'?'#F0D898':opt.tagBg===C.wl?C.wm:opt.tagBg==='#EEF4FD'?'#B5D4F4':'#F0CECE'}` }}>{opt.tag}</span>
+                      <span style={{ fontSize:10, fontWeight:600, padding:'2px 8px', borderRadius:3, background:opt.tagBg, color:opt.tagCol, border:`1px solid ${opt.tagBg==='#FFFAEE'?'#F0D898':opt.tagBg===C.wl?C.wm:opt.tagBg==='#EEF4FD'?'#B5D4F4':T.danger.border}` }}>{opt.tag}</span>
                     </div>
                     <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8 }}>
                       {opt.months===0 ? (

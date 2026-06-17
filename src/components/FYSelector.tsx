@@ -111,16 +111,16 @@ export default function FYSelector({ month, year, onSelect, parsed }: FYSelector
                 </div>
                 <div>
                   <p style={{ fontSize: 10, fontWeight: 600, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase' }}>Deductions</p>
-                  <div style={{ background: '#FBF0F0', borderRadius: 4, border: `1px solid ${C.border}` }}>
+                  <div style={{ background: T.danger.fill, borderRadius: 4, border: `1px solid ${C.border}` }}>
                     {(deductions.length > 0 ? deductions : [{ label: 'Deductions', amount: totalDed } as ParsedComponent]).map((d, i, arr) => (
                       <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 8px', borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : 'none', fontSize: 10.5 }}>
                         <span style={{ color: C.fg }}>{d.label}</span>
-                        <span style={{ fontWeight: 600, color: '#B94040' }}>−{fmt(d.amount)}</span>
+                        <span style={{ fontWeight: 600, color: T.danger.text }}>−{fmt(d.amount)}</span>
                       </div>
                     ))}
                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 8px', fontSize: 10.5, fontWeight: 700, background: '#F7E0E0', borderTop: `1px solid ${C.border}` }}>
-                      <span style={{ color: '#B94040' }}>Total</span>
-                      <span style={{ color: '#B94040' }}>−{fmt(totalDed)}</span>
+                      <span style={{ color: T.danger.text }}>Total</span>
+                      <span style={{ color: T.danger.text }}>−{fmt(totalDed)}</span>
                     </div>
                   </div>
                 </div>

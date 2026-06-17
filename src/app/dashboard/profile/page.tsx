@@ -13,7 +13,7 @@ import { calcOldRegime, calcNewRegime, calcHRAExemption } from '@/lib/tax-engine
 
 import { tokens as T } from '@/lib/tokens'
 
-const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, bg:T.paper, card:T.card, border:T.hairline, text:T.ink, muted:T.muted, danger:'#B94040' }
+const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, bg:T.paper, card:T.card, border:T.hairline, text:T.ink, muted:T.muted, danger:T.danger.text }
 const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`
 const uid = () => Math.random().toString(36).slice(2,8)
 
@@ -740,7 +740,7 @@ function SalaryMonthEditor({ monthKey, isActual, isOverride, initialRows, onClos
         </div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginTop:10, fontSize:11.5 }}>
           <div style={{ padding:'8px 10px', background:C.wl, borderRadius:4 }}><p style={{ fontSize:10, color:C.muted, margin:0 }}>Earnings</p><p style={{ fontWeight:600, color:C.text, margin:0 }}>₹{totalEarning.toLocaleString('en-IN')}</p></div>
-          <div style={{ padding:'8px 10px', background:'#FBEFEF', borderRadius:4 }}><p style={{ fontSize:10, color:C.muted, margin:0 }}>Deductions</p><p style={{ fontWeight:600, color:C.danger, margin:0 }}>−₹{totalDeduction.toLocaleString('en-IN')}</p></div>
+          <div style={{ padding:'8px 10px', background:T.danger.fill, borderRadius:4 }}><p style={{ fontSize:10, color:C.muted, margin:0 }}>Deductions</p><p style={{ fontWeight:600, color:C.danger, margin:0 }}>−₹{totalDeduction.toLocaleString('en-IN')}</p></div>
           <div style={{ padding:'8px 10px', background:'#EEF2EE', borderRadius:4 }}><p style={{ fontSize:10, color:C.muted, margin:0 }}>Net</p><p style={{ fontWeight:600, color:'#2A7A4A', margin:0 }}>₹{(totalEarning - totalDeduction).toLocaleString('en-IN')}</p></div>
         </div>
         <div style={{ display:'flex', gap:8, marginTop:14, flexWrap:'wrap' as const }}>
@@ -2409,7 +2409,7 @@ function ProfileContent() {
                       const isSurplusNew = mte.shortfallNew < 0
                       return (
                         <div style={{ ...S.card, border:`1.5px solid #D85A30`, background:'#FFF8F4' }}>
-                          <div style={{ padding:'10px 16px', background:'#FBEFEF', borderBottom:`1px solid ${C.border}`, display:'flex', alignItems:'center', gap:8 }}>
+                          <div style={{ padding:'10px 16px', background:T.danger.fill, borderBottom:`1px solid ${C.border}`, display:'flex', alignItems:'center', gap:8 }}>
                             <span style={{ fontSize:14 }}>△</span>
                             <span style={{ fontSize:11.5, fontWeight:700, color:'#A04020', letterSpacing:'0.04em', textTransform:'uppercase' as const }}>Multi-employer FY · TDS may be short</span>
                           </div>
@@ -2470,9 +2470,9 @@ function ProfileContent() {
                               <div style={{ padding:'8px 10px', borderTop:`1px solid ${C.border}`, color:C.text }}>Expected tax</div>
                               <div style={{ padding:'8px 10px', borderTop:`1px solid ${C.border}`, borderLeft:`1px solid ${C.border}`, textAlign:'right' as const, fontWeight:600, color:C.text }}>{fmt(mte.expectedTaxOld)}</div>
                               <div style={{ padding:'8px 10px', borderTop:`1px solid ${C.border}`, borderLeft:`1px solid ${C.border}`, textAlign:'right' as const, fontWeight:600, color:C.text }}>{fmt(mte.expectedTaxNew)}</div>
-                              <div style={{ padding:'8px 10px', borderTop:`1px solid ${C.border}`, fontWeight:600, color:C.text, background:isSurplusOld || isSurplusNew ? '#EEF2EE' : '#FBEFEF' }}>{isSurplusOld && isSurplusNew ? 'TDS surplus' : 'Shortfall'}</div>
-                              <div style={{ padding:'8px 10px', borderTop:`1px solid ${C.border}`, borderLeft:`1px solid ${C.border}`, textAlign:'right' as const, fontWeight:700, color: isSurplusOld ? '#2A7A4A' : '#D85A30', background:isSurplusOld ? '#EEF2EE' : '#FBEFEF' }}>{isSurplusOld ? `+${fmt(Math.abs(mte.shortfallOld))}` : fmt(mte.shortfallOld)}</div>
-                              <div style={{ padding:'8px 10px', borderTop:`1px solid ${C.border}`, borderLeft:`1px solid ${C.border}`, textAlign:'right' as const, fontWeight:700, color: isSurplusNew ? '#2A7A4A' : '#D85A30', background:isSurplusNew ? '#EEF2EE' : '#FBEFEF' }}>{isSurplusNew ? `+${fmt(Math.abs(mte.shortfallNew))}` : fmt(mte.shortfallNew)}</div>
+                              <div style={{ padding:'8px 10px', borderTop:`1px solid ${C.border}`, fontWeight:600, color:C.text, background:isSurplusOld || isSurplusNew ? '#EEF2EE' : T.danger.fill }}>{isSurplusOld && isSurplusNew ? 'TDS surplus' : 'Shortfall'}</div>
+                              <div style={{ padding:'8px 10px', borderTop:`1px solid ${C.border}`, borderLeft:`1px solid ${C.border}`, textAlign:'right' as const, fontWeight:700, color: isSurplusOld ? '#2A7A4A' : '#D85A30', background:isSurplusOld ? '#EEF2EE' : T.danger.fill }}>{isSurplusOld ? `+${fmt(Math.abs(mte.shortfallOld))}` : fmt(mte.shortfallOld)}</div>
+                              <div style={{ padding:'8px 10px', borderTop:`1px solid ${C.border}`, borderLeft:`1px solid ${C.border}`, textAlign:'right' as const, fontWeight:700, color: isSurplusNew ? '#2A7A4A' : '#D85A30', background:isSurplusNew ? '#EEF2EE' : T.danger.fill }}>{isSurplusNew ? `+${fmt(Math.abs(mte.shortfallNew))}` : fmt(mte.shortfallNew)}</div>
                             </div>
                             <p style={{ fontSize:10.5, color:C.muted, margin:'0 0 8px', lineHeight:1.5 }}>
                               <strong style={{ color:C.text }}>Note:</strong> Expected tax assumes only what's on your slips (EPF + HRA exemption based on slip's basic/HRA, rent assumed ₹0). Once you finish in Your Tax with rent, 80D, and other deductions, the real shortfall will be lower.
@@ -2990,7 +2990,7 @@ function ProfileContent() {
                       <span style={{ color:'#2A7A4A' }}>+{fmt(pnl.monthlyIncome)}/mo</span>
                     </div>
 
-                    <div style={{ padding:'8px 14px', background:'#FBF0F0', borderBottom:`1px solid #F0CECE`, fontSize:10, fontWeight:700, color:C.danger, letterSpacing:'0.06em', textTransform:'uppercase' as const, marginTop:1 }}>Expenses</div>
+                    <div style={{ padding:'8px 14px', background:T.danger.fill, borderBottom:`1px solid ${T.danger.border}`, fontSize:10, fontWeight:700, color:C.danger, letterSpacing:'0.06em', textTransform:'uppercase' as const, marginTop:1 }}>Expenses</div>
                     {pnl.expenseLines.length === 0 ? (
                       <div style={{ ...S.row, fontSize:12, color:C.muted, fontStyle:'italic' as const }}>No expenses detected</div>
                     ) : pnl.expenseLines.map(line => {
@@ -3111,7 +3111,7 @@ function ProfileContent() {
                   {/* Spending spikes */}
                   {analytics.spikes.length > 0 && (
                     <div style={S.card}>
-                      <div style={{ ...S.cardHead, background:'#FBF0F0', borderColor:'#F0CECE' }}>Spending spikes — last month vs average</div>
+                      <div style={{ ...S.cardHead, background:T.danger.fill, borderColor:T.danger.border }}>Spending spikes — last month vs average</div>
                       {analytics.spikes.map(s => (
                         <div key={s.category} style={{ ...S.row, gap:8 }}>
                           <span style={{ flex:1 }}>

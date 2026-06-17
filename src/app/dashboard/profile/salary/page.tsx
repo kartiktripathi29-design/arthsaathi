@@ -16,7 +16,7 @@ import { GuideStrip } from '@/components/GuideStrip'
 
 import { tokens as T } from '@/lib/tokens'
 
-const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, bg:T.paper, card:T.card, border:T.hairline, text:T.ink, muted:T.muted, green:T.green, danger:'#B94040' }
+const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, bg:T.paper, card:T.card, border:T.hairline, text:T.ink, muted:T.muted, green:T.green, danger:T.danger.text }
 const fmt = (n:number) => n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`
 // Compact Indian-notation amount (K / L / Cr) for the at-a-glance timeline cell ONLY, so a long ₹
 // figure can't floor a 1fr grid track wider than its share. Full precision stays one tap away in the
@@ -1807,7 +1807,7 @@ export default function SalaryPageCompleteFinal() {
                   {/* Deductions — each row has an inline Override */}
                   <div style={{ marginBottom: 20 }}>
                     <h3 style={{ fontSize: 13, fontWeight: 600, color: C.fg, margin: '0 0 12px' }}>Deductions</h3>
-                    <div style={{ background: '#FBF0F0', borderRadius: 6, overflow: 'hidden' }}>
+                    <div style={{ background: T.danger.fill, borderRadius: 6, overflow: 'hidden' }}>
                       {/* Hide ₹0 deduction lines (e.g. PF/ESI not on this slip) — keep the original index so Edit still targets the right component. */}
                       {(md.deductionsList && md.deductionsList.length > 0 ? md.deductionsList : [{ label: 'Deductions', amount: md.deductions }]).map((d, i) => ({ d, i })).filter(({ d }) => (d.amount || 0) !== 0).map(({ d, i }, vi, arr) => {
                         const isEditing = overrideKey?.empId === previewEmploymentId && overrideKey?.monthKey === previewMonth && overrideKey?.kind === 'deduction' && overrideKey?.index === i
@@ -1840,7 +1840,7 @@ export default function SalaryPageCompleteFinal() {
                           </div>
                         )
                       })}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: '#FBF0F0', fontWeight: 600, borderTop: `1px solid ${C.border}` }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: T.danger.fill, fontWeight: 600, borderTop: `1px solid ${C.border}` }}>
                         <span style={{ fontSize: 12, color: C.danger }}>Total deductions</span>
                         <span style={{ fontSize: 12, color: C.danger }}>−{fmt(md.deductions)}</span>
                       </div>
@@ -2014,12 +2014,12 @@ export default function SalaryPageCompleteFinal() {
                   const isForecastCell = wizard.intent === 'forecast' && m.source === 'projected' && m.gross > 0
                   const bg = m.source === 'actual' ? C.fg
                     : m.source === 'edited' ? C.wm
-                    : m.source === 'inferred' ? '#CFE0F0'
+                    : m.source === 'inferred' ? T.source.fill
                     : isForecastCell ? T.caution.fill
                     : C.border
                   const fg = m.source === 'actual' ? T.onTeal
                     : m.source === 'edited' ? T.ink
-                    : m.source === 'inferred' ? '#1F4E7A'
+                    : m.source === 'inferred' ? T.source.text
                     : isForecastCell ? T.caution.text
                     : C.muted
                   const icon = isForecastCell ? '◇'
@@ -2030,7 +2030,7 @@ export default function SalaryPageCompleteFinal() {
                   const anomaly = anomalyByMonth.get(m.monthKey)
                   const cellBorder = anomaly ? `2px solid ${T.caution.text}`
                     : isForecastCell ? `2px dashed ${T.caution.text}`
-                    : m.source === 'inferred' ? `1px solid #7AA8D1`
+                    : m.source === 'inferred' ? `1px solid ${T.source.border}`
                     : 'none'
                   return (
                     <button
@@ -2074,7 +2074,7 @@ export default function SalaryPageCompleteFinal() {
               <div style={{ display: 'flex', gap: 12, fontSize: 10.5, color: C.muted, marginBottom: 14, flexWrap: 'wrap' }}>
                 <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: C.fg, marginRight: 4, verticalAlign: 'middle' }} /><strong style={{ color: C.fg }}>●</strong> Actual (from slip)</span>
                 <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: C.wm, marginRight: 4, verticalAlign: 'middle' }} /><strong style={{ color: C.fg }}>◐</strong> Edited (you changed it)</span>
-                <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#CFE0F0', border: '1px solid #7AA8D1', marginRight: 4, verticalAlign: 'middle' }} /><strong style={{ color: '#1F4E7A' }}>◆</strong> Inferred (from another slip)</span>
+                <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: T.source.fill, border: `1px solid ${T.source.border}`, marginRight: 4, verticalAlign: 'middle' }} /><strong style={{ color: T.source.text }}>◆</strong> Inferred (from another slip)</span>
                 {wizard.intent === 'forecast' && (
                   <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: T.caution.fill, border: `2px dashed ${T.caution.text}`, marginRight: 4, verticalAlign: 'middle' }} />◇ Forecast</span>
                 )}
@@ -2154,7 +2154,7 @@ export default function SalaryPageCompleteFinal() {
                                 </div>
                                 <div>
                                   <p style={{ fontSize: 10, fontWeight: 600, color: C.muted, margin: '0 0 6px', textTransform: 'uppercase' }}>Deductions</p>
-                                  <div style={{ background: '#FBF0F0', borderRadius: 4 }}>
+                                  <div style={{ background: T.danger.fill, borderRadius: 4 }}>
                                     {(m.deductionsList && m.deductionsList.length > 0 ? m.deductionsList : [{ label: 'Deductions', amount: m.deductions }]).filter(d => (d.amount || 0) !== 0).map((d, i, arr) => (
                                       <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : 'none', fontSize: 11 }}>
                                         <span style={{ color: C.text }}>{d.label}</span>

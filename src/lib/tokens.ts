@@ -48,6 +48,20 @@ export const tokens = {
     fill: 'var(--caut-f)',
     border: 'var(--caut-b)',
   },
+
+  /** danger — error / over-budget / negative amounts */
+  danger: {
+    text: 'var(--danger-t)',
+    fill: 'var(--danger-f)',
+    border: 'var(--danger-b)',
+  },
+
+  /** source — "inferred from another slip" timeline state */
+  source: {
+    text: 'var(--src-t)',
+    fill: 'var(--src-f)',
+    border: 'var(--src-b)',
+  },
 } as const
 
 export type Tokens = typeof tokens

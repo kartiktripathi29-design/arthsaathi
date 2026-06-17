@@ -233,7 +233,7 @@ export default function DocumentsPage() {
 
   const DocStatusLine = ({ status }: { status: DocStatus }) => {
     if (status.state === 'idle') return null
-    const color = status.state === 'done' ? C.green : status.state === 'error' ? '#B94040' : C.muted
+    const color = status.state === 'done' ? C.green : status.state === 'error' ? T.danger.text : C.muted
     const text = status.state === 'reading' ? 'Reading document…' : status.msg
     return <p style={{ fontSize: 11, color, margin: '8px 0 0', fontWeight: 500 }}>{text}</p>
   }

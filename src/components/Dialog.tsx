@@ -16,7 +16,7 @@ import { tokens as T } from '@/lib/tokens'
 
 const C = {
   fg: T.teal, bg: T.paper, card: T.card, border: T.hairline,
-  text: T.ink, muted: T.muted, danger: '#B94040', wl: T.sand,
+  text: T.ink, muted: T.muted, danger: T.danger.text, wl: T.sand,
 }
 
 export interface ConfirmOptions {

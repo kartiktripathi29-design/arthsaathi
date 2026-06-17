@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 
 import { tokens as T } from '@/lib/tokens'
 
-const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, bg:T.paper, card:T.card, border:T.hairline, text:T.ink, muted:T.muted, danger:'#B94040' }
+const C = { fg:T.teal, wheat:T.taupe, wl:T.sand, wm:T.taupeLine, bg:T.paper, card:T.card, border:T.hairline, text:T.ink, muted:T.muted, danger:T.danger.text }
 const fmt = (n:number) => `₹${Math.round(n).toLocaleString('en-IN')}`
 const uid = () => Math.random().toString(36).slice(2,8)
 
@@ -297,7 +297,7 @@ export default function InvestPage() {
 
               {/* Over-budget warning */}
               {totalUser > freeToSpend && (
-                <div style={{ background:'#FBF0F0', border:`1px solid #F0CECE`, borderRadius:5, padding:'9px 14px', fontSize:12.5, color:C.danger, marginBottom:12 }}>
+                <div style={{ background:T.danger.fill, border:`1px solid ${T.danger.border}`, borderRadius:5, padding:'9px 14px', fontSize:12.5, color:C.danger, marginBottom:12 }}>
                   You've allocated {fmt(totalUser - freeToSpend)} more than your free-to-invest amount. Reduce some amounts.
                 </div>
               )}

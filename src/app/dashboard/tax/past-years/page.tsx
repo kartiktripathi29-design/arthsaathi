@@ -4,7 +4,7 @@ import { passwordDialog } from '@/components/Dialog'
 import { tokens as T } from '@/lib/tokens'
 import type { SavingsResult, SeniorStatus } from '@/lib/tax-history'
 
-const C = { fg: T.teal, bg: T.paper, card: T.card, border: T.hairline, text: T.ink, muted: T.muted, faint: T.faint, green: T.green, ivory: T.ivory, onTeal: T.onTeal, tint: T.tint, marigold: T.marigold, caution: T.caution, danger: '#B94040' }
+const C = { fg: T.teal, bg: T.paper, card: T.card, border: T.hairline, text: T.ink, muted: T.muted, faint: T.faint, green: T.green, ivory: T.ivory, onTeal: T.onTeal, tint: T.tint, marigold: T.marigold, caution: T.caution, danger: T.danger.text }
 const fmt = (n: number) => (n === 0 ? '₹0' : `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`)
 const regimeLabel = (r: 'old' | 'new') => (r === 'old' ? 'Old regime' : 'New regime')
 

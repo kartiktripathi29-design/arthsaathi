@@ -80,7 +80,7 @@ function TaxBadge({ transactions }: { transactions: Transaction[] }) {
   return (
     <span style={{ display: 'flex', gap: 4 }}>
       {ltcg && <span style={{ fontSize: 10, fontWeight: 600, color: '#2A7A4A', background: '#EEF2EE', padding: '2px 6px', borderRadius: 3, border: '1px solid #C8D8C8' }}>LTCG</span>}
-      {stcg && <span style={{ fontSize: 10, fontWeight: 600, color: '#B94040', background: '#FBF0F0', padding: '2px 6px', borderRadius: 3, border: '1px solid #F0CECE' }}>STCG</span>}
+      {stcg && <span style={{ fontSize: 10, fontWeight: 600, color: T.danger.text, background: T.danger.fill, padding: '2px 6px', borderRadius: 3, border: `1px solid ${T.danger.border}` }}>STCG</span>}
     </span>
   );
 }
@@ -182,7 +182,7 @@ function HoldingDetail({ holding, C }: { holding: Holding; C: any }) {
               return (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 10px', borderBottom: i < holding.transactions.length - 1 ? `1px solid #FAF7F2` : 'none', fontSize: 11.5, background: i % 2 === 0 ? '#fff' : '#FDFAF6' }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 10, fontWeight: 600, color: isBuy ? '#2A7A4A' : isSell ? '#B94040' : C.muted, background: isBuy ? '#EEF2EE' : isSell ? '#FBF0F0' : C.wl, padding: '1px 6px', borderRadius: 3, minWidth: 36, textAlign: 'center' as const }}>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: isBuy ? '#2A7A4A' : isSell ? T.danger.text : C.muted, background: isBuy ? '#EEF2EE' : isSell ? T.danger.fill : C.wl, padding: '1px 6px', borderRadius: 3, minWidth: 36, textAlign: 'center' as const }}>
                       {isBuy ? 'BUY' : isSell ? 'SELL' : (t.type || 'TXN').toUpperCase()}
                     </span>
                     <span style={{ color: C.muted }}>{t.date}</span>
@@ -190,7 +190,7 @@ function HoldingDetail({ holding, C }: { holding: Holding; C: any }) {
                   <span style={{ display: 'flex', gap: 16 }}>
                     <span style={{ color: C.text }}>Qty: <strong>{t.units?.toLocaleString('en-IN')}</strong></span>
                     <span style={{ color: C.text }}>@ ₹<strong>{t.price?.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</strong></span>
-                    {t.amount && <span style={{ color: isBuy ? '#2A7A4A' : '#B94040', fontWeight: 600 }}>₹{Math.round(t.amount).toLocaleString('en-IN')}</span>}
+                    {t.amount && <span style={{ color: isBuy ? '#2A7A4A' : T.danger.text, fontWeight: 600 }}>₹{Math.round(t.amount).toLocaleString('en-IN')}</span>}
                   </span>
                 </div>
               );
@@ -344,7 +344,7 @@ export default function DematHoldings({ existingHoldings, onSuccess }: DematHold
               <p style={{ fontSize: 10.5, color: C.muted, margin: 0 }}>OTP sent to your CDSL-registered mobile</p>
             </>
           )}
-          {errorMsg && <p style={{ fontSize: 11, color: '#B94040', margin: '4px 0 0', background: '#FBF0F0', padding: '4px 8px', borderRadius: 4 }}>{errorMsg}</p>}
+          {errorMsg && <p style={{ fontSize: 11, color: T.danger.text, margin: '4px 0 0', background: T.danger.fill, padding: '4px 8px', borderRadius: 4 }}>{errorMsg}</p>}
         </div>
         {holdings ? (
           <button onClick={handleConnect} disabled={status === 'loading' || !sdkReady}

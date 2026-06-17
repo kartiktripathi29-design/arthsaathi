@@ -9,7 +9,7 @@ import toast from 'react-hot-toast'
 import { tokens as T } from '@/lib/tokens'
 import { getStoredIdentity, maskPan } from '@/lib/identity'
 
-const C = { fg: T.teal, bg: T.paper, card: T.card, border: T.hairline, ink: T.ink, muted: T.muted, green: T.green, sand: T.sand, wheat: T.taupe, danger: '#B94040' }
+const C = { fg: T.teal, bg: T.paper, card: T.card, border: T.hairline, ink: T.ink, muted: T.muted, green: T.green, sand: T.sand, wheat: T.taupe, danger: T.danger.text }
 const fmt = (n: number) => `₹${Math.abs(Math.round(n || 0)).toLocaleString('en-IN')}`
 const signed = (n: number) => `${n < 0 ? '−' : ''}${fmt(n)}`
 

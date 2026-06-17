@@ -31,6 +31,14 @@
   --caut-t: #9A6B16;       /* text */
   --caut-f: #FBF1DD;       /* fill */
   --caut-b: #ECD9AE;       /* border */
+  /* danger set — error / over-budget / negative amounts */
+  --danger-t: #B94040;     /* text */
+  --danger-f: #FBF0F0;     /* fill */
+  --danger-b: #F0CECE;     /* border */
+  /* source set — "inferred from another slip" timeline state (cool counterpoint to teal) */
+  --src-t: #1F4E7A;        /* text */
+  --src-f: #CFE0F0;        /* fill */
+  --src-b: #7AA8D1;        /* border */
 
   --brand: #0E4D47;
   --brand-light: #E3EDEA;
@@ -75,6 +83,14 @@
   --caut-t: #D9B25C;
   --caut-f: #2A2415;
   --caut-b: #4A3D1E;
+  /* danger set */
+  --danger-t: #E08A8A;
+  --danger-f: #2B1A1A;
+  --danger-b: #4C2E2E;
+  /* source set — inferred timeline state */
+  --src-t: #8FB8E0;
+  --src-f: #172430;
+  --src-b: #2F4A5E;
 }
 
 * { box-sizing: border-box; }
