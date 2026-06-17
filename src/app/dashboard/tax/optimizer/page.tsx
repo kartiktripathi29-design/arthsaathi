@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { computeSec80G } from '@/lib/deductions'
 import { getSalaryFacts } from '@/lib/salary-facts'
-import { slabBreakdown, type SeniorStatus } from '@/lib/tax-slabs'
+import { slabBreakdown, oldRegimeDeductionSaving, type SeniorStatus } from '@/lib/tax-slabs'
 import { GuideStrip } from '@/components/GuideStrip'
 
 import { tokens as T } from '@/lib/tokens'
@@ -461,7 +461,7 @@ export default function TaxOptimizerPage() {
         hraExempt, otherExempts, totalExemptions,
         // Component break-up of Section-10 exemptions (for the expandable row).
         exemptBreakdown: { hra: hraExempt, lta: ltaCapped, driver: Number(exemptionsData.driverSalary || 0), car: Number(exemptionsData.carMaintenance || 0), daily: Number(exemptionsData.dailyAllowance || 0), superannuation: superannuationCapped, pfWithdrawal: Number(exemptionsData.pfWithdrawal || 0), gratuity: gratuityCapped, medical: Number(exemptionsData.medical || 0), other: Number(exemptionsData.other || 0) },
-        sec80C, sec80D, sec24b, nps, sec80TTA, sec80TTB, sec80E, sec80G, totalDeductions,
+        sec80C, sec80D, sec80DCap: selfCap + parentsCap, sec24b, nps, sec80TTA, sec80TTB, sec80E, sec80G, totalDeductions,
         stdDedNew, stdDedOld,
         subTotalNew, subTotalOld,
         taxableNew, taxableOld,
@@ -501,7 +501,12 @@ export default function TaxOptimizerPage() {
         tdsPaid: calc.tdsPaid, balance: rec ? calc.newBalance : calc.oldBalance,
         itrForm: calc.itrForm,
         // Deduction usage — lets the Dashboard show unused 80C/80D/NPS/home-loan headroom.
-        sec80C: calc.sec80C, sec80D: calc.sec80D, sec24b: calc.sec24b, nps: calc.nps,
+        // sec80DCap travels too, so the Dashboard's 80D headroom respects senior-citizen limits
+        // (₹25k/₹50k self · ₹25k/₹50k parents) instead of assuming the ₹1L both-senior maximum.
+        sec80C: calc.sec80C, sec80D: calc.sec80D, sec80DCap: calc.sec80DCap, sec24b: calc.sec24b, nps: calc.nps,
+        // Old-regime taxable income + senior status, so the Dashboard's headroom can value unused
+        // deductions at the user's real marginal slab (rebate-aware) instead of a flat 30%.
+        taxableOld: calc.taxableOld, seniorStatus,
         computedAt: Date.now(),
       }))
       // Full computed picture, for the CA-ready computation statement (/dashboard/tax/computation).
@@ -925,6 +930,15 @@ export default function TaxOptimizerPage() {
       <div style={{ background: C.wl, border: `1px solid ${C.wm}`, borderRadius: 8, padding: 20, marginBottom: 24 }}>
         <h3 style={{ fontSize: 13, fontWeight: 600, color: C.fg, margin: '0 0 16px' }}>Where you can save more</h3>
 
+        {calc.recommendation === 'new' ? (
+          // These deductions (80C / 80D / NPS 80CCD(1B) / 24(b)) only reduce OLD-regime tax. When the
+          // new regime wins, claiming more of them changes nothing on the bill the user will actually
+          // file — so we don't dangle a saving that isn't real. (HRA is old-regime-only too.)
+          <div style={{ padding: '12px', background: C.slip.fill, border: `1px solid ${C.slip.border}`, borderRadius: 6 }}>
+            <p style={{ fontSize: 11.5, color: C.muted, margin: 0, lineHeight: 1.6 }}>The new regime is your better option — and it doesn&apos;t use 80C, 80D, NPS (80CCD(1B)), HRA or home-loan-interest deductions. So there&apos;s nothing more to claim here; these only lower tax under the old regime.</p>
+          </div>
+        ) : (
+          <>
         {!calc.hraFilled && calc.grossSalary > 0 && (
           <div style={{ padding: '12px', background: C.caution.fill, border: `1px solid ${C.wm}`, borderRadius: 6, marginBottom: 12 }}>
             <p style={{ fontSize: 11, color: C.caution.text, margin: 0, fontWeight: 500 }}>You haven't entered rent details. If you pay rent, fill <Link href="/dashboard/profile/exemptions" style={{ color: C.caution.text, textDecoration: 'underline' }}>Allowances</Link> to claim HRA and save more.</p>
@@ -937,7 +951,7 @@ export default function TaxOptimizerPage() {
           const saveItems = [
             { label: 'Home Loan Interest', limit: 200000, used: calc.sec24b },
             { label: '80C Investments', limit: 150000, used: calc.sec80C },
-            { label: 'Health Insurance (80D)', limit: 100000, used: calc.sec80D },
+            { label: 'Health Insurance (80D)', limit: calc.sec80DCap, used: calc.sec80D },
             { label: 'NPS (80CCD(1B))', limit: 50000, used: calc.nps },
           ].filter(s => Math.max(0, s.limit - s.used) > 0)
           if (saveItems.length === 0) {
@@ -951,8 +965,9 @@ export default function TaxOptimizerPage() {
           <div className="opt-save" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           {saveItems.map(s => {
             const gap = Math.max(0, s.limit - s.used)
-            const slabRate = 0.30   // assume 30% marginal slab for upper-middle salary
-            const yearlyTaxSaved = gap * slabRate
+            // Exact saving at the user's real marginal slab (senior-aware, rebate + cess included),
+            // not a flat 30% — so a filer already in the zero-tax zone sees ₹0, not a false promise.
+            const yearlyTaxSaved = oldRegimeDeductionSaving(calc.taxableOld, gap, seniorStatus)
             return (
               <Link key={s.label} href="/dashboard/profile/deductions" style={{ display: 'block', padding: '10px', background: T.card, borderRadius: 4, border: `1px solid ${C.border}`, textDecoration: 'none', color: 'inherit' }}>
                 <p style={{ fontSize: 10, color: C.muted, margin: '0 0 4px', fontWeight: 500 }}>{s.label}</p>
@@ -966,6 +981,8 @@ export default function TaxOptimizerPage() {
           )
         })()}
         <p style={{ fontSize: 10, color: C.muted, margin: '12px 0 0', fontStyle: 'italic' }}>Only invest if it makes financial sense — tax saving is a bonus, not the goal.</p>
+          </>
+        )}
       </div>
 
       {/* Hand-off to a tax consultant */}

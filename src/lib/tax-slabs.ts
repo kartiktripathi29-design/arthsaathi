@@ -103,3 +103,17 @@ export function estimateAnnualTax(annualSalary: number, regime: 'new' | 'old', s
   const standardDeduction = regime === 'old' ? 50000 : 75000
   return slabBreakdown(Math.max(0, annualSalary - standardDeduction), regime, seniorStatus).total
 }
+
+// Tax actually saved by claiming `extraDeduction` more of an old-regime Chapter VI-A deduction
+// (80C / 80D / 80CCD(1B) / 24(b)), starting from the user's CURRENT old-regime taxable income.
+// Exact slab-delta — it runs the full breakdown (87A rebate + cess included) at both points and
+// returns the difference. So it correctly:
+//   • uses the user's real marginal slab (senior-aware), not a flat assumed rate;
+//   • tapers when the deduction crosses a slab boundary;
+//   • returns ₹0 once taxable income is already in the rebate / zero-tax zone (≤ ₹5L old regime),
+//     where a flat-rate guess would wrongly promise savings.
+export function oldRegimeDeductionSaving(taxableOld: number, extraDeduction: number, seniorStatus: SeniorStatus = 'normal'): number {
+  const before = slabBreakdown(Math.max(0, taxableOld), 'old', seniorStatus).total
+  const after = slabBreakdown(Math.max(0, taxableOld - Math.max(0, extraDeduction)), 'old', seniorStatus).total
+  return Math.max(0, before - after)
+}
