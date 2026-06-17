@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { computeSec80G, type DonationCat } from '@/lib/deductions'
 import { getSalaryFacts } from '@/lib/salary-facts'
 import { GuideStrip } from '@/components/GuideStrip'
+import VerdictBarLive from '@/components/VerdictBarLive'
 
 import { tokens as T } from '@/lib/tokens'
 
@@ -180,6 +181,7 @@ export default function DeductionsPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '20px 0' }}>
+      <VerdictBarLive />
       <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Deductions</h1>
       <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>Tax-saving investments and expenses. <span style={{ whiteSpace: 'nowrap' }}>(These only reduce tax in Old Regime)</span></p>
 

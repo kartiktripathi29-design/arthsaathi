@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { computeAnnualHraExemption, type HraMonth } from '@/lib/salary-analytics'
 import { getSalaryFacts } from '@/lib/salary-facts'
 import { GuideStrip } from '@/components/GuideStrip'
+import VerdictBarLive from '@/components/VerdictBarLive'
 
 import { tokens as T } from '@/lib/tokens'
 
@@ -319,6 +320,7 @@ export default function ExemptionsPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '20px 0' }}>
+      <VerdictBarLive />
       <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Allowances</h1>
       <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>Income that is completely tax-free — <span style={{ whiteSpace: 'nowrap' }}>Old Regime only · Section 10</span></p>
 

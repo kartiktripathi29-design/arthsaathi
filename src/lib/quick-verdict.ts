@@ -8,8 +8,9 @@
 // Productionising this means extracting the optimizer's computation into one shared engine that both
 // screens call (so there is literally one code path). For the prototype we replicate the subset.
 
-import { slabBreakdown, estimateAnnualTax, type SeniorStatus } from './tax-slabs'
+import { estimateAnnualTax, type SeniorStatus } from './tax-slabs'
 import { getSalaryFacts } from './salary-facts'
+import { computeRegimeCore, cap80DSelf, cap80DParents, CAP_80C, CAP_24B, CAP_NPS, CAP_80TTA, CAP_80TTB } from './verdict-engine'
 
 export interface QuickVerdict {
   hasSalary: boolean
@@ -56,27 +57,24 @@ export function computeQuickVerdict(): QuickVerdict {
   const hra = exm.hra || {}
   const hraExempt = (typeof hra.annualExemption === 'number' && n(hra.rentPaid) > 0) ? Math.round(hra.annualExemption) : 0
 
-  const sec80C = Math.min(150000,
+  // Caps come from the shared engine — same limits the optimizer applies.
+  const sec80C = Math.min(CAP_80C,
     n(ded.ppf) + n(ded.elss) + n(ded.lic) + n(ded.tuition) + n(ded.nsc) +
     n(ded.employeePF) + n(ded.homeLoanPrincipal) + n(ded.termInsurance) + n(ded.other80C))
-  const selfCap = senior !== 'normal' ? 50000 : 25000
-  const parentsCap = parentsSenior ? 50000 : 25000
-  const sec80D = Math.min(n(ded.selfFamily), selfCap) +
-    Math.min(n(ded.parents) + (parentsSenior ? n(ded.parentsMedicalExp) : 0), parentsCap)
-  const sec24b = Math.min(n(ded.homeLoanInterest), 200000)
-  const nps = Math.min(n(ded.nps), 50000)
-  const sec80TTA = senior === 'normal' ? Math.min(n(ded.savingsInterest80TTA), 10000) : 0
-  const sec80TTB = senior !== 'normal' ? Math.min(n(ded.interest80TTB), 50000) : 0
+  const sec80D = Math.min(n(ded.selfFamily), cap80DSelf(senior)) +
+    Math.min(n(ded.parents) + (parentsSenior ? n(ded.parentsMedicalExp) : 0), cap80DParents(parentsSenior))
+  const sec24b = Math.min(n(ded.homeLoanInterest), CAP_24B)
+  const nps = Math.min(n(ded.nps), CAP_NPS)
+  const sec80TTA = senior === 'normal' ? Math.min(n(ded.savingsInterest80TTA), CAP_80TTA) : 0
+  const sec80TTB = senior !== 'normal' ? Math.min(n(ded.interest80TTB), CAP_80TTB) : 0
 
   const totalDeductions = sec80C + sec80D + sec24b + nps + sec80TTA + sec80TTB
   const totalExemptions = hraExempt
 
-  const taxableNew = Math.max(0, gross - 75000)
-  const taxableOld = Math.max(0, gross - 50000 - totalExemptions - totalDeductions)
-  const newTotal = slabBreakdown(taxableNew, 'new', 'normal').total
-  const oldTotal = slabBreakdown(taxableOld, 'old', senior).total
-  const recommendation = newTotal <= oldTotal ? 'new' : 'old'
-  const savings = Math.abs(newTotal - oldTotal)
+  // Regime comparison via the shared engine (identical code path to the Tax Optimizer's core).
+  const { newTotal, oldTotal, recommendation, savings } = computeRegimeCore({
+    annualGross: gross, totalExemptions, totalDeductions, seniorStatus: senior,
+  })
 
   const range = {
     newTax: estimateAnnualTax(gross, 'new', senior),

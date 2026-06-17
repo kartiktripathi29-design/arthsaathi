@@ -26,6 +26,7 @@ export default function StartPage() {
   const [c80, setC80] = useState('')
   const [d80, setD80] = useState('')
   const [nps, setNps] = useState('')
+  const [hl, setHl] = useState('')
   // Monthly basic / HRA-received off the latest slip — needed to value the HRA exemption.
   const basis = useRef<{ basic: number; hra: number }>({ basic: 0, hra: 0 })
 
@@ -40,6 +41,7 @@ export default function StartPage() {
     if (ded.ppf) setC80(String(ded.ppf))
     if (ded.selfFamily) setD80(String(ded.selfFamily))
     if (ded.nps) setNps(String(ded.nps))
+    if (ded.homeLoanInterest) setHl(String(ded.homeLoanInterest))
     recompute()
   }, [recompute])
 
@@ -76,6 +78,7 @@ export default function StartPage() {
   const questions: { label: string; sub: string; val: string; on: (s: string) => void; ph: string }[] = [
     { label: 'House rent (HRA)', sub: 'monthly rent you pay', val: rent, on: onRent, ph: 'e.g. 30,000' },
     { label: 'Tax-saving investments (80C)', sub: 'PPF · ELSS · LIC — yearly', val: c80, on: s => onDed('ppf', s, setC80), ph: 'up to 1,50,000' },
+    { label: 'Home loan interest (24b)', sub: 'yearly interest — up to 2L', val: hl, on: s => onDed('homeLoanInterest', s, setHl), ph: 'up to 2,00,000' },
     { label: 'Health insurance (80D)', sub: 'yearly premium', val: d80, on: s => onDed('selfFamily', s, setD80), ph: 'e.g. 25,000' },
     { label: 'Pension savings (NPS)', sub: '80CCD(1B) — yearly', val: nps, on: s => onDed('nps', s, setNps), ph: 'up to 50,000' },
   ]
@@ -85,7 +88,7 @@ export default function StartPage() {
       <VerdictBar verdict={v} />
 
       <h1 style={{ fontSize: 22, fontWeight: 800, color: T.ink, margin: '0 0 4px', letterSpacing: '-0.02em' }}>Your provisional answer</h1>
-      <p style={{ fontSize: 13, color: T.muted, margin: '0 0 16px' }}>Straight off your slip. Answer four quick questions to make it exact.</p>
+      <p style={{ fontSize: 13, color: T.muted, margin: '0 0 16px' }}>Straight off your slip. Answer a few quick questions to make it exact.</p>
 
       {/* First-look range — the payoff, from salary alone */}
       {v && (
@@ -107,7 +110,7 @@ export default function StartPage() {
             </div>
           </div>
           <div style={{ fontSize: 12.5, textAlign: 'center', color: T.muted }}>
-            <span style={{ color: T.ink, fontWeight: 700 }}>Your real answer sits in this range.</span> The four questions below decide where.
+            <span style={{ color: T.ink, fontWeight: 700 }}>Your real answer sits in this range.</span> The questions below decide where.
           </div>
         </div>
       )}

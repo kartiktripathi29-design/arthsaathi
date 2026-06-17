@@ -4,7 +4,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { computeSec80G } from '@/lib/deductions'
 import { getSalaryFacts } from '@/lib/salary-facts'
-import { slabBreakdown, oldRegimeDeductionSaving, type SeniorStatus } from '@/lib/tax-slabs'
+import { oldRegimeDeductionSaving, type SeniorStatus } from '@/lib/tax-slabs'
+import { computeRegimeCore, cap80DSelf, cap80DParents } from '@/lib/verdict-engine'
 import { GuideStrip } from '@/components/GuideStrip'
 
 import { tokens as T } from '@/lib/tokens'
@@ -346,8 +347,8 @@ export default function TaxOptimizerPage() {
         150000,
       )
       // 80D — caps depend on senior-citizen status of self and parents.
-      const selfCap = (seniorStatus !== 'normal') ? 50000 : 25000
-      const parentsCap = parentsSenior ? 50000 : 25000
+      const selfCap = cap80DSelf(seniorStatus)
+      const parentsCap = cap80DParents(parentsSenior)
       const sec80DSelf = Math.min((deductionsData.selfFamily || 0), selfCap)
       // Parents bucket includes medical expenditure for uninsured senior parents — same as the
       // Deductions page. Previously omitted here, so that expenditure gave no tax benefit.
@@ -396,15 +397,13 @@ export default function TaxOptimizerPage() {
       const subTotalNew = grossSalary + slabOtherIncome
       // New regime DISABLES Section 10 exemptions (HRA, LTA, etc.) and Chapter VI-A deductions.
       // Only standard deduction (₹75k) and employer NPS 80CCD(2) survive. So no HRA subtraction here.
-      const taxableNew = Math.max(0, subTotalNew - stdDedNew)
       const subTotalOld = grossSalary + slabOtherIncome
-      const taxableOld = Math.max(0, subTotalOld - stdDedOld - totalExemptions - totalDeductions)
-
-      const newBreak = slabBreakdown(taxableNew, 'new', 'normal') // new regime slabs are flat regardless
-      const oldBreak = slabBreakdown(taxableOld, 'old', seniorStatus)
-      // Grand totals add the (regime-independent) special-rate tax on capital gains / crypto.
-      const newTotal = newBreak.total + specialTaxTotal
-      const oldTotal = oldBreak.total + specialTaxTotal
+      // Regime comparison via the shared engine — identical code path to the quick-verdict, so the two
+      // screens can't drift on standard deductions, slabs, 87A rebate, or the old-vs-new pick. (Grand
+      // totals fold in the regime-independent special-rate tax on capital gains / crypto.)
+      const { taxableNew, taxableOld, newBreak, oldBreak, newTotal, oldTotal } = computeRegimeCore({
+        annualGross: grossSalary, slabOtherIncome, totalExemptions, totalDeductions, seniorStatus, specialTaxTotal,
+      })
       // ── Tax already deducted (TDS), resolved by source priority ──────────────────────────
       // 1) AIS / 26AS is authoritative — its totalTaxCredit aggregates every head (salary,
       //    crypto 194S, interest, dividends) plus advance / self-assessment tax. If present, it
