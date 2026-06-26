@@ -58,6 +58,11 @@ export default function DeductionsPage() {
   const [expanded, setExpanded] = useState<string[]>([])
   // Annual gross from saved salary slips — used as the base for the 10%-of-Adjusted-GTI 80G cap.
   const [annualGrossForAGTI, setAnnualGrossForAGTI] = useState(0)
+  // Gate the localStorage write-backs until the initial load has populated state. Without this, the
+  // [ded]/[donationRows] effects fire on the very first mount with the DEFAULT (empty) state and
+  // persist it over real saved data — wiping e.g. ppf before the load applies (the F4 clobber). Using
+  // state (not a ref) means the first-mount write-back closure reliably reads `false` and skips.
+  const [hydrated, setHydrated] = useState(false)
 
   useEffect(() => {
     const data = localStorage.getItem('av_deductions')
@@ -112,17 +117,20 @@ export default function DeductionsPage() {
     } catch (e) {
       console.error('Failed to auto-prefill PF:', e)
     }
+    setHydrated(true) // initial load done — write-backs below may now persist
   }, [])
 
   useEffect(() => {
+    if (!hydrated) return // don't clobber saved data with the default state on first mount (F4)
     localStorage.setItem('av_deductions', JSON.stringify(ded))
     // Keep the optimizer-only overlay aligned with the lossless status so the two tabs never disagree.
     try { localStorage.setItem('av_user_senior', ded.selfSeniorStatus || (ded.selfSenior ? 'senior' : 'normal')) } catch {}
-  }, [ded])
+  }, [ded, hydrated])
 
   useEffect(() => {
+    if (!hydrated) return // see F4 — wait for the initial load before persisting
     localStorage.setItem('av_donations80G', JSON.stringify(donationRows))
-  }, [donationRows])
+  }, [donationRows, hydrated])
 
   useEffect(() => {
     // Adjusted-GTI base for the 80G 10%-of-AGTI cap. Read the ONE shared annual-income figure

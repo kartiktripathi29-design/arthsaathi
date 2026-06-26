@@ -60,13 +60,31 @@ Affects `/try` **and** `/start` (both render `ProvisionalVerdict`).
 Fix: a real responsive rule on this component (container/media `max-width:~480` → single column for both
 grids), authored where it applies — not in landing's local styled-jsx.
 
-### F4 — [VERIFY · needs real data] "best answer so far" savings differs across pages
-Same seed showed **saves ₹51,324** on `/try` & `/start` but **₹76,559** on deductions; the deductions
-80C row showed only ₹69,120, ignoring the seeded `ppf:90000`. Likely each page's on-mount recompute
-mutates `av_*` differently, or the synthetic seed doesn't map the deductions page schema. The whole
-proto premise is "one number that moves live and carries through" — so confirm with a **real uploaded
-slip** that the VerdictBar shows a *consistent* figure across start → wizard → deductions → exemptions.
-A synthetic seed can't settle this.
+### F4 — [DIAGNOSED · real bug, root cause found] savings jumps on the deductions/exemptions pages
+**Not a computation bug** — the verdict engine is consistent (same data → ₹51,324 everywhere; proven by
+`scripts/probe-f4.mjs`: `/start` and `/deductions` both read `ppf:90000` and report 51,324 at rest, in
+both navigation orders). The divergent ₹76,559 / 80C ₹69,120 is a **mount-time write-back clobber**:
+
+- The **deductions** page has a load effect (reads `av_deductions` → `setDed`) AND a write-back effect
+  `useEffect(() => localStorage.setItem('av_deductions', JSON.stringify(ded)), [ded])`. The write-back
+  fires on the **initial mount with the default all-zeros `ded`**, before the load's `setDed` is applied —
+  persisting an empty `av_deductions`. The PF auto-prefill then refills only `employeePF` (₹69,120), so
+  `ppf:90000` is gone → 80C = 69,120 → old regime ~₹25,234 worse → savings shows ₹76,559. The arithmetic
+  reconciles to the penny (1,440,000 − 50,000 − 168,000 − 69,120 vs −150,000).
+- The **exemptions** page (`page.tsx:265`) has the identical unguarded write-back — visiting it can wipe
+  `av_exemptions.hra` (rentPaid/annualExemption → 0) the same way.
+
+Manifestation: in dev (React StrictMode double-invoke) it reliably persists the wiped state (what the
+gate-walk screenshots caught). In production (single mount) it **self-heals at rest** — but leaves (a) a
+visible flicker as the live number animates from the wrong value, and (b) a transient empty
+`av_deductions`/`av_exemptions` window that `SyncProvider`'s 3s poll could push to the cloud = **possible
+data loss**. So it's a real data-safety bug, not just cosmetic.
+
+**Fix (recommended):** guard both write-back effects so they don't persist until after the initial load
+has populated state (a `hydrated` ref/flag, set true at the end of the load effect; the write-back
+early-returns until then). Small, contained, kills the clobber + flicker + sync-loss risk. Touches the
+pre-existing deductions/exemptions pages (outside the proto new-files set) — a slightly wider blast
+radius, so flagged for a deliberate go-ahead rather than ridden in with the proto fixes.
 
 ### F5 — [LATENT · minor in prod] `SyncProvider` has no unconfigured-Supabase guard
 `AuthGate` and `useUser` both guard the "Supabase not configured" (mock) case; `SyncProvider`

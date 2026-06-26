@@ -139,6 +139,9 @@ export default function ExemptionsPage() {
   // All sections collapsed by default — the page is a tidy list of one-line headers you tap to open.
   const [expanded, setExpanded] = useState<string[]>([])
   const [showHraCalc, setShowHraCalc] = useState(false)
+  // Gate the av_exemptions write-back until the initial load runs, so first mount never persists the
+  // DEFAULT (empty) state over real saved data — e.g. wiping rentPaid/annualExemption (the F4 clobber).
+  const [hydrated, setHydrated] = useState(false)
 
   useEffect(() => {
     const data = localStorage.getItem('av_salary_timeline')
@@ -178,6 +181,7 @@ export default function ExemptionsPage() {
         console.error('Failed to load exemptions:', e)
       }
     }
+    setHydrated(true) // initial load done — the av_exemptions write-back may now persist
   }, [])
 
   // HRA exemption (Rule 2A) is a PER-MONTH minimum, summed over the year — not a
@@ -263,6 +267,7 @@ export default function ExemptionsPage() {
   const grpRetireSum = s.superannuation + s.pfWithdrawal + gratuityCapped
 
   useEffect(() => {
+    if (!hydrated) return // don't clobber saved av_exemptions with the default state on first mount (F4)
     try {
       localStorage.setItem('av_exemptions', JSON.stringify({
         // Persist the COMPUTED HRA exemption alongside its raw inputs so the Tax Optimizer
@@ -288,7 +293,7 @@ export default function ExemptionsPage() {
         gratuity: gratuityCapped,
       }))
     } catch {}
-  }, [s.hraReceived, s.rentPaid, s.isMetro, s.lta, s.driverSalary, s.carMaintenance, s.dailyAllowance, s.superannuation, s.pfWithdrawal, gratuityCapped, hraAnnualExemption, hraMonthlyDisplay, salary])
+  }, [s.hraReceived, s.rentPaid, s.isMetro, s.lta, s.driverSalary, s.carMaintenance, s.dailyAllowance, s.superannuation, s.pfWithdrawal, gratuityCapped, hraAnnualExemption, hraMonthlyDisplay, salary, hydrated])
 
   const toggle = (key: string) => setExpanded(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
   const update = (k: keyof ExemptionsState, v: any) => setS(prev => ({ ...prev, [k]: v }))
