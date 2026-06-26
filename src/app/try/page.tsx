@@ -9,12 +9,18 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import ProvisionalVerdict from '@/components/ProvisionalVerdict'
 import Logo from '@/components/Logo'
+import { ThemeToggle, useArthvoTheme, useThemedBase } from '@/components/ThemeToggle'
 import { tokens as T } from '@/lib/tokens'
 
 const num = (s: string) => Math.max(0, parseFloat((s || '').replace(/,/g, '')) || 0)
 const writeJSON = (k: string, o: any) => { try { localStorage.setItem(k, JSON.stringify(o)) } catch {} }
 
 export default function TryPage() {
+  // /try lives outside /dashboard, so it gets none of the dashboard layout's theming — wire the shared
+  // appearance state here (same av_theme key) and paint the themed base so dark mode actually applies
+  // and a visitor can switch it, on this public pre-auth screen.
+  const { theme, setTheme, resolved } = useArthvoTheme()
+  useThemedBase(resolved)
   const [salary, setSalary] = useState('')
   const [entered, setEntered] = useState(false)
   const [version, setVersion] = useState(0)
@@ -48,11 +54,15 @@ export default function TryPage() {
   }, [])
 
   return (
-    <div style={{ minHeight: '100vh', background: T.paper, color: T.ink, fontFamily: '"Sora",-apple-system,sans-serif' }}>
+    <div data-theme={resolved} suppressHydrationWarning style={{ minHeight: '100vh', background: T.paper, color: T.ink, fontFamily: '"Sora",-apple-system,sans-serif' }}>
+      <style>{`.btn-ghost{transition:background .15s} .btn-ghost:hover{background:var(--tint) !important}`}</style>
       {/* Public header — no account required */}
       <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 28px', borderBottom: `1px solid ${T.hairline}` }}>
         <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center' }}><Logo variant="onLight" size={30} /></Link>
-        <Link href="/login" style={{ fontSize: 13, color: T.muted, fontWeight: 500, textDecoration: 'none' }}>Sign in</Link>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
+          <Link href="/login" style={{ fontSize: 13, color: T.muted, fontWeight: 500, textDecoration: 'none' }}>Sign in</Link>
+          <ThemeToggle theme={theme} setTheme={setTheme} resolved={resolved} />
+        </div>
       </nav>
 
       <div style={{ padding: '28px 20px 60px' }}>
@@ -68,13 +78,13 @@ export default function TryPage() {
               </div>
               <button onClick={() => seed(salary)} style={{ padding: '11px 18px', background: T.teal, color: T.onTeal, borderRadius: 10, fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>See my answer →</button>
             </div>
-            <div style={{ fontSize: 11, color: T.muted, marginTop: 12 }}>🔒 No account needed. Your numbers stay on your device until you save.</div>
+            <div style={{ fontSize: 11, color: T.muted, marginTop: 12 }}>No account needed. Your numbers stay on your device until you save.</div>
           </div>
         ) : (
           <>
             <div style={{ maxWidth: 760, margin: '0 auto 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
               <button onClick={() => setEntered(false)} style={{ background: 'transparent', border: 'none', color: T.teal, fontWeight: 600, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>← Change salary</button>
-              <span style={{ fontSize: 11.5, color: T.muted }}>🔒 Saved on this device · no account yet</span>
+              <span style={{ fontSize: 11.5, color: T.muted }}>Saved on this device · no account yet</span>
             </div>
             <ProvisionalVerdict
               version={version}

@@ -104,6 +104,17 @@ export default function ProvisionalVerdict({
 
   return (
     <div style={{ maxWidth: 760, margin: '0 auto', fontFamily: '"Sora",-apple-system,sans-serif' }}>
+      {/* Both grids are 2-up by default; collapse to a single column on narrow phones so the regime
+          figures and the "make it exact" inputs don't crowd or clip at ~320px. (Local rule — the
+          landing's own .demo-regime media query is component-scoped and doesn't reach here.) */}
+      <style>{`
+        .pv-regime { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .pv-questions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+        @media (max-width: 480px) {
+          .pv-regime { grid-template-columns: 1fr; }
+          .pv-questions { grid-template-columns: 1fr; }
+        }
+      `}</style>
       <VerdictBar verdict={v} />
 
       <h1 style={{ fontSize: 22, fontWeight: 800, color: T.ink, margin: '0 0 4px', letterSpacing: '-0.02em' }}>{heading}</h1>
@@ -111,7 +122,7 @@ export default function ProvisionalVerdict({
 
       {v && (
         <div style={{ ...card, padding: 18, marginBottom: 20 }}>
-          <div className="demo-regime" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 8 }}>
+          <div className="pv-regime" style={{ marginBottom: 8 }}>
             <div style={{ background: T.tint, borderRadius: 10, padding: '14px 16px' }}>
               <div style={{ fontSize: 10, fontWeight: 600, color: T.teal, letterSpacing: '0.04em', marginBottom: 6 }}>New regime</div>
               <div style={{ fontSize: 26, fontWeight: 800, color: T.teal, letterSpacing: '-0.02em' }}>{fmt(v.range.newTax)}</div>
@@ -135,7 +146,7 @@ export default function ProvisionalVerdict({
 
       <div style={{ ...card, padding: 18, marginBottom: 20 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: T.teal, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 14 }}>Make it exact</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
+        <div className="pv-questions">
           {questions.map(q => (
             <div key={q.label}>
               <div style={{ fontSize: 12.5, fontWeight: 600, color: T.ink, marginBottom: 2 }}>{q.label}</div>

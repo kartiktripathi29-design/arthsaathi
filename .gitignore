@@ -44,3 +44,7 @@ next-env.d.ts
 
 # prisma generated client (regenerated via `prisma generate`)
 /generated
+
+# gate-walk harness scratch (screenshots + headless chrome profile)
+gatewalk-shots/
+.gatewalk-profile/

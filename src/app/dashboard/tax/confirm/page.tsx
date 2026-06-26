@@ -135,7 +135,7 @@ export default function ConfirmSlipPage() {
         <Link href="/dashboard/profile/documents" style={{ padding: '12px 18px', background: 'transparent', color: T.teal, border: `1px solid ${T.hairline}`, borderRadius: 9, fontWeight: 600, fontSize: 13, textDecoration: 'none' }}>Re-upload slip</Link>
         <button onClick={confirm} style={{ padding: '12px 24px', background: T.teal, color: T.onTeal, border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>Looks right → see my tax</button>
       </div>
-      <p style={{ fontSize: 11, color: T.muted, fontStyle: 'italic', margin: '12px 0 0', textAlign: 'center' }}>🔒 Your slip stays on your device. We only keep the figures you confirm here.</p>
+      <p style={{ fontSize: 11, color: T.muted, fontStyle: 'italic', margin: '12px 0 0', textAlign: 'center' }}>Your slip stays on your device. We only keep the figures you confirm here.</p>
     </div>
   )
 }
