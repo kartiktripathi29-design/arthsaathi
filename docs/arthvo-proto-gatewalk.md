@@ -110,8 +110,13 @@ F1/F2/F3/F5 fixed and **re-walked** (real pixels) — all verified; `next build`
 - **F5** — `SyncProvider` `ENABLED` now also requires `NEXT_PUBLIC_SUPABASE_URL`, so it stays inert
   (no client construction, no overlay) when Supabase is unconfigured.
 
-**Still open: F4** (savings divergence) — needs a real uploaded slip, not fixed here.
+**F4** (savings "divergence") — investigated, root-caused as a mount-time write-back clobber (not an
+engine bug), and **fixed**: both the deductions and exemptions write-back effects are now gated behind a
+`hydrated` state flag set at the end of their load effect, so first mount never persists the default
+(empty) state over saved data. Verified via `scripts/probe-f4*.mjs` + a gate-walk re-capture: deductions
+now reads 80C ₹1,50,000 / saves ₹51,324, matching `/start`. (commit `db2b2e3`)
 
 ## Discipline note
 This was the walk first (no fixes ridden into it); the F1/F2/F3/F5 fixes were then applied and
-re-walked as their own pass. F4 remains until checked on real data.
+re-walked (commit `3be9b4a`), and F4 was investigated and fixed as its own pass (`db2b2e3`). All five
+findings are now closed.
