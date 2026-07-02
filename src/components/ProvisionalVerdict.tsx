@@ -4,10 +4,10 @@
 // onboarding step (/dashboard/tax/start) AND the public, pre-auth /try flow — so both are one
 // implementation. The only difference is the CTA (full breakdown vs sign-up-to-save).
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { computeQuickVerdict, type QuickVerdict } from '@/lib/quick-verdict'
-import { getSalaryFacts } from '@/lib/salary-facts'
+import { applyRentToExemptions } from '@/lib/quick-inputs'
 import VerdictBar from '@/components/VerdictBar'
 import { tokens as T } from '@/lib/tokens'
 
@@ -48,14 +48,10 @@ export default function ProvisionalVerdict({
   const [d80, setD80] = useState('')
   const [nps, setNps] = useState('')
   const [hl, setHl] = useState('')
-  const basis = useRef<{ basic: number; hra: number }>({ basic: 0, hra: 0 })
 
   const recompute = useCallback(() => setV(computeQuickVerdict()), [])
 
   useEffect(() => {
-    const facts = getSalaryFacts()
-    const last: any = facts.hraBasis?.[facts.hraBasis.length - 1] || {}
-    basis.current = { basic: Number(last.basic) || Math.round(facts.annualGross * 0.4 / 12), hra: Number(last.hra) || 0 }
     const ded = readJSON('av_deductions'); const exm = readJSON('av_exemptions')
     setRent(exm.hra?.rentPaid ? String(exm.hra.rentPaid) : '')
     setC80(ded.ppf ? String(ded.ppf) : '')
@@ -67,12 +63,10 @@ export default function ProvisionalVerdict({
 
   const onRent = (val: string) => {
     setRent(val)
-    const rentM = num(val)
-    const { basic, hra } = basis.current
-    const monthly = rentM > 0 ? Math.max(0, Math.min(hra || basic * 0.5, rentM - 0.1 * basic, 0.5 * basic)) : 0
-    const exm = readJSON('av_exemptions')
-    exm.hra = { ...(exm.hra || {}), rentPaid: rentM, hraReceived: hra || Math.round(basic * 0.5), isMetro: true, annualExemption: Math.round(monthly * 12) }
-    writeJSON('av_exemptions', exm); recompute()
+    // Canonical Rule 2A via the shared helper — caps at real per-month HRA (no fabrication), honours
+    // the saved isMetro, and merges into the saved exemptions object. See src/lib/quick-inputs.ts.
+    applyRentToExemptions(num(val))
+    recompute()
   }
   const onDed = (field: string, val: string, set: (s: string) => void) => {
     set(val)

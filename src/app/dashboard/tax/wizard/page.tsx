@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { computeQuickVerdict, type QuickVerdict } from '@/lib/quick-verdict'
-import { getSalaryFacts } from '@/lib/salary-facts'
+import { applyRentToExemptions, markNoRentExemptions } from '@/lib/quick-inputs'
 import VerdictBar from '@/components/VerdictBar'
 import { tokens as T } from '@/lib/tokens'
 
@@ -35,18 +35,15 @@ export default function TaxBreaksWizard() {
   const [nps, setNps] = useState('')
   const [selfSenior, setSelfSenior] = useState(false)
   const [parentsSenior, setParentsSenior] = useState(false)
-  const basis = useRef<{ basic: number; hra: number }>({ basic: 0, hra: 0 })
   const pfAnnual = useRef(0)
 
   const recompute = useCallback(() => setV(computeQuickVerdict()), [])
 
   useEffect(() => {
-    const facts = getSalaryFacts()
-    const last: any = facts.hraBasis?.[facts.hraBasis.length - 1] || {}
-    basis.current = { basic: Number(last.basic) || Math.round(facts.annualGross * 0.4 / 12), hra: Number(last.hra) || 0 }
-    // Credit employee PF off the slip toward 80C, so the user only adds what's beyond it.
+    // Credit employee PF off the slip toward 80C, so the user only adds what's beyond it. Skip the
+    // synthetic seed slip (/try) — it carries no real PF and must not fabricate an 80C credit.
     let slipPF = 0
-    try { const sl = JSON.parse(localStorage.getItem('av_salary_timeline') || '[]'); const s = Array.isArray(sl) ? sl[sl.length - 1] : null; slipPF = Math.round((s?.employeePF || 0) * 12) } catch {}
+    try { const sl = JSON.parse(localStorage.getItem('av_salary_timeline') || '[]'); const real = Array.isArray(sl) ? sl.filter((s: any) => !s?._synthetic) : []; const s = real[real.length - 1] || null; slipPF = Math.round((s?.employeePF || 0) * 12) } catch {}
     const ded = readJSON('av_deductions'); const exm = readJSON('av_exemptions')
     if (slipPF > 0 && !ded.employeePF) { patchDed({ employeePF: slipPF }) }
     pfAnnual.current = slipPF || Number(ded.employeePF) || 0
@@ -59,14 +56,13 @@ export default function TaxBreaksWizard() {
 
   const onRent = (val: string) => {
     setRent(val); setNoRent(false)
-    const rentM = num(val); const { basic, hra } = basis.current
-    const monthly = rentM > 0 ? Math.max(0, Math.min(hra || basic * 0.5, rentM - 0.1 * basic, 0.5 * basic)) : 0
-    writeJSON('av_exemptions', { ...readJSON('av_exemptions'), hra: { rentPaid: rentM, hraReceived: hra || Math.round(basic * 0.5), isMetro: true, annualExemption: Math.round(monthly * 12), noRent: false } })
+    // Shared, canonical HRA writer — real per-month cap, saved isMetro, merged object (no fabrication).
+    applyRentToExemptions(num(val))
     recompute()
   }
   const markNoRent = () => {
     setNoRent(true); setRent('')
-    writeJSON('av_exemptions', { ...readJSON('av_exemptions'), hra: { rentPaid: 0, annualExemption: 0, noRent: true } })
+    markNoRentExemptions()
     recompute()
   }
   const onDed = (field: string, val: string, set: (s: string) => void) => { set(val); patchDed({ [field]: num(val) }); recompute() }

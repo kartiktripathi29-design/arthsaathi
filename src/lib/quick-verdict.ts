@@ -48,6 +48,15 @@ export function computeQuickVerdict(): QuickVerdict {
   const exm = readJSON('av_exemptions') || {}
   const ais = readJSON('as_ais')
 
+  // Slab-taxed other income (freelance / F&O / interest / rent) shifts the old-vs-new crossover, so it
+  // MUST enter the comparison or the live bar can confidently recommend the wrong regime. We sum only
+  // the unambiguous slab entries here; equity/crypto capital gains are special-rate (regime-independent,
+  // so they don't change the pick) and are priced exactly by the full optimizer, not this quick view.
+  const otherRaw = readJSON('av_other_income')
+  const otherEntries: any[] = Array.isArray(otherRaw) ? otherRaw : []
+  const slabOtherIncome = otherEntries.reduce(
+    (t, e) => (e?.type === 'equity' || e?.type === 'crypto') ? t : t + n(e?.amount), 0)
+
   const senior: SeniorStatus =
     ded.selfSeniorStatus === 'super_senior' ? 'super_senior'
     : (ded.selfSeniorStatus === 'senior' || ded.selfSenior) ? 'senior' : 'normal'
@@ -73,7 +82,7 @@ export function computeQuickVerdict(): QuickVerdict {
 
   // Regime comparison via the shared engine (identical code path to the Tax Optimizer's core).
   const { newTotal, oldTotal, recommendation, savings } = computeRegimeCore({
-    annualGross: gross, totalExemptions, totalDeductions, seniorStatus: senior,
+    annualGross: gross, slabOtherIncome, totalExemptions, totalDeductions, seniorStatus: senior,
   })
 
   const range = {
@@ -85,7 +94,9 @@ export function computeQuickVerdict(): QuickVerdict {
   // Exactness — weighted signals, summing to 100 when everything is supplied.
   let pct = 0
   const missing: string[] = []
-  if (facts.source === 'summary') pct += 30
+  // A synthetic /try summary is an estimate, not a real slip — it earns no confidence and still asks
+  // for the real slip, so the bar can't present invented salary as "exact".
+  if (facts.source === 'summary' && !facts.synthetic) pct += 30
   else if (facts.source === 'slip-average') { pct += 15; missing.push('Add the rest of your salary slips') }
   else missing.push('Add a salary slip')
   if (n(hra.rentPaid) > 0 || hra.noRent) pct += 20; else missing.push('Add your rent (HRA)')

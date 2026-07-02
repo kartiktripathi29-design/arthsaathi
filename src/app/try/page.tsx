@@ -34,20 +34,37 @@ export default function TryPage() {
     const basic = Math.round(m * 0.4), hra = Math.round(m * 0.2)
     // Careful summary (drives the verdict) PLUS a light synthetic slip, so the "has data" gates pass
     // after sign-up — the dashboard opens on their numbers instead of bouncing to a blank upload.
+    // Flag the seeded summary synthetic so real uploaded/confirmed data is distinguishable from this
+    // estimate — both so we never clobber real data (below) and so downstream can treat it as provisional.
     writeJSON('av_salary_summary', {
       annualGross: annual, annualNet: Math.round(annual * 0.9), annualTDS: 0, fyStartYear,
-      hraBasis: Array.from({ length: 12 }, () => ({ basic, hra })),
+      hraBasis: Array.from({ length: 12 }, () => ({ basic, hra })), _synthetic: true,
     })
     writeJSON('av_salary_timeline', [{ grossSalary: m, basicSalary: basic, hra, netSalary: Math.round(m * 0.9), month: '', year: String(fyStartYear), _synthetic: true }])
     setSalary(String(m)); setEntered(true); setVersion(x => x + 1)
   }
 
   // Resume from a salary carried in (?m= from the landing estimate) or one already on the device.
+  // REAL uploaded/confirmed salary (a non-synthetic summary or slip) is never overwritten by the
+  // landing estimate — a returning user who types a figure resumes their real data instead of losing
+  // it. Only when there's no real data do we seed the synthetic estimate from ?m=.
   useEffect(() => {
     try {
+      const s = JSON.parse(localStorage.getItem('av_salary_summary') || 'null')
+      const hasRealSummary = !!s && (s.annualGross || 0) > 0 && !s._synthetic
+      let hasRealSlip = false
+      try {
+        const tl = JSON.parse(localStorage.getItem('av_salary_timeline') || 'null')
+        hasRealSlip = Array.isArray(tl) && tl.some((x: any) => x && !x._synthetic && (Number(x.grossSalary) || 0) > 0)
+      } catch {}
+      if (hasRealSummary || hasRealSlip) {
+        if (hasRealSummary) setSalary(String(Math.round(s.annualGross / 12)))
+        setEntered(true)
+        return
+      }
       const mParam = new URLSearchParams(window.location.search).get('m')
       if (mParam && num(mParam) > 0) { seed(mParam); return }
-      const s = JSON.parse(localStorage.getItem('av_salary_summary') || 'null')
+      // No real data and no ?m=, but a prior synthetic estimate is on the device — resume it.
       if (s && (s.annualGross || 0) > 0) { setSalary(String(Math.round(s.annualGross / 12))); setEntered(true) }
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps

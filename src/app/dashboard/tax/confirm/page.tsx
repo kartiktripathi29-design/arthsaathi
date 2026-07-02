@@ -16,12 +16,14 @@ import { tokens as T } from '@/lib/tokens'
 const fmt = (v: number) => `₹${Math.abs(Math.round(v || 0)).toLocaleString('en-IN')}`
 const num = (s: string) => Math.max(0, parseFloat((s || '').replace(/,/g, '')) || 0)
 
-function latestSlip(): any | null {
+// Real (non-synthetic) slips from the timeline. The /try seed writes a synthetic placeholder slip so
+// the pre-auth verdict has something to render; it must never be surfaced here as a slip to confirm.
+function realSlips(): any[] {
   try {
     const parsed = JSON.parse(localStorage.getItem('av_salary_timeline') || 'null')
     const slips = Array.isArray(parsed) ? parsed : parsed?.employments?.[0]?.slips || []
-    return slips.length ? slips[slips.length - 1] : null
-  } catch { return null }
+    return slips.filter((s: any) => s && !s._synthetic)
+  } catch { return [] }
 }
 
 // The fields we surface for confirmation. `critical` ones, if missing, block trust (we say so);
@@ -41,11 +43,14 @@ const FIELDS: { key: string; label: string; group: 'earn' | 'ded'; critical?: bo
 export default function ConfirmSlipPage() {
   const router = useRouter()
   const [slip, setSlip] = useState<any | null | undefined>(undefined)
+  const [slipCount, setSlipCount] = useState(0)
   const [vals, setVals] = useState<Record<string, string>>({})
 
   useEffect(() => {
-    const s = latestSlip()
+    const slips = realSlips()
+    const s = slips.length ? slips[slips.length - 1] : null
     setSlip(s)
+    setSlipCount(slips.length)
     if (s) {
       const init: Record<string, string> = {}
       for (const f of FIELDS) init[f.key] = s[f.key] ? String(Math.round(s[f.key])) : ''
@@ -70,17 +75,31 @@ export default function ConfirmSlipPage() {
 
   const confirm = () => {
     const get = (k: string) => num(vals[k])
-    const gross = get('grossSalary'), net = get('netSalary'), basic = get('basicSalary'), hra = get('hra'), pf = get('employeePF'), tds = get('tdsDeducted')
     const confirmed = { ...slip }
     for (const f of FIELDS) confirmed[f.key] = get(f.key)
     const now = new Date()
     const fyStartYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
     try {
-      localStorage.setItem('av_salary_timeline', JSON.stringify([confirmed]))
-      // ×12 projection from the one confirmed slip — same model the app uses for a single upload.
+      // Preserve the FULL uploaded timeline — a multi-month upload (raises, bonuses, arrears) must not
+      // collapse to a single slip. Apply the user's edits to the slip they just confirmed (the latest
+      // real one) and drop the synthetic /try placeholder now that a real slip is confirmed.
+      const real = realSlips()
+      const timeline = real.length ? real.map((s, i) => (i === real.length - 1 ? confirmed : s)) : [confirmed]
+      localStorage.setItem('av_salary_timeline', JSON.stringify(timeline))
+
+      // Annual totals aggregated across ALL months, not ×12 of one. avg(month)×12 generalises the
+      // single-slip case (unchanged for one slip) while reflecting every month for a full-year upload.
+      const nSlips = timeline.length || 1
+      const avg = (pick: (s: any) => any) => timeline.reduce((t, s) => t + (Number(pick(s)) || 0), 0) / nSlips
+      const avgBasic = avg(s => s.basicSalary), avgHra = avg(s => s.hra)
+      const hraBasis = Array.from({ length: 12 }, (_unused, i) => timeline[i]
+        ? { basic: Number(timeline[i].basicSalary) || 0, hra: Number(timeline[i].hra) || 0 }
+        : { basic: Math.round(avgBasic), hra: Math.round(avgHra) })
       localStorage.setItem('av_salary_summary', JSON.stringify({
-        annualGross: gross * 12, annualNet: net * 12, annualTDS: tds * 12, fyStartYear,
-        hraBasis: Array.from({ length: 12 }, () => ({ basic, hra })),
+        annualGross: Math.round(avg(s => s.grossSalary) * 12),
+        annualNet: Math.round(avg(s => s.netSalary) * 12),
+        annualTDS: Math.round(avg(s => s.tdsDeducted) * 12),
+        fyStartYear, hraBasis,
       }))
     } catch {}
     router.push('/dashboard/tax/start')
@@ -110,7 +129,7 @@ export default function ConfirmSlipPage() {
     <div style={{ maxWidth: 620, margin: '0 auto', fontFamily: '"Sora",-apple-system,sans-serif' }}>
       <h1 style={{ fontSize: 22, fontWeight: 800, color: T.ink, margin: '0 0 4px', letterSpacing: '-0.02em' }}>Here’s what we read</h1>
       <p style={{ fontSize: 13, color: T.muted, margin: '0 0 16px' }}>
-        From your {slip.month ? `${slip.month} ${slip.year || ''}` : 'salary'} slip{slip.employerName ? ` · ${slip.employerName}` : ''}. Fix anything that’s off — these numbers drive your answer.
+        From your {slip.month ? `${slip.month} ${slip.year || ''}` : 'salary'} slip{slip.employerName ? ` · ${slip.employerName}` : ''}{slipCount > 1 ? ` · ${slipCount} months saved` : ''}. Fix anything that’s off — these numbers drive your answer.
       </p>
 
       {/* Honest read signal — no fabricated % */}
