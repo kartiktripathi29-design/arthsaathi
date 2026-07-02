@@ -48,3 +48,6 @@ next-env.d.ts
 # gate-walk harness scratch (screenshots + headless chrome profile)
 gatewalk-shots/
 .gatewalk-profile/
+
+# claude code agent memory (local-only, not part of the codebase)
+memory/
