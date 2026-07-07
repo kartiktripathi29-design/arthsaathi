@@ -1,0 +1,123 @@
+'use client'
+// PROTOTYPE (Phase 4) — defer auth. This is the public twin of /dashboard/tax/start: a visitor can
+// reach the FULL provisional verdict and refine it with the quick questions WITHOUT an account. It
+// lives outside /dashboard, so the dashboard AuthGate never runs. Sign-up is deferred to the moment
+// they want to SAVE / get the exact, file-ready breakdown. Everything is written to the same
+// localStorage keys, so after they sign up the dashboard already has their numbers (same origin).
+
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import ProvisionalVerdict from '@/components/ProvisionalVerdict'
+import DataAssurance from '@/components/DataAssurance'
+import Logo from '@/components/Logo'
+import { ThemeToggle, useArthvoTheme, useThemedBase } from '@/components/ThemeToggle'
+import { tokens as T } from '@/lib/tokens'
+
+const num = (s: string) => Math.max(0, parseFloat((s || '').replace(/,/g, '')) || 0)
+const writeJSON = (k: string, o: any) => { try { localStorage.setItem(k, JSON.stringify(o)) } catch {} }
+
+export default function TryPage() {
+  // /try lives outside /dashboard, so it gets none of the dashboard layout's theming — wire the shared
+  // appearance state here (same av_theme key) and paint the themed base so dark mode actually applies
+  // and a visitor can switch it, on this public pre-auth screen.
+  const { theme, setTheme, resolved } = useArthvoTheme()
+  useThemedBase(resolved)
+  const [salary, setSalary] = useState('')
+  const [entered, setEntered] = useState(false)
+  const [version, setVersion] = useState(0)
+
+  const seed = (monthlyStr: string) => {
+    const m = num(monthlyStr)
+    if (!m) return
+    const annual = m * 12
+    const now = new Date()
+    const fyStartYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
+    const basic = Math.round(m * 0.4), hra = Math.round(m * 0.2)
+    // Careful summary (drives the verdict) PLUS a light synthetic slip, so the "has data" gates pass
+    // after sign-up — the dashboard opens on their numbers instead of bouncing to a blank upload.
+    // Flag the seeded summary synthetic so real uploaded/confirmed data is distinguishable from this
+    // estimate — both so we never clobber real data (below) and so downstream can treat it as provisional.
+    writeJSON('av_salary_summary', {
+      annualGross: annual, annualNet: Math.round(annual * 0.9), annualTDS: 0, fyStartYear,
+      hraBasis: Array.from({ length: 12 }, () => ({ basic, hra })), _synthetic: true,
+    })
+    writeJSON('av_salary_timeline', [{ grossSalary: m, basicSalary: basic, hra, netSalary: Math.round(m * 0.9), month: '', year: String(fyStartYear), _synthetic: true }])
+    setSalary(String(m)); setEntered(true); setVersion(x => x + 1)
+  }
+
+  // Resume from a salary carried in (?m= from the landing estimate) or one already on the device.
+  // REAL uploaded/confirmed salary (a non-synthetic summary or slip) is never overwritten by the
+  // landing estimate — a returning user who types a figure resumes their real data instead of losing
+  // it. Only when there's no real data do we seed the synthetic estimate from ?m=.
+  useEffect(() => {
+    try {
+      const s = JSON.parse(localStorage.getItem('av_salary_summary') || 'null')
+      const hasRealSummary = !!s && (s.annualGross || 0) > 0 && !s._synthetic
+      let hasRealSlip = false
+      try {
+        const tl = JSON.parse(localStorage.getItem('av_salary_timeline') || 'null')
+        hasRealSlip = Array.isArray(tl) && tl.some((x: any) => x && !x._synthetic && (Number(x.grossSalary) || 0) > 0)
+      } catch {}
+      if (hasRealSummary || hasRealSlip) {
+        if (hasRealSummary) setSalary(String(Math.round(s.annualGross / 12)))
+        setEntered(true)
+        return
+      }
+      const mParam = new URLSearchParams(window.location.search).get('m')
+      if (mParam && num(mParam) > 0) { seed(mParam); return }
+      // No real data and no ?m=, but a prior synthetic estimate is on the device — resume it.
+      if (s && (s.annualGross || 0) > 0) { setSalary(String(Math.round(s.annualGross / 12))); setEntered(true) }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return (
+    <div data-theme={resolved} suppressHydrationWarning style={{ minHeight: '100vh', background: T.paper, color: T.ink, fontFamily: '"Sora",-apple-system,sans-serif' }}>
+      <style>{`.btn-ghost{transition:background .15s} .btn-ghost:hover{background:var(--tint) !important}`}</style>
+      {/* Public header — no account required */}
+      <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 28px', borderBottom: `1px solid ${T.hairline}` }}>
+        <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center' }}><Logo variant="onLight" size={30} /></Link>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
+          <Link href="/login" style={{ fontSize: 13, color: T.muted, fontWeight: 500, textDecoration: 'none' }}>Sign in</Link>
+          <ThemeToggle theme={theme} setTheme={setTheme} resolved={resolved} />
+        </div>
+      </nav>
+
+      <div style={{ padding: '28px 20px 60px' }}>
+        {!entered ? (
+          <div style={{ maxWidth: 440, margin: '40px auto 0', background: T.card, border: `1.5px solid ${T.hairline}`, borderRadius: 16, padding: '24px 28px' }}>
+            <div style={{ fontSize: 20, fontWeight: 800, color: T.ink, letterSpacing: '-0.02em', marginBottom: 6 }}>See your real tax — no signup.</div>
+            <div style={{ fontSize: 13, color: T.muted, marginBottom: 16 }}>Start with your monthly salary. We’ll show old vs new regime, then refine it with a few questions.</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', flex: 1, border: `1.5px solid ${T.hairline}`, borderRadius: 10, overflow: 'hidden', background: T.card }}>
+                <span style={{ padding: '11px 12px', fontSize: 15, color: T.teal, fontWeight: 700, borderRight: `1px solid ${T.hairline}` }}>₹</span>
+                <input type="tel" inputMode="numeric" value={salary} onChange={e => setSalary(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') seed(salary) }} placeholder="e.g. 1,20,000" autoFocus
+                  style={{ flex: 1, width: '100%', padding: '11px 12px', border: 'none', outline: 'none', fontSize: 14, fontFamily: '"Sora",sans-serif', background: 'transparent', color: T.ink }} />
+              </div>
+              <button onClick={() => seed(salary)} style={{ padding: '11px 18px', background: T.teal, color: T.onTeal, borderRadius: 10, fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>See my answer →</button>
+            </div>
+            <div style={{ fontSize: 11, color: T.muted, marginTop: 12 }}>No account needed. Your numbers stay on your device until you save.</div>
+            <DataAssurance style={{ marginTop: 8 }} />
+          </div>
+        ) : (
+          <>
+            <div style={{ maxWidth: 760, margin: '0 auto 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+              <button onClick={() => setEntered(false)} style={{ background: 'transparent', border: 'none', color: T.teal, fontWeight: 600, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>← Change salary</button>
+              <span style={{ fontSize: 11.5, color: T.muted }}>Saved on this device · no account yet</span>
+            </div>
+            <ProvisionalVerdict
+              version={version}
+              heading="Your answer — no signup needed"
+              subheading="Old vs new regime on your salary. Refine it below; sign up only when you want to save it."
+              ctaHref="/signup"
+              ctaLabel="Save your answer → Sign up"
+              noSalaryHref="/try"
+              noSalaryLabel="Enter your salary →"
+              footnote="Sign up (free) to add your real slip, capital gains and exact TDS — and get a CA-ready computation."
+            />
+          </>
+        )}
+      </div>
+    </div>
+  )
+}

@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { computeSec80G, type DonationCat } from '@/lib/deductions'
 import { getSalaryFacts } from '@/lib/salary-facts'
 import { GuideStrip } from '@/components/GuideStrip'
+import VerdictBarLive from '@/components/VerdictBarLive'
 
 import { tokens as T } from '@/lib/tokens'
 
@@ -57,6 +58,11 @@ export default function DeductionsPage() {
   const [expanded, setExpanded] = useState<string[]>([])
   // Annual gross from saved salary slips — used as the base for the 10%-of-Adjusted-GTI 80G cap.
   const [annualGrossForAGTI, setAnnualGrossForAGTI] = useState(0)
+  // Gate the localStorage write-backs until the initial load has populated state. Without this, the
+  // [ded]/[donationRows] effects fire on the very first mount with the DEFAULT (empty) state and
+  // persist it over real saved data — wiping e.g. ppf before the load applies (the F4 clobber). Using
+  // state (not a ref) means the first-mount write-back closure reliably reads `false` and skips.
+  const [hydrated, setHydrated] = useState(false)
 
   useEffect(() => {
     const data = localStorage.getItem('av_deductions')
@@ -111,17 +117,20 @@ export default function DeductionsPage() {
     } catch (e) {
       console.error('Failed to auto-prefill PF:', e)
     }
+    setHydrated(true) // initial load done — write-backs below may now persist
   }, [])
 
   useEffect(() => {
+    if (!hydrated) return // don't clobber saved data with the default state on first mount (F4)
     localStorage.setItem('av_deductions', JSON.stringify(ded))
     // Keep the optimizer-only overlay aligned with the lossless status so the two tabs never disagree.
     try { localStorage.setItem('av_user_senior', ded.selfSeniorStatus || (ded.selfSenior ? 'senior' : 'normal')) } catch {}
-  }, [ded])
+  }, [ded, hydrated])
 
   useEffect(() => {
+    if (!hydrated) return // see F4 — wait for the initial load before persisting
     localStorage.setItem('av_donations80G', JSON.stringify(donationRows))
-  }, [donationRows])
+  }, [donationRows, hydrated])
 
   useEffect(() => {
     // Adjusted-GTI base for the 80G 10%-of-AGTI cap. Read the ONE shared annual-income figure
@@ -165,7 +174,10 @@ export default function DeductionsPage() {
     deduction: sec80G,
   } = computeSec80G(donationRows, adjustedGTI)
   const totalDeductions = sec80C + sec80D + sec24b + secNps + sec80TTA + sec80TTB + sec80E + sec80G
-  const taxSavingsOld = totalDeductions * 0.2 // rough estimate at 20% slab
+  // The savings figure now lives in ONE place — the VerdictBar at the top of this page — which shows
+  // the precise old-vs-new saving against the right baseline (the new regime). The old flat-20%
+  // "rough savings" estimate is gone: it anchored on old-regime-without-deductions, overstating what
+  // the user actually saves versus simply filing new.
 
   // Guide strip — narrates deductions claimed + the old-regime caveat (replaces the static banner).
   const guide: { tone: 'calm' | 'attention' | 'good'; lines: string[] } = totalDeductions > 0
@@ -180,6 +192,7 @@ export default function DeductionsPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '20px 0' }}>
+      <VerdictBarLive />
       <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Deductions</h1>
       <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>Tax-saving investments and expenses. <span style={{ whiteSpace: 'nowrap' }}>(These only reduce tax in Old Regime)</span></p>
 
@@ -525,12 +538,12 @@ export default function DeductionsPage() {
         )}
       </div>
 
-      {/* Tax Savings Preview */}
-      {taxSavingsOld > 0 && (
+      {/* Context only — the savings number lives in the VerdictBar at the top (no competing figure). */}
+      {totalDeductions > 0 && (
         <div style={{ background: T.tint, border: `1px solid ${T.hairline}`, borderRadius: 8, padding: 16, marginBottom: 24 }}>
-          <p style={{ fontSize: 11, color: C.muted, margin: '0 0 6px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>Rough savings — old regime, <span style={{ whiteSpace: 'nowrap' }}>before your real rate</span></p>
-          <p style={{ fontSize: 18, fontWeight: 700, color: C.fg, margin: 0 }}>~{fmt(taxSavingsOld)}</p>
-          <p style={{ fontSize: 10, color: C.muted, margin: '6px 0 0' }}>These deductions don't count in New Regime. Your actual saving depends on your total income and which regime you choose.</p>
+          <p style={{ fontSize: 12.5, color: C.muted, margin: 0, lineHeight: 1.55 }}>
+            <strong style={{ color: C.text }}>{fmt(totalDeductions)} claimed.</strong> These only reduce tax under the old regime — whether that beats the new regime, and by how much, is in the best-answer bar above and your full breakdown in <span style={{ whiteSpace: 'nowrap' }}>Your Tax</span>.
+          </p>
         </div>
       )}
 

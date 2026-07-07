@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import { seedIfMissing, verifyIdentity, setStoredIdentity } from '@/lib/identity'
 import { confirmDialog, passwordDialog } from '@/components/Dialog'
 import { GuideStrip } from '@/components/GuideStrip'
+import DataAssurance from '@/components/DataAssurance'
 
 import { tokens as T } from '@/lib/tokens'
 
@@ -383,7 +384,8 @@ export default function DocumentsPage() {
         toast(`${allSlips.length} slip(s) parsed. ${failed.length} file(s) failed:\n${failed.join('\n')}`, { duration: 6000 })
       }
       // AIS / 26AS are already parsed on attach (see processTaxDoc), so nothing to do here.
-      router.push('/dashboard/profile/salary')
+      // Wiring: straight to "here's what we read" to confirm the parse, then the provisional verdict.
+      router.push('/dashboard/tax/confirm')
     } catch (e: any) {
       console.error('[Documents] Outer error:', e)
       toast.error(e.message || 'Upload failed')
@@ -559,6 +561,8 @@ export default function DocumentsPage() {
           Skip to Other earnings
         </button>
       </div>
+      {/* Data-handling assurance next to the upload CTA (brief Change 3). */}
+      <DataAssurance style={{ marginTop: 12, justifyContent: 'center' }} />
 
     </div>
   )

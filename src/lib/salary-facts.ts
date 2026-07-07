@@ -23,10 +23,11 @@ export interface SalaryFacts {
   fyStartYear: number | null
   hraBasis: HraMonth[]          // per-month Basic + HRA series (only available from the summary)
   source: SalaryFactsSource     // where the numbers came from — useful for "verify your data" hints
+  synthetic: boolean            // true when the figures are the /try estimate, not a real slip/summary
 }
 
 const EMPTY: SalaryFacts = {
-  annualGross: 0, annualNet: 0, annualTDS: 0, fyStartYear: null, hraBasis: [], source: 'none',
+  annualGross: 0, annualNet: 0, annualTDS: 0, fyStartYear: null, hraBasis: [], source: 'none', synthetic: false,
 }
 
 // Only the numeric fields this module averages; raw slips carry many more we don't touch here.
@@ -38,11 +39,13 @@ interface RawSlip {
 }
 
 // Raw monthly slips, handling both the flat-array and {employments:[{slips}]} shapes the app stores.
+// Synthetic /try placeholder slips are excluded — annual figures must never derive from fabricated
+// per-line data.
 function readSlips(): RawSlip[] {
   try {
     const parsed = JSON.parse(localStorage.getItem('av_salary_timeline') || 'null')
-    if (Array.isArray(parsed)) return parsed
-    return parsed?.employments?.[0]?.slips || []
+    const slips: any[] = Array.isArray(parsed) ? parsed : (parsed?.employments?.[0]?.slips || [])
+    return slips.filter((s: any) => s && !s._synthetic)
   } catch {
     return []
   }
@@ -63,6 +66,7 @@ export function getSalaryFacts(): SalaryFacts {
         fyStartYear: summary.fyStartYear ?? null,
         hraBasis: Array.isArray(summary.hraBasis) ? summary.hraBasis : [],
         source: 'summary',
+        synthetic: !!summary._synthetic,
       }
     }
   } catch {
@@ -82,6 +86,7 @@ export function getSalaryFacts(): SalaryFacts {
       fyStartYear: null,
       hraBasis: [],
       source: 'slip-average',
+      synthetic: false,
     }
   }
 

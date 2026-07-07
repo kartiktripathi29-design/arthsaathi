@@ -4,8 +4,10 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { computeSec80G } from '@/lib/deductions'
 import { getSalaryFacts } from '@/lib/salary-facts'
-import { slabBreakdown, oldRegimeDeductionSaving, type SeniorStatus } from '@/lib/tax-slabs'
+import { oldRegimeDeductionSaving, type SeniorStatus } from '@/lib/tax-slabs'
+import { computeRegimeCore, cap80DSelf, cap80DParents } from '@/lib/verdict-engine'
 import { GuideStrip } from '@/components/GuideStrip'
+import VerdictHero from '@/components/VerdictHero'
 
 import { tokens as T } from '@/lib/tokens'
 
@@ -346,8 +348,8 @@ export default function TaxOptimizerPage() {
         150000,
       )
       // 80D — caps depend on senior-citizen status of self and parents.
-      const selfCap = (seniorStatus !== 'normal') ? 50000 : 25000
-      const parentsCap = parentsSenior ? 50000 : 25000
+      const selfCap = cap80DSelf(seniorStatus)
+      const parentsCap = cap80DParents(parentsSenior)
       const sec80DSelf = Math.min((deductionsData.selfFamily || 0), selfCap)
       // Parents bucket includes medical expenditure for uninsured senior parents — same as the
       // Deductions page. Previously omitted here, so that expenditure gave no tax benefit.
@@ -396,15 +398,13 @@ export default function TaxOptimizerPage() {
       const subTotalNew = grossSalary + slabOtherIncome
       // New regime DISABLES Section 10 exemptions (HRA, LTA, etc.) and Chapter VI-A deductions.
       // Only standard deduction (₹75k) and employer NPS 80CCD(2) survive. So no HRA subtraction here.
-      const taxableNew = Math.max(0, subTotalNew - stdDedNew)
       const subTotalOld = grossSalary + slabOtherIncome
-      const taxableOld = Math.max(0, subTotalOld - stdDedOld - totalExemptions - totalDeductions)
-
-      const newBreak = slabBreakdown(taxableNew, 'new', 'normal') // new regime slabs are flat regardless
-      const oldBreak = slabBreakdown(taxableOld, 'old', seniorStatus)
-      // Grand totals add the (regime-independent) special-rate tax on capital gains / crypto.
-      const newTotal = newBreak.total + specialTaxTotal
-      const oldTotal = oldBreak.total + specialTaxTotal
+      // Regime comparison via the shared engine — identical code path to the quick-verdict, so the two
+      // screens can't drift on standard deductions, slabs, 87A rebate, or the old-vs-new pick. (Grand
+      // totals fold in the regime-independent special-rate tax on capital gains / crypto.)
+      const { taxableNew, taxableOld, newBreak, oldBreak, newTotal, oldTotal } = computeRegimeCore({
+        annualGross: grossSalary, slabOtherIncome, totalExemptions, totalDeductions, seniorStatus, specialTaxTotal,
+      })
       // ── Tax already deducted (TDS), resolved by source priority ──────────────────────────
       // 1) AIS / 26AS is authoritative — its totalTaxCredit aggregates every head (salary,
       //    crypto 194S, interest, dividends) plus advance / self-assessment tax. If present, it
@@ -584,42 +584,20 @@ export default function TaxOptimizerPage() {
       })()}
 
       {/* ── Verdict hero — leads with the recommendation: regime · saving · refund/payable · ITR.
-           Pure presentation of values already computed in `calc` (no math here). ── */}
-      <div style={{ background: C.card, border: `2px solid ${T.teal}`, borderRadius: 10, padding: '22px 20px', marginBottom: 16, position: 'relative' as const }}>
-        <span style={{ position: 'absolute' as const, top: -10, left: 16, fontSize: 10, fontWeight: 700, background: T.teal, color: T.onTeal, padding: '3px 10px', borderRadius: 20, letterSpacing: '0.04em' }}>Recommended</span>
-        <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 24, alignItems: 'flex-start', marginTop: 2 }}>
-
-          {/* Recommended regime + saving vs the other regime */}
-          <div style={{ flex: '1 1 200px' }}>
-            <p style={{ fontSize: 11, color: C.muted, margin: '0 0 4px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>File under</p>
-            <p style={{ fontSize: 26, fontWeight: 800, color: C.fg, margin: 0, lineHeight: 1.1 }}>{calc.recommendation === 'new' ? 'New regime' : 'Old regime'}</p>
-            <p style={{ fontSize: 12.5, color: C.muted, margin: '6px 0 0' }}>Saves <strong style={{ color: T.green }}>{fmt(calc.savings)}</strong> vs the {calc.recommendation === 'new' ? 'old' : 'new'} regime</p>
-          </div>
-
-          {/* Refund due / balance payable for the recommended regime */}
-          {calc.tdsPaid > 0 && (() => {
-            const bal = calc.recommendation === 'new' ? calc.newBalance : calc.oldBalance
-            const total = calc.recommendation === 'new' ? calc.newTotal : calc.oldTotal
-            const refund = bal < 0
-            return (
-              <div style={{ flex: '1 1 200px' }}>
-                <p style={{ fontSize: 11, color: C.muted, margin: '0 0 4px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>{refund ? 'Refund due' : 'Balance payable'}</p>
-                <p style={{ fontSize: 26, fontWeight: 800, color: refund ? T.green : C.fg, margin: 0, lineHeight: 1.1 }}>{fmt(Math.abs(bal))}</p>
-                <p style={{ fontSize: 10, color: T.faint, margin: '3px 0 0', lineHeight: 1.4 }}>{calc.tdsSource === 'ais' ? 'TDS from your AIS / 26AS' : calc.tdsSource === 'estimated' ? 'TDS estimated' : 'TDS from your salary slips'}</p>
-                <p style={{ fontSize: 11, color: C.muted, margin: '6px 0 0', lineHeight: 1.45 }}>Tax {fmt(total)} − TDS {fmt(calc.tdsPaid)}{refund ? ' = refund due' : ' = still to pay'}</p>
-              </div>
-            )
-          })()}
-
-          {/* Which ITR to file */}
-          <div style={{ flex: '1 1 160px' }}>
-            <p style={{ fontSize: 11, color: C.muted, margin: '0 0 4px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>File form</p>
-            <p style={{ fontSize: 26, fontWeight: 800, color: C.fg, margin: 0, lineHeight: 1.1 }}>{calc.itrForm}</p>
-            {calc.itrReasons[0] && <p style={{ fontSize: 11, color: C.muted, margin: '6px 0 0', lineHeight: 1.45 }}>{calc.itrReasons[0]}</p>}
-            <div style={{ marginTop: 4 }}><ITRFormsReference /></div>
-          </div>
-        </div>
-      </div>
+           Pure presentation of values already computed in `calc`. Extracted to <VerdictHero> so the
+           public landing's hero-journey final frame reuses this EXACT markup (byte-for-byte), not a
+           mock. (C.fg === T.teal, C.muted === T.muted, C.card === T.card — unchanged render.) ── */}
+      <VerdictHero
+        recommendation={calc.recommendation}
+        savings={calc.savings}
+        balance={calc.recommendation === 'new' ? calc.newBalance : calc.oldBalance}
+        total={calc.recommendation === 'new' ? calc.newTotal : calc.oldTotal}
+        tdsPaid={calc.tdsPaid}
+        tdsSource={calc.tdsSource}
+        itrForm={calc.itrForm}
+        itrReason={calc.itrReasons[0]}
+        itrReference={<ITRFormsReference />}
+      />
 
       {/* Senior-citizen + parents-senior toggles — affect old-regime slabs, 80D limits, 80TTA/80TTB eligibility */}
       <div style={{ marginBottom: 16, padding: 12, background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
