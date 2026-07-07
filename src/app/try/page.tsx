@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import ProvisionalVerdict from '@/components/ProvisionalVerdict'
+import DataAssurance from '@/components/DataAssurance'
 import Logo from '@/components/Logo'
 import { ThemeToggle, useArthvoTheme, useThemedBase } from '@/components/ThemeToggle'
 import { tokens as T } from '@/lib/tokens'
@@ -96,6 +97,7 @@ export default function TryPage() {
               <button onClick={() => seed(salary)} style={{ padding: '11px 18px', background: T.teal, color: T.onTeal, borderRadius: 10, fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>See my answer →</button>
             </div>
             <div style={{ fontSize: 11, color: T.muted, marginTop: 12 }}>No account needed. Your numbers stay on your device until you save.</div>
+            <DataAssurance style={{ marginTop: 8 }} />
           </div>
         ) : (
           <>

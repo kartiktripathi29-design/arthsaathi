@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import { seedIfMissing, verifyIdentity, setStoredIdentity } from '@/lib/identity'
 import { confirmDialog, passwordDialog } from '@/components/Dialog'
 import { GuideStrip } from '@/components/GuideStrip'
+import DataAssurance from '@/components/DataAssurance'
 
 import { tokens as T } from '@/lib/tokens'
 
@@ -560,6 +561,8 @@ export default function DocumentsPage() {
           Skip to Other earnings
         </button>
       </div>
+      {/* Data-handling assurance next to the upload CTA (brief Change 3). */}
+      <DataAssurance style={{ marginTop: 12, justifyContent: 'center' }} />
 
     </div>
   )

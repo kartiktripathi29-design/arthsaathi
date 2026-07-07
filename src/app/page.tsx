@@ -2,6 +2,7 @@
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import BgDemo from '@/components/BgDemo'
+import DataAssurance from '@/components/DataAssurance'
 import HeroJourney from '@/components/HeroJourney'
 import Logo from '@/components/Logo'
 import { ThemeToggle, type ThemeMode } from '@/components/ThemeToggle'
@@ -194,10 +195,7 @@ export default function LandingPage() {
             <span>No signup needed.</span>
             <span style={{ color:T.green, fontWeight:700 }}>Free during early access.</span>
           </div>
-          <div style={{ marginTop:8, fontSize:11, color:T.muted, lineHeight:1.5, display:'flex', gap:6 }}>
-            <span style={{ color:T.green, fontWeight:700 }}>✓</span>
-            <span>Your salary slip is processed automatically — never seen by a human.</span>
-          </div>
+          <DataAssurance style={{ marginTop:8 }} />
         </div>
       </div>
 
