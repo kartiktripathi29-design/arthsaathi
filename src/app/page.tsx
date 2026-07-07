@@ -2,6 +2,7 @@
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import BgDemo from '@/components/BgDemo'
+import HeroJourney from '@/components/HeroJourney'
 import Logo from '@/components/Logo'
 import { ThemeToggle, type ThemeMode } from '@/components/ThemeToggle'
 import { tokens as T } from '@/lib/tokens'
@@ -95,6 +96,15 @@ export default function LandingPage() {
     }
   }
 
+  // Hand-off from the hero-journey final frame → the live quick-estimate widget (brief Change 1).
+  const goToEstimate = () => {
+    const el = document.getElementById('quick-estimate')
+    if (!el) return
+    const y = el.getBoundingClientRect().top + window.scrollY - 84
+    window.scrollTo({ top: y, behavior: 'smooth' })
+    el.querySelector('input')?.focus()
+  }
+
   return (
     <div data-theme={resolved} suppressHydrationWarning style={{ minHeight: '100vh', background: T.paper, color: T.ink, fontFamily: '"Sora",-apple-system,sans-serif', overflowX: 'hidden' }}>
       <style>{`
@@ -153,8 +163,14 @@ export default function LandingPage() {
           One slip. Your real tax — and which regime it belongs in.
         </p>
 
+        {/* Hero journey (Change 1) — the animated story, resolving into the real result component
+            (VerdictHero), which hands off to the quick-estimate widget just below. Non-blocking. */}
+        <div className="fu d3" style={{ margin:'0 auto 28px' }}>
+          <HeroJourney monthly={taxSaving?.monthly ?? null} onTry={goToEstimate} />
+        </div>
+
         {/* Quick calculator */}
-        <div className="fu d4" style={{ background:T.card, border:`1.5px solid ${T.hairline}`, borderRadius:16, padding:'24px 28px', maxWidth:440, margin:'0 auto 12px', textAlign:'left' }}>
+        <div id="quick-estimate" className="fu d4" style={{ background:T.card, border:`1.5px solid ${T.hairline}`, borderRadius:16, padding:'24px 28px', maxWidth:440, margin:'0 auto 12px', textAlign:'left' }}>
           <div style={{ fontSize:13, fontWeight:700, color:T.teal, marginBottom:12 }}>Quick estimate — what's your monthly salary?</div>
           <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:0 }}>
             <div style={{ display:'flex', flex:1, border:`1.5px solid ${T.hairline}`, borderRadius:10, overflow:'hidden', background:T.card }}>
@@ -168,7 +184,20 @@ export default function LandingPage() {
               Check now →
             </button>
           </div>
-          <div style={{ fontSize:11, color:T.muted, marginTop:12 }}>No signup needed.</div>
+          {/* Pricing (Change 2) + data-handling assurance (Change 3), placed here so both sit ABOVE
+              the fold, next to the first CTA (acceptance #4). Change 2 reinstates the word "free",
+              deliberately reversing the session-4 "free retired" positioning call — logged for Kartik.
+              Change 3 states ONLY the founder-cleared claim ("never seen by a human"); the "never sold"
+              and retention (deleted / stored-encrypted) claims are NOT yet confirmed, so they are
+              intentionally omitted here — do not add them without founder sign-off. */}
+          <div style={{ marginTop:12, display:'flex', flexWrap:'wrap' as const, alignItems:'center', gap:'4px 12px', fontSize:11, color:T.muted }}>
+            <span>No signup needed.</span>
+            <span style={{ color:T.green, fontWeight:700 }}>Free during early access.</span>
+          </div>
+          <div style={{ marginTop:8, fontSize:11, color:T.muted, lineHeight:1.5, display:'flex', gap:6 }}>
+            <span style={{ color:T.green, fontWeight:700 }}>✓</span>
+            <span>Your salary slip is processed automatically — never seen by a human.</span>
+          </div>
         </div>
       </div>
 
@@ -219,6 +248,20 @@ export default function LandingPage() {
         </div>
       </div>
 
+      {/* Credibility block (Change 4) — ICAI-compliant: institutional voice only, NO individual name,
+          photo, membership number or firm, and NO invitation to engage CA services. The copy is the
+          founder's own, verbatim from the brief. NOTE: the collective "built by chartered accountants"
+          is a factual claim about authorship — founder-provided but not separately re-confirmed here;
+          if it should not be asserted, this whole block is a clean removal. */}
+      <div className="pain-sec" style={{ background:T.paper, paddingTop:0 }}>
+        <div style={{ maxWidth:720, margin:'0 auto', textAlign:'center' }}>
+          <div style={{ fontSize:11, color:T.faint, fontWeight:700, letterSpacing:'0.3em', textTransform:'uppercase' as const, marginBottom:16 }}>Who builds ArthVo</div>
+          <p style={{ fontSize:'clamp(15px,2.2vw,19px)', color:T.ink, lineHeight:1.7, fontWeight:400 }}>
+            ArthVo is built by chartered accountants who spent years watching the same story: clients discovering at filing time that they&apos;d overpaid all year — money they could have kept if anyone had explained their own salary slip to them. This is that explanation, automated.
+          </p>
+        </div>
+      </div>
+
       {/* How it works */}
       <div className="hiw-sec" style={{ background:T.sand }}>
         <div style={{ maxWidth:1100, margin:'0 auto' }}>
@@ -260,8 +303,12 @@ export default function LandingPage() {
             See which one's yours →
           </Link>
         </div>
-        <div style={{ marginTop:20, display:'flex', justifyContent:'center', gap:28, flexWrap:'wrap' as const }}>
-          {['No signup for the estimate', 'Plain English, always'].map(t => (
+        {/* Pricing repeated near the final CTA (Change 2), incl. the optional extended-access line. */}
+        <div style={{ marginTop:16, fontSize:13, color:'rgba(244,238,224,0.85)', lineHeight:1.6 }}>
+          <strong style={{ color:T.green, fontWeight:700 }}>Free during early access.</strong> Early users keep extended free access.
+        </div>
+        <div style={{ marginTop:16, display:'flex', justifyContent:'center', gap:28, flexWrap:'wrap' as const }}>
+          {['No signup for the estimate', 'Never seen by a human', 'Plain English, always'].map(t => (
             <div key={t} style={{ fontSize:13, color:'rgba(244,238,224,0.7)', display:'flex', alignItems:'center', gap:6 }}>
               <span style={{ color:T.green }}>✓</span> {t}
             </div>
