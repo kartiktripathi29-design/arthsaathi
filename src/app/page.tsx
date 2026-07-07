@@ -1,9 +1,9 @@
 'use client'
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
+import Image from 'next/image'
 import BgDemo from '@/components/BgDemo'
 import DataAssurance from '@/components/DataAssurance'
-import HeroJourney from '@/components/HeroJourney'
 import Logo from '@/components/Logo'
 import { ThemeToggle, type ThemeMode } from '@/components/ThemeToggle'
 import { tokens as T } from '@/lib/tokens'
@@ -12,6 +12,8 @@ import { estimateAnnualTax } from '@/lib/tax-slabs'
 export default function LandingPage() {
   const [salary, setSalary] = useState('')
   const [taxSaving, setTaxSaving] = useState<{ monthly: number; newTax: number; oldTax: number } | null>(null)
+  // Hero photo fallback — if /hero/hero.jpg is missing or fails to load, the .photo-hero gradient shows.
+  const [heroError, setHeroError] = useState(false)
 
   // Theme: identical logic to dashboard/layout.tsx (same av_theme key, same default, same resolution),
   // so a choice made here matches the dashboard and vice versa. 'system' follows prefers-color-scheme;
@@ -132,10 +134,27 @@ export default function LandingPage() {
         .hiw-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
         .cta-sec{padding:72px 48px}
         .footer-bar{padding:20px 48px}
+        /* Photo hero — full-bleed pre-graded image (teal duotone + baked left scrim). Headline overlaid
+           on the LEFT (desktop) / anchored to the BOTTOM over a scrim (mobile). NO CSS colour overlay on
+           desktop — the grade is baked in; a second layer would double-darken. */
+        .photo-hero{position:relative;width:100%;height:clamp(400px,60vh,600px);overflow:hidden;background:linear-gradient(120deg,var(--sand) 0%,var(--paper) 52%,var(--tint) 100%)}
+        .photo-hero-img{object-fit:cover;object-position:50% center}
+        .photo-hero-scrim{position:absolute;inset:0;pointer-events:none;display:none}
+        .photo-hero-copy{position:absolute;inset:0;max-width:1120px;margin:0 auto;padding:0 52px;display:flex;flex-direction:column;justify-content:center}
+        .photo-hero-copy-inner{max-width:600px}
+        /* FIXED overlay colours (not theme tokens): the photo is identical in light & dark, so the text
+           must not flip with the theme. The baked LEFT SCRIM darkens this zone (measured ~0.09 lum), so
+           LIGHT text reads on it — no CSS image overlay needed (per spec). The text-shadow is a per-glyph
+           halo (not an image overlay), added as legibility insurance where the grade lightens. */
+        .ph-title{color:#F6F1E6;text-shadow:0 1px 18px rgba(0,0,0,0.42)}
+        .ph-accent{color:#F1D69C;text-shadow:0 1px 18px rgba(0,0,0,0.42)}
+        .ph-sub{color:rgba(246,241,230,0.92);text-shadow:0 1px 14px rgba(0,0,0,0.38)}
         .demo-regime{display:grid;grid-template-columns:1fr 1fr;gap:12px}
         .demo-slots{display:grid;grid-template-columns:1fr 1fr;gap:8px}
         @media (max-width:900px){ .pain-grid{grid-template-columns:1fr} .hiw-grid{grid-template-columns:repeat(2,1fr)} }
-        @media (max-width:768px){ .nav-bar{padding:12px 20px} .hero-sec{padding:56px 20px 24px} .demo-wrap{padding:4px 16px 24px} .pain-sec{padding:32px 20px 24px} .hiw-sec{padding:56px 20px} .cta-sec{padding:56px 24px} .footer-bar{padding:16px 20px} }
+        @media (max-width:768px){ .nav-bar{padding:12px 20px} .hero-sec{padding:56px 20px 24px} .demo-wrap{padding:4px 16px 24px} .pain-sec{padding:32px 20px 24px} .hiw-sec{padding:56px 20px} .cta-sec{padding:56px 24px} .footer-bar{padding:16px 20px}
+          .photo-hero{height:clamp(440px,74vh,560px)} .photo-hero-img{object-position:70% center} .photo-hero-copy{justify-content:flex-end;padding:0 22px 34px}
+          .photo-hero-scrim{display:block;background:linear-gradient(to top,rgba(9,14,12,0.82) 4%,rgba(9,14,12,0.38) 42%,rgba(9,14,12,0) 72%)} }
         @media (max-width:560px){ .hiw-grid{grid-template-columns:1fr} .demo-slots{grid-template-columns:1fr} }
         @media (max-width:480px){ .demo-regime{grid-template-columns:1fr} .demo-topbar{flex-wrap:wrap;row-gap:4px} }
         @media (max-width:430px){ .nav-actions{gap:6px} .nav-cta{padding-left:13px!important;padding-right:13px!important} }
@@ -153,23 +172,33 @@ export default function LandingPage() {
         </div>
       </nav>
 
-      {/* HERO */}
-      <div className="hero-sec" style={{ maxWidth:1000, margin:'0 auto', textAlign:'center' }}>
-        <h1 className="fu d2" style={{ fontSize:'clamp(26px, 7vw, 54px)', fontWeight:900, lineHeight:1.04, letterSpacing:'-0.04em', color:T.ink, marginBottom:8 }}>
-          <span style={{ display:'block' }}>Your employer taxed<br />what they knew.</span>
-          <span style={{ color:T.teal }} className="highlight">Not what's true for you.</span>
-        </h1>
-
-        <p className="fu d3" style={{ fontSize:'clamp(15px,2vw,18px)', color:T.muted, margin:'20px auto 32px', maxWidth:520, lineHeight:1.75, fontWeight:400 }}>
-          One slip. Your real tax — and which regime it belongs in.
-        </p>
-
-        {/* Hero journey (Change 1) — the animated story, resolving into the real result component
-            (VerdictHero), which hands off to the quick-estimate widget just below. Non-blocking. */}
-        <div className="fu d3" style={{ margin:'0 auto 28px' }}>
-          <HeroJourney monthly={taxSaving?.monthly ?? null} onTry={goToEstimate} />
+      {/* PHOTO HERO — replaces the animated hero on this page (HeroJourney was imported only here).
+          Pre-graded photo via next/image; live headline overlaid on the left. No CSS colour overlay on
+          desktop (grade is baked in). Static gradient fallback shows if the image is missing/errors. */}
+      <section className="photo-hero">
+        {!heroError && (
+          <Image src="/hero/hero.jpg" alt="A salaried professional reviewing a payslip at a laptop"
+            fill priority sizes="100vw" className="photo-hero-img" onError={() => setHeroError(true)} />
+        )}
+        <div className="photo-hero-scrim" aria-hidden />
+        <div className="photo-hero-copy">
+          <div className="photo-hero-copy-inner fu d2">
+            <h1 className="ph-title" style={{ fontSize:'clamp(27px,4.4vw,48px)', fontWeight:900, lineHeight:1.06, letterSpacing:'-0.03em', margin:0 }}>
+              Your employer taxed<br />what they knew.
+              <span className="ph-accent" style={{ display:'block' }}>Not what&apos;s true for you.</span>
+            </h1>
+            <p className="ph-sub" style={{ fontSize:'clamp(14px,2vw,18px)', lineHeight:1.6, margin:'16px 0 22px', maxWidth:430, fontWeight:400 }}>
+              One slip. Your real tax — and which regime it belongs in.
+            </p>
+            <button onClick={goToEstimate} className="btn-green" style={{ padding:'13px 26px', background:T.teal, color:T.ivory, borderRadius:10, fontWeight:800, fontSize:15, border:'none', cursor:'pointer', fontFamily:'inherit' }}>
+              See your real tax →
+            </button>
+          </div>
         </div>
+      </section>
 
+      {/* HERO widget */}
+      <div className="hero-sec" style={{ maxWidth:1000, margin:'0 auto', textAlign:'center' }}>
         {/* Quick calculator */}
         <div id="quick-estimate" className="fu d4" style={{ background:T.card, border:`1.5px solid ${T.hairline}`, borderRadius:16, padding:'24px 28px', maxWidth:440, margin:'0 auto 12px', textAlign:'left' }}>
           <div style={{ fontSize:13, fontWeight:700, color:T.teal, marginBottom:12 }}>Quick estimate — what's your monthly salary?</div>
