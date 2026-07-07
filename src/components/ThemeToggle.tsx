@@ -64,8 +64,15 @@ export function useThemedBase(resolved: 'light' | 'dark') {
 // dashboard top bar. Relies on a `.btn-ghost` hover rule on the host page for the hover tint; fine
 // without. (`theme` distinguishes the explicit-vs-system state the slider alone can't show.)
 export function ThemeToggle({ theme, setTheme, resolved }: { theme: ThemeMode; setTheme: (t: ThemeMode) => void; resolved: 'light' | 'dark' }) {
-  const isDark = resolved === 'dark'
-  const isAuto = theme === 'system'
+  // theme/resolved derive from localStorage + matchMedia, which don't exist during SSR — so the server
+  // always renders the server-default (system / light). Gate the theme-dependent visuals behind a mount
+  // flag so the FIRST client render matches that server markup (no hydration mismatch on aria-pressed /
+  // aria-checked / colors), then snap to the real appearance. Clears the dev hydration warning on every
+  // surface that shows the toggle (landing, /try, dashboard).
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  const isDark = (mounted ? resolved : 'light') === 'dark'
+  const isAuto = (mounted ? theme : 'system') === 'system'
   const W = 52, H = 28, KNOB = 22, PAD = 2
 
   return (
