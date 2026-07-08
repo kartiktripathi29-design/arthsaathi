@@ -384,8 +384,10 @@ export default function DocumentsPage() {
         toast(`${allSlips.length} slip(s) parsed. ${failed.length} file(s) failed:\n${failed.join('\n')}`, { duration: 6000 })
       }
       // AIS / 26AS are already parsed on attach (see processTaxDoc), so nothing to do here.
-      // Wiring: straight to "here's what we read" to confirm the parse, then the provisional verdict.
-      router.push('/dashboard/tax/confirm')
+      // Wiring: into the step-by-step flow — Salary (review the parsed slip) → Other earnings →
+      // Allowances → Deductions → Your Tax. Each page carries its own forward button. (The proto
+      // provisional-verdict confirm/start screens are bypassed here by design.)
+      router.push('/dashboard/profile/salary')
     } catch (e: any) {
       console.error('[Documents] Outer error:', e)
       toast.error(e.message || 'Upload failed')
