@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAppStore } from '@/store/AppStore'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { PHASE_2_ENABLED } from '@/lib/phase'
 
 import { tokens as T } from '@/lib/tokens'
 
@@ -112,9 +113,10 @@ function AmtInput({ value, onChange }: { value:number; onChange:(n:number)=>void
 
 export default function InvestPage() {
   const { salary } = useAppStore()
-  // PHASE-2: remove this guard to re-enable
+  // PHASE-2 gate: redirect away while Phase-2 is off. Flip PHASE_2_ENABLED (src/lib/phase.ts) to
+  // re-enable — same one flag that opens the Phase-2 API routes.
   const router = useRouter()
-  useEffect(() => { router.replace('/dashboard/profile/documents') }, [router])
+  useEffect(() => { if (!PHASE_2_ENABLED) router.replace('/dashboard/profile/documents') }, [router])
   const [risk, setRisk] = useState<Risk>('moderate')
   const [goals, setGoals] = useState<Set<GoalKey>>(new Set(['emergency','retirement','wealth']))
   const [plan, setPlan] = useState<InvestRow[]>([])
