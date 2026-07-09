@@ -2,8 +2,12 @@
 // Receives parsed CAS data from the frontend after the widget completes.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { PHASE_2_ENABLED } from '@/lib/phase';
 
 export async function POST(req: NextRequest) {
+  // Phase-2 gate — same flag as the CAS token route. 404 while Phase-2 is off.
+  if (!PHASE_2_ENABLED) return new NextResponse(null, { status: 404 });
+
   let body: any;
 
   try {

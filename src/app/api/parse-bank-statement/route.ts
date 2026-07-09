@@ -10,12 +10,18 @@ import { prisma } from '@/lib/db'
 import { logActivity } from '@/lib/activity'
 import { hashBuffer } from '@/lib/storage'
 import { getUser } from '@/lib/auth'
+import { PHASE_2_ENABLED } from '@/lib/phase'
 
 export const maxDuration = 120
 
 const client = new Anthropic()
 
 export async function POST(req: NextRequest) {
+  // Phase-2 gate. Bank-statement ingestion is a Phase-2 feature; while Phase-2 is off this route must
+  // not parse a file or touch the DB. Return 404 (not 403) so we don't advertise the endpoint exists.
+  // Guarded BEFORE any auth/parse/DB work runs.
+  if (!PHASE_2_ENABLED) return new NextResponse(null, { status: 404 })
+
   const t0 = Date.now()
   const log = (s: string) => console.log(`[bank-parse] ${s}: ${Date.now() - t0}ms`)
 
@@ -381,6 +387,9 @@ async function persistStatement(
   intelligence: IntelligenceReport | null,
   userP: Promise<{ id: string } | null>,
 ) {
+  // Belt-and-braces second layer: never write Phase-2 statement data while Phase-2 is off, even if a
+  // caller reached here some other way. Same one flag as the route guard above.
+  if (!PHASE_2_ENABLED) return
   try {
     const user = await userP
     if (!user) return // not signed in — skip persistence (avoids orphan 'anonymous' rows / FK errors)
