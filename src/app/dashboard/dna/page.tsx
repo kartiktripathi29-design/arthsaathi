@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { PHASE_2_ENABLED } from '@/lib/phase'
 
 import { tokens as T } from '@/lib/tokens'
 
@@ -144,8 +145,9 @@ const PROFILES: Record<string, any> = {
 
 export default function DNAPage() {
   const router = useRouter()
-  // PHASE-2: remove this guard to re-enable
-  useEffect(() => { router.replace('/dashboard/profile/documents') }, [router])
+  // PHASE-2 gate: redirect away while Phase-2 is off. Flip PHASE_2_ENABLED (src/lib/phase.ts) to
+  // re-enable — same one flag that opens the Phase-2 API routes.
+  useEffect(() => { if (!PHASE_2_ENABLED) router.replace('/dashboard/profile/documents') }, [router])
   const [step, setStep] = useState<'quiz'|'processing'|'result'>('quiz')
   const [current, setCurrent] = useState(0)
   const [scores, setScores] = useState({ E:0, B:0, P:0, O:0 })
