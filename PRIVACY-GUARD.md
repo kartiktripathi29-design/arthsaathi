@@ -21,14 +21,15 @@ merged to `main`, deployed to production (arthvo.com), verified live.
 export const PHASE_2_ENABLED = false
 ```
 
-Single source of truth. No env var. Both the API guards and (future) client guards
+Single source of truth. No env var. Both the API guards and the client-page redirects
 read it. **To turn Phase-2 back on, flip this one constant to `true`** — every guard
 below opens at once.
 
-Phase-2 pages themselves still gate the old way — an ad-hoc client redirect
-(`useEffect(() => router.replace('/dashboard/profile/documents'))`) in
-`dashboard/invest`, `dashboard/dna`, `dashboard/decide`. Those redirects are *not*
-security; they can be migrated to read `PHASE_2_ENABLED` in a follow-up.
+The Phase-2 pages (`dashboard/invest`, `dashboard/dna`, `dashboard/decide`) redirect
+away with `useEffect(() => { if (!PHASE_2_ENABLED) router.replace('/dashboard/profile/documents') })`
+— reading the same flag (PR #31), so UI and API open together. Note this is a
+convenience/consistency gate, **not** a security boundary: the API `404` guards are the
+enforcement.
 
 ---
 
@@ -132,10 +133,10 @@ transmission behind "never seen by a human."
 
 ## Open / follow-ups
 
+- ✅ **Phase-2 client guards** — *done (PR #31)*: the three `router.replace` redirects
+  now read `PHASE_2_ENABLED`, so UI and API share the one flag literally.
 - **Transparency copy:** decide whether "never seen by a human" should disclose the
   Anthropic transmission (or reword). Product/founder call.
-- **Phase-2 client guards:** migrate the three `router.replace` redirects to read
-  `PHASE_2_ENABLED` so UI and API share the one flag literally.
 - **Re-enabling Phase-2:** flip `PHASE_2_ENABLED` → `true`, ensure `CASPARSER_API_KEY`
   is set, and re-confirm this assurance audit against the then-reachable bank/demat
   paths (bank statements are also sent to Claude and persisted).
