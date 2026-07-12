@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { tokens as T } from '@/lib/tokens'
 import { getStoredIdentity, maskPan } from '@/lib/identity'
+import { useSelectedFY } from '@/lib/useSelectedFY'
 
 const C = { fg: T.teal, bg: T.paper, card: T.card, border: T.hairline, ink: T.ink, muted: T.muted, green: T.green, sand: T.sand, wheat: T.taupe, danger: T.danger.text }
 const fmt = (n: number) => `₹${Math.abs(Math.round(n || 0)).toLocaleString('en-IN')}`
@@ -63,6 +64,11 @@ export default function ComputationPage() {
   const [who, setWho] = useState<{ name: string; pan: string } | null>(null)
   const [view, setView] = useState<'loading' | 'no-data' | 'ready'>('loading')
   const [mode, setMode] = useState<'summary' | 'detailed'>('summary')
+  const selFY = useSelectedFY()
+  // FY/AY come from the snapshot the optimizer computed on (fallback: the live resolver) — never a
+  // hardcoded year.
+  const fyText = c?.fyLabel || selFY?.label || ''
+  const ayText = c?.ayLabel || selFY?.ayLabel || ''
 
   useEffect(() => {
     let snap: any = null
@@ -124,7 +130,7 @@ export default function ComputationPage() {
 
   const copyText = () => {
     const L: string[] = []
-    L.push('COMPUTATION OF INCOME — FY 2025-26 (AY 2026-27)')
+    L.push(`COMPUTATION OF INCOME — ${fyText} (${ayText})`)
     if (who?.name) L.push(`Assessee: ${who.name}${who.pan ? ` · PAN ${who.pan}` : ''}`)
     L.push(`Recommended regime: ${rec ? 'New' : 'Old'} (saves ${fmt(c.savings)})`)
     L.push('')
@@ -164,7 +170,7 @@ export default function ComputationPage() {
       <div className="comp-doc" style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '28px 32px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
         <div style={{ textAlign: 'center', borderBottom: `2px solid ${C.fg}`, paddingBottom: 12, marginBottom: 16 }}>
           <h1 style={{ fontSize: 18, fontWeight: 800, color: C.fg, margin: '0 0 2px' }}>Computation of Total Income &amp; Tax</h1>
-          <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>FY 2025-26 · AY 2026-27 · {mode === 'summary' ? 'Summary' : 'Detailed form'}</p>
+          <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>{fyText} · {ayText} · {mode === 'summary' ? 'Summary' : 'Detailed form'}</p>
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, fontSize: 12, color: C.ink, marginBottom: 16 }}>

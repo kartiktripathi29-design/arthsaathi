@@ -8,6 +8,7 @@ import { useUser } from '@/lib/useUser'
 import { tokens as T } from '@/lib/tokens'
 import Logo from '@/components/Logo'
 import { ThemeToggle, useThemedBase } from '@/components/ThemeToggle'
+import { useSelectedFY } from '@/lib/useSelectedFY'
 
 const SUPABASE_CONFIGURED = !!process.env.NEXT_PUBLIC_SUPABASE_URL
 
@@ -214,7 +215,8 @@ function TopBar({ theme, setTheme, resolved }: { theme: ThemeMode; setTheme: (t:
   const pathname = usePathname()
   const router = useRouter()
   const { user, logout } = useAppStore()
-  const [selectedFY, setSelectedFY] = useState('FY 2026–27')
+  // Single source of truth for the displayed FY — derived from the user's slip via the resolver.
+  const selFY = useSelectedFY()
   // Mobile-only account menu: the sidebar footer (chip + sign-out) hides with the rail under 768px,
   // so the chip resurfaces here in the top bar as a tap-to-open dropdown.
   const [menuOpen, setMenuOpen] = useState(false)
@@ -232,13 +234,6 @@ function TopBar({ theme, setTheme, resolved }: { theme: ThemeMode; setTheme: (t:
     logout()
     router.replace('/login')
   }
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('av_selected_fy')
-      if (stored) setSelectedFY(stored)
-    }
-  }, [])
 
   // Close the account menu on any tap outside the chip.
   useEffect(() => {
@@ -279,7 +274,7 @@ function TopBar({ theme, setTheme, resolved }: { theme: ThemeMode; setTheme: (t:
       </Link>
       <h1 className="dash-toptitle" style={{ fontSize: 13, fontWeight: 600, color: T.ink, margin: 0 }}>{pageTitle}</h1>
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 11, color: T.muted }}>{selectedFY}</span>
+        {selFY && <span style={{ fontSize: 11, color: T.muted }}>{selFY.label}</span>}
         <span className="dash-topbadge" style={{
           fontSize: 11, background: T.card, color: T.teal,
           padding: '2px 9px', borderRadius: 3, fontWeight: 500,

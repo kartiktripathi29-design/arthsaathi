@@ -4,7 +4,8 @@ import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { seedIfMissing, verifyIdentity, setStoredIdentity } from '@/lib/identity'
 import { confirmDialog, passwordDialog } from '@/components/Dialog'
-import { estimateAnnualTax, type SeniorStatus } from '@/lib/tax-slabs'
+import { estimateAnnualTax, fyLabel, type SeniorStatus } from '@/lib/tax-slabs'
+import { anchorFYFromSlips } from '@/lib/fy'
 import {
   detectAnomalies,
   extractAnnualGross,
@@ -173,14 +174,11 @@ type Intent = 'validate' | 'forecast'
 function slipFyStartYear(year: number, monthNum: number): number {
   return monthNum >= 4 ? year : year - 1
 }
-function inferFyStartYear(slipDates: { year: number; monthNum: number }[], intent: Intent): number {
+function inferFyStartYear(slipDates: { year: number; monthNum: number }[], _intent: Intent): number {
   if (slipDates.length === 0) return new Date().getMonth() + 1 >= 4 ? new Date().getFullYear() : new Date().getFullYear() - 1
-  // Use the latest slip to anchor.
-  const latest = [...slipDates].sort((a, b) => (b.year - a.year) || (b.monthNum - a.monthNum))[0]
-  const slipFy = slipFyStartYear(latest.year, latest.monthNum)
-  // Forecast operates within the SAME FY as the uploaded slip (e.g. Apr 2026 slip → FY 2026-27),
-  // not the year after. Validate also uses the slip's FY.
-  return slipFy
+  // Mixed-FY gate: anchor to the FY with the MOST slip-months (ties → later FY) — never a blend.
+  // Single-FY uploads resolve to that one FY unchanged. Shared resolver: src/lib/fy.ts.
+  return anchorFYFromSlips(slipDates).anchorFY
 }
 
 // A confirmed slip-to-month-range mapping inferred from slip dates.
@@ -541,6 +539,10 @@ export default function SalaryPageCompleteFinal() {
       fyStart: slipFyStartYear(year, monthNum),
     }
   }), [slips])
+
+  // Mixed-FY gate: which FY the timeline anchors to (most months) and any slip-months excluded from
+  // it — surfaced as a flag in the review. Matches inferFyStartYear (both use the shared resolver).
+  const fySpan = useMemo(() => anchorFYFromSlips(slipsWithMeta.map(s => ({ year: s.year, monthNum: s.monthNum }))), [slipsWithMeta])
 
   function nextMonthKey(mk: string): string {
     const [y, m] = mk.split('-').map(Number)
@@ -1702,6 +1704,11 @@ export default function SalaryPageCompleteFinal() {
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '20px 0' }}>
       <style>{SAL_MOBILE_CSS}</style>
+      {fySpan.spansMultiple && (
+        <div style={{ background: T.caution.fill, border: `1px solid ${T.caution.border}`, color: T.caution.text, borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 12.5, lineHeight: 1.5 }}>
+          <strong>Your slips span two financial years.</strong> Computing on <strong>{fyLabel(fySpan.anchorFY)}</strong> — the year with the most months. {fySpan.excluded.length} slip{fySpan.excluded.length > 1 ? 's' : ''} from another year {fySpan.excluded.length > 1 ? 'are' : 'is'} excluded here; add {fySpan.excluded.length > 1 ? 'them' : 'it'} under that year separately so two years’ rules are never blended into one number.
+        </div>
+      )}
       <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Salary</h1>
       <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>
         FY {fyStartYear}-{fyStartYear + 1} (Apr {fyStartYear} – Mar {fyStartYear + 1})

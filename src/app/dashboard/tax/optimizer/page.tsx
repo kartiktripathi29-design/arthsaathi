@@ -6,6 +6,7 @@ import { computeSec80G } from '@/lib/deductions'
 import { getSalaryFacts } from '@/lib/salary-facts'
 import { oldRegimeDeductionSaving, type SeniorStatus } from '@/lib/tax-slabs'
 import { computeRegimeCore, cap80DSelf, cap80DParents } from '@/lib/verdict-engine'
+import { useSelectedFY, setSelectedFYMode } from '@/lib/useSelectedFY'
 import { GuideStrip } from '@/components/GuideStrip'
 import VerdictHero from '@/components/VerdictHero'
 
@@ -483,6 +484,8 @@ export default function TaxOptimizerPage() {
     }
   }, [seniorStatus, parentsSenior])
 
+  const selFY = useSelectedFY()
+
   // Persist a compact snapshot of the computed tax picture so the Dashboard can render the same
   // numbers without re-deriving them (single source of truth, like av_salary_summary). Written
   // whenever the calc updates.
@@ -510,9 +513,12 @@ export default function TaxOptimizerPage() {
         computedAt: Date.now(),
       }))
       // Full computed picture, for the CA-ready computation statement (/dashboard/tax/computation).
-      localStorage.setItem('av_tax_computation', JSON.stringify({ ...calc, computedAt: Date.now() }))
+      // Carry the resolver's FY/AY labels so that page renders the SAME year, never a hardcoded one.
+      localStorage.setItem('av_tax_computation', JSON.stringify({
+        ...calc, fyLabel: selFY?.label ?? null, ayLabel: selFY?.ayLabel ?? null, computedAt: Date.now(),
+      }))
     } catch {}
-  }, [calc])
+  }, [calc, selFY])
 
   if (calcError) {
     return (
@@ -555,7 +561,30 @@ export default function TaxOptimizerPage() {
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '20px 0' }}>
       <style>{OPT_MOBILE_CSS}</style>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Your Tax</h1>
-      <p style={{ fontSize: 13, color: C.muted, margin: '0 0 16px' }}>Your tax picture for FY 2025-26</p>
+      <p style={{ fontSize: 13, color: C.muted, margin: '0 0 10px' }}>Your tax picture for {selFY?.label ?? '—'}</p>
+      {/* FY picker — current year vs plan ahead, straight from the resolver. Plan-ahead is disabled
+          (with a hint) when it would land on the same year (e.g. an April slip). */}
+      {selFY && (
+        <div style={{ display: 'flex', gap: 8, margin: '0 0 16px', flexWrap: 'wrap' }}>
+          {selFY.options.map(o => {
+            const active = o.mode === selFY.mode
+            return (
+              <button key={o.mode} type="button" title={o.hint}
+                onClick={() => { if (!o.disabled) setSelectedFYMode(o.mode) }}
+                disabled={o.disabled}
+                style={{
+                  padding: '6px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, fontFamily: 'inherit',
+                  cursor: o.disabled ? 'not-allowed' : 'pointer', opacity: o.disabled ? 0.5 : 1,
+                  border: `1px solid ${active ? C.fg : C.border}`,
+                  background: active ? C.fg : 'transparent',
+                  color: o.disabled ? C.muted : active ? T.onTeal : C.fg,
+                }}>
+                {o.label}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {/* Guide strip — a confidence / completeness note. It does NOT restate the verdict hero below;
           it tells the user how solid the figure is and what would make it exact (TDS source, salary basis). */}

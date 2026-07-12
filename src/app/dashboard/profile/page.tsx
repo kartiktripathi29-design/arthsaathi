@@ -9,7 +9,7 @@ import { useAppStore } from '@/store/AppStore'
 import { MEGA_CATEGORIES, MegaCategory, tagTransactions, detectSalaryCandidates, detectSalary, SalaryCandidate, SalaryDetectionResult, generateExpenseSuggestions, ExpenseSuggestion, loadMerchantMemory, saveMerchantMemory, extractMerchantKey } from '@/lib/categories'
 import type { IntelligenceReport, ClassifiedTransaction } from '@/lib/txn-intelligence'
 import type { ParsedSalaryData } from '@/types'
-import { calcOldRegime, calcNewRegime, calcHRAExemption } from '@/lib/tax-engine'
+import { calcOldRegime, calcNewRegime, calcHRAExemption } from '@/lib/tax-slabs'
 
 import { tokens as T } from '@/lib/tokens'
 
