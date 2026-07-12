@@ -2,43 +2,55 @@
 
 <!-- Tip/status lines. Refresh these each state check. -->
 
-- **Tip (origin/main):** `9f84b52` — 2026-07-12 — Merge PR #33 (derived FY resolution)
-- **Repo location:** `C:\dev\arthsaathi` — **moved out of OneDrive** this session (OneDrive broke Next's file-watcher → stale hot-reload). Start sessions from here.
-- **Deploy:** production `arthsaathi-app` → **arthvo.com** (Vercel, auto-deploys `main`). All work below is live-verified.
+- **Tip (origin/main):** `c8972db` — 2026-07-12 — Merge PR #42 (cross-device verdict context)
+- **Repo location:** `C:\dev\arthsaathi` — moved out of OneDrive (OneDrive broke Next's file-watcher). Start sessions from here.
+- **Deploy:** production `arthsaathi-app` → **arthvo.com / www.arthvo.com** (Vercel, auto-deploys `main`). Everything below is live-verified.
+- **DB:** Supabase project **`bsxwxqnighcjayxjikiv`** (the earlier `frmmuizbbhplcrdtaywy` was the wrong project — see #39). Full migration history applied; auto-migrate on prod deploys.
 - **Landing hero:** animated `HeroJourney` (photo-hero PR #27 was reverted; `public/hero/hero.jpg` absent).
 
-## Shipped this session
+## What's live (verified on arthvo.com)
 
-### Upload flow — PR #28
-Uploading a slip + **Proceed** was jumping straight to "Your Tax" (a leftover from the prototype re-wire `385bed1`). Pointed Proceed back at the Salary page so the guided flow runs: **Documents → Salary → Other earnings → Allowances → Deductions → Your Tax.**
+- **Email capture** on `/try` (PR #36) — stores email + verdict figures + `capturedAt`; idempotent; rate-limited.
+- **Unsubscribe** — `GET /unsubscribe?token=` sets `unsubscribed=true`, idempotent confirmation page.
+- **Cross-device rehydrate** (PR #42) — `GET /api/email-capture/context?r=<token>` returns **only** `{verdictFY, verdictAmount}` for a non-unsubscribed capture (404 on unknown/short/unsubscribed); `/try?r=` shows a returning-user banner when the device has no local verdict (local wins). Prod round-trip verified end-to-end.
+- **Final January email copy** (PR #41) — `docs/EMAIL-JANUARY.md` is the founder-final draft (no email is sent yet; the send itself is a future task).
+- **Derived FY resolution** (PR #33) — FY derived from the slip (Apr–Mar), never hardcoded; `tax-slabs.ts` year-parameterized; `fy.ts` + `useSelectedFY`; retired `tax-engine.ts`.
+- **Privacy guards** (PRs #29–#32) — Phase-2 gating (below); `PRIVACY-GUARD.md`; `NEXT_PUBLIC_CLOUD_SYNC=0` in prod.
+- **Data-assurance line** — single source `DataAssurance.tsx` on hero / `/try` / dashboard upload. *(Copy change to name AI explicitly is in open PR #43, not yet merged.)*
 
-### Privacy guards (Phase-2 API gating) — PRs #29, #30, #31, #32
-UI-hidden ≠ API-off. Introduced one flag `PHASE_2_ENABLED` (`src/lib/phase.ts`; no env var) and, on the server, **404** (not 403) before any parse/DB/auth:
-- `parse-bank-statement` (+ belt-and-braces guard in `persistStatement`), `parse-cas/token`, `parse-cas/save`.
-- Migrated the Invest/DNA/Decide client redirects to read the same flag (#31).
-- Audited the data-handling assurance → **`PRIVACY-GUARD.md`** (#30, doc updated #32).
-- **Vercel:** set `NEXT_PUBLIC_CLOUD_SYNC=0` explicitly in production + redeployed (`/api/user-data` inert; verified 404 live).
+## What's gated / disabled (intentional)
 
-### Derived FY resolution — PR #33 (closes the session-4 FY conflict)
-FY is now **derived from the slip** (Apr–Mar boundary), never hardcoded.
-- **`tax-slabs.ts`** year-parameterized (`TAX_RULES` + `LATEST_ENACTED_FY`). FY2026-27 confirmed **identical** to FY2025-26 (Budget 2026 changed no slabs; FY2025-26 validated against the ITD portal).
-- **`fy.ts`** resolver: `fyFromSlipMonth`, `resolveFY` (plan-ahead capped at latest enacted, convergence-disabled), `fyOptions`, `anchorFYFromSlips`.
-- **Retired `tax-engine.ts`** (stale FY2024-25) → migrated `/api/tax-calc` + `dashboard/profile`. Live-verified the corrected numbers: ₹12.75L gross new-regime **₹83,200 → ₹0**; ₹15.75L **₹1,45,600 → ₹1,09,200**; old regime unchanged.
-- **One `selectedFY`** (`useSelectedFY` hook): killed the chrome hardcode, current/plan-ahead picker on the optimizer, FY/AY labels threaded into the computation statement.
-- **Mixed-FY gate:** compute on the most-months FY + a visible flag banner (not full slicing).
-- **Past-years:** `tax-history.ts` kept self-contained; a cross-check test locks its FY2025-26 agreement with the consolidated engine.
-- Tests: `node:test` suite **34 → 75**, green; `tsc --noEmit` clean; Vercel prod build green.
+- **Phase-2 APIs → 404** while `PHASE_2_ENABLED = false` (`src/lib/phase.ts`, code constant): `parse-bank-statement`, `parse-cas/token`, `parse-cas/save`. Verified 404 live.
+- **FY 2026-27 "plan ahead" disabled** (PR #40) — option visible-but-disabled with hint "Available once next year's rules are finalised"; resolver **clamps** to the latest genuinely enacted FY (2025) because `FY_2026_27` is still an identical copy of `FY_2025_26`. Sentinel test auto-fails once real rules are encoded.
+- **`/api/user-data`** inert (`NEXT_PUBLIC_CLOUD_SYNC=0`).
 
-## Open items
-- **Old OneDrive folder** (`…\Downloads\arthsaathi_v2`) — a scheduled task (`DeleteArthsaathiOneDrive`) deletes it automatically once the Claude session holding its lock closes.
-- **PRIVACY-GUARD.md follow-ups:** disclosure wording for "never seen by a human" (Anthropic transmission); Phase-2 re-enable checklist.
+## Open PRs — close-out session (awaiting review/merge; none merged)
+
+- **#43** — copy: `DataAssurance` line names AI explicitly ("Read automatically by AI — no human ever sees your slip.")
+- **#44** — chore: remove verified-dead files (8 files, deletions only; `tsc` + tests green)
+- **#45** — model: `/api/parse-ais` → `claude-sonnet-4-6` (A/B confirmed identical extraction)
+- **#46** — chore: `scripts/smoke-prod.mjs` (14/14 green against prod)
+
+## What remains — tracked in issue #39
+
+1. **FY 2026-27** — CA-verified figures, then encode a real distinct rule set + a `≠ FY25-26` sentinel test, removing the #40 gate in the same PR. *(No CA figures supplied yet.)*
+2. **Old Supabase project** `frmmuizbbhplcrdtaywy` — dashboard check for real rows; migrate if any.
+3. **Past-years ITR validation** — run real past-year returns through `scripts/validate-past-years.mjs`.
+4. **`/api/parse-itr`** still on `claude-opus-4-5` — upgrade to Sonnet with the same identical-extraction guardrail.
+
+## Tooling
+
+- **`scripts/smoke-prod.mjs`** (via PR #46) — live launch-critical smoke test, exit 0/1. `node scripts/smoke-prod.mjs [baseUrl]`.
+- Tests: `node --test src/lib/*.test.mjs` (94 green); `npx tsc --noEmit` clean.
 
 ## Recent commits
 ```
+c8972db Merge PR #42 — cross-device verdict context (/try?r=)
+c903577 Merge PR #41 — final January email copy (verbatim)
+1f8c776 Merge PR #35 — FY26-27 verification report
+2dde3d2 Merge PR #40 — gate unverified FY (disable + clamp)
+c182831 Merge PR #38 — capture copy fix + build-migrate
+16a2fea Merge PR #36 — email capture on /try
+fb4a793 Merge PR #37 — past-years harness
 9f84b52 Merge PR #33 — derived FY resolution
-69292ca Merge PR #32 — mark client-guard follow-up done
-8157cc0 Merge PR #31 — gate client redirects on PHASE_2_ENABLED
-0dc0858 Merge PR #30 — PRIVACY-GUARD.md
-5b8c222 Merge PR #29 — server-side Phase-2 API gate
-0bd9210 Merge PR #28 — post-upload Proceed → step-by-step flow
 ```
