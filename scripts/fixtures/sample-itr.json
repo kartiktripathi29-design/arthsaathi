@@ -1,0 +1,16 @@
+{
+  "documentType": "SYNTHETIC FIXTURE - not a real return",
+  "assessmentYear": "AY 2025-26",
+  "itrForm": "ITR-1",
+  "filedRegime": "old",
+  "isSalaried": true,
+  "grossSalary": 1200000,
+  "exemptAllowances": 0,
+  "otherSlabIncome": 0,
+  "chapterVIA": 150000,
+  "reportedGrossTotalIncome": 1150000,
+  "reportedTotalIncome": 1000000,
+  "reportedTotalTax": 117000,
+  "reportedRefundOrPayable": 0,
+  "notes": "Synthetic fixture for scripts/validate-past-years.mjs. FY 2024-25, filed old, gross 12L with 1.5L Ch.VI-A. Expected could-have-saved (switch to new) = 45500. No PAN or personal data - obviously fake."
+}
