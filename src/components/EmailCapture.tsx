@@ -20,7 +20,7 @@ function fireEvent(event: 'capture_shown' | 'capture_submitted' | 'capture_dismi
 export default function EmailCapture() {
   const selFY = useSelectedFY()
   const [email, setEmail] = useState('')
-  const [status, setStatus] = useState<'idle' | 'submitting' | 'done' | 'error'>('idle')
+  const [status, setStatus] = useState<'idle' | 'submitting' | 'done' | 'invalid' | 'failed'>('idle')
   const [dismissed, setDismissed] = useState(false)
   const shownFired = useRef(false)
 
@@ -34,19 +34,19 @@ export default function EmailCapture() {
 
   const onSubmit = async () => {
     try {
-      if (!isValidEmail(email)) { setStatus('error'); return }
+      if (!isValidEmail(email)) { setStatus('invalid'); return }
       setStatus('submitting')
       // Capture the could-have-saved figure + FY shown at this moment (resolver + pure verdict read —
       // no verdict logic touched). verdictAmount is nullable only if genuinely uncomputable.
       let verdictAmount: number | null = null
       try { const v = computeQuickVerdict(); verdictAmount = Number.isFinite(v?.savings) ? v.savings : null } catch { verdictAmount = null }
       const verdictFY = selFY?.fy
-      if (!Number.isInteger(verdictFY)) { setStatus('error'); return }
+      if (!Number.isInteger(verdictFY)) { setStatus('failed'); return }
       const res = await submitCapture(fetch, { email: email.trim(), verdictFY: verdictFY as number, verdictAmount })
       if (res.ok) { setStatus('done'); fireEvent('capture_submitted') }
-      else { setStatus('error') }
+      else { setStatus(res.status === 400 ? 'invalid' : 'failed') } // 400 = bad email; else a save failure
     } catch {
-      setStatus('error') // a capture failure must never break the page
+      setStatus('failed') // a capture failure must never break the page
     }
   }
 
@@ -77,9 +77,9 @@ export default function EmailCapture() {
         One email in January — the month you can still change your tax. Nothing else.
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', flex: 1, minWidth: 200, border: `1.5px solid ${status === 'error' ? T.marigold : T.hairline}`, borderRadius: 10, overflow: 'hidden', background: T.card }}>
+        <div style={{ display: 'flex', flex: 1, minWidth: 200, border: `1.5px solid ${status === 'invalid' ? T.marigold : T.hairline}`, borderRadius: 10, overflow: 'hidden', background: T.card }}>
           <input type="email" inputMode="email" value={email} autoComplete="email"
-            onChange={e => { setEmail(e.target.value); if (status === 'error') setStatus('idle') }}
+            onChange={e => { setEmail(e.target.value); if (status === 'invalid' || status === 'failed') setStatus('idle') }}
             onKeyDown={e => { if (e.key === 'Enter') onSubmit() }}
             placeholder="you@email.com"
             style={{ flex: 1, width: '100%', padding: '11px 12px', border: 'none', outline: 'none', fontSize: 14, fontFamily: '"Sora",sans-serif', background: 'transparent', color: T.ink }} />
@@ -89,8 +89,11 @@ export default function EmailCapture() {
           Remind me in January
         </button>
       </div>
-      {status === 'error' && (
+      {status === 'invalid' && (
         <div style={{ fontSize: 11.5, color: T.marigold, marginTop: 8 }}>Please enter a valid email and try again.</div>
+      )}
+      {status === 'failed' && (
+        <div style={{ fontSize: 11.5, color: T.marigold, marginTop: 8 }}>Couldn’t save that just now — please try again in a moment.</div>
       )}
       <div style={{ fontSize: 11, color: T.muted, marginTop: 10 }}>
         One reminder email. Unsubscribe with one click. No marketing.
