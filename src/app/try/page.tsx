@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import ProvisionalVerdict from '@/components/ProvisionalVerdict'
+import EmailCapture from '@/components/EmailCapture'
 import DataAssurance from '@/components/DataAssurance'
 import Logo from '@/components/Logo'
 import { ThemeToggle, useArthvoTheme, useThemedBase } from '@/components/ThemeToggle'
@@ -115,6 +116,8 @@ export default function TryPage() {
               noSalaryLabel="Enter your salary →"
               footnote="Sign up (free) to add your real slip, capital gains and exact TDS — and get a CA-ready computation."
             />
+            {/* Post-verdict email capture — renders AFTER the verdict and never gates it. */}
+            <EmailCapture />
           </>
         )}
       </div>

@@ -320,3 +320,28 @@ model UserData {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
+
+// Phase-1 email capture on the /try verdict — retention infrastructure, not a newsletter. Pre-auth,
+// so NOT related to User. verdictAmount is the could-have-saved figure shown at capture time, stored
+// for January personalization. No email is sent anywhere; capture + store + one-click unsubscribe only.
+model EmailCapture {
+  id               String   @id @default(cuid())
+  email            String   @unique
+  source           String   @default("try-verdict")
+  verdictFY        Int
+  verdictAmount    Int?
+  capturedAt       DateTime @default(now())
+  consentAt        DateTime @default(now())
+  unsubscribed     Boolean  @default(false)
+  unsubscribeToken String   @unique
+  updatedAt        DateTime @updatedAt
+
+  @@index([capturedAt])
+}
+
+// Minimal server-side event counter (no third-party analytics is wired). One row per event key.
+model AnalyticsCounter {
+  key       String   @id
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
