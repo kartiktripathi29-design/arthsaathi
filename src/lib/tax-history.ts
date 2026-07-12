@@ -5,10 +5,12 @@
  * rules*, so we can show — honestly — how a different regime choice would have landed. This is the
  * foundation for the "how much you could have saved" read on a previously-filed ITR.
  *
- * Deliberately self-contained. It does NOT reuse `tax-engine.ts` / `tax-slabs.ts`: those encode a
- * single (and currently contested — see the FY-conflict handoff note) year, and running a prior year
- * through them would silently apply the wrong slabs. A retrospective number computed on the wrong
- * year's rules is a fabricated number — which the product's "no fabricated numbers" principle forbids.
+ * Deliberately self-contained. `tax-slabs.ts` is now year-parameterized, but only carries the current
+ * enacted FYs (2025-26, 2026-27); this table covers the historical range (FY 2020-21+) those don't.
+ * Running a prior year through the current engine would silently apply the wrong slabs — and a
+ * retrospective number computed on the wrong year's rules is a fabricated number, which the product's
+ * "no fabricated numbers" principle forbids. The overlapping year (FY 2025-26) is locked to the
+ * consolidated engine by a cross-check test (tax-history-parity.test.mjs) so the two can't drift.
  *
  * Pure: no React, no I/O. Rupee inputs are annual rupees (integers).
  *

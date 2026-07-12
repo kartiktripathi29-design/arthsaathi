@@ -2,8 +2,9 @@
 // Chapter VI-A caps, and the old-vs-new pick live — so the Tax Optimizer and the quick-verdict can
 // never disagree on the core math. Built on tax-slabs.ts (the current slab source of truth).
 //
-// NOTE: this is intentionally separate from the legacy tax-engine.ts, which still carries FY 2024-25
-// slabs and feeds a different API route. Don't cross the streams.
+// NOTE: this regime-comparison layer (for the quick-verdict + optimizer) is built on the shared
+// tax-slabs.ts slab math. The old FY 2024-25 tax-engine.ts it used to warn against has been retired
+// and its regime-computation folded into tax-slabs.ts.
 
 import { slabBreakdown, type SeniorStatus } from './tax-slabs'
 
