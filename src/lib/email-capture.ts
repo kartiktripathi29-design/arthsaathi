@@ -73,3 +73,24 @@ export async function submitCapture(
     return { ok: false, status: 0 }
   }
 }
+
+// ── Cross-device rehydrate ──────────────────────────────────────────────────
+// The January email's CTA carries the capture's unguessable token (/try?r=<token>). /try reads back
+// ONLY the two verdict numbers for a NON-unsubscribed capture, so a click from another device isn't a
+// cold start. The token grants read of exactly two numbers (verdictFY, verdictAmount) — never the
+// email address or any other field. Unknown or unsubscribed token → no context (the route 404s).
+export interface ContextStore {
+  contextByToken(token: string): Promise<{ verdictFY: number; verdictAmount: number | null } | null>
+}
+
+export async function getCaptureContext(store: ContextStore, token: unknown): Promise<{ verdictFY: number; verdictAmount: number | null } | null> {
+  const t = String(token ?? '')
+  if (t.length < 16) return null // unguessable tokens are long — reject obviously-bad input without a lookup
+  return store.contextByToken(t)
+}
+
+// /try decision: only fetch the token context when there's a token AND this device has no local
+// verdict — local state always wins.
+export function shouldFetchContext(hasLocalVerdict: boolean, token: string | null | undefined): boolean {
+  return !hasLocalVerdict && typeof token === 'string' && token.length >= 16
+}

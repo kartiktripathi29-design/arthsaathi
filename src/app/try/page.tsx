@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import ProvisionalVerdict from '@/components/ProvisionalVerdict'
 import EmailCapture from '@/components/EmailCapture'
+import { shouldFetchContext } from '@/lib/email-capture'
 import DataAssurance from '@/components/DataAssurance'
 import Logo from '@/components/Logo'
 import { ThemeToggle, useArthvoTheme, useThemedBase } from '@/components/ThemeToggle'
@@ -26,6 +27,7 @@ export default function TryPage() {
   const [salary, setSalary] = useState('')
   const [entered, setEntered] = useState(false)
   const [version, setVersion] = useState(0)
+  const [returning, setReturning] = useState<{ verdictFY: number; verdictAmount: number | null } | null>(null)
 
   const seed = (monthlyStr: string) => {
     const m = num(monthlyStr)
@@ -72,6 +74,23 @@ export default function TryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Cross-device rehydrate: if the January email link carries ?r=<token> and this device has NO local
+  // verdict, fetch back ONLY the prior verdict figures and show a returning-user banner. Local state
+  // wins if present; unknown/unsubscribed token → 404 → no banner, page works normally.
+  useEffect(() => {
+    try {
+      const token = new URLSearchParams(window.location.search).get('r')
+      const s = JSON.parse(localStorage.getItem('av_salary_summary') || 'null')
+      const hasLocalVerdict = !!s && (s.annualGross || 0) > 0
+      if (!shouldFetchContext(hasLocalVerdict, token)) return
+      fetch(`/api/email-capture/context?r=${encodeURIComponent(token as string)}`)
+        .then(res => (res.ok ? res.json() : null))
+        .then(ctx => { if (ctx && Number.isInteger(ctx.verdictFY)) setReturning(ctx) })
+        .catch(() => {})
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   return (
     <div data-theme={resolved} suppressHydrationWarning style={{ minHeight: '100vh', background: T.paper, color: T.ink, fontFamily: '"Sora",-apple-system,sans-serif' }}>
       <style>{`.btn-ghost{transition:background .15s} .btn-ghost:hover{background:var(--tint) !important}`}</style>
@@ -85,6 +104,11 @@ export default function TryPage() {
       </nav>
 
       <div style={{ padding: '28px 20px 60px' }}>
+        {returning && typeof returning.verdictAmount === 'number' && returning.verdictAmount > 0 && (
+          <div style={{ maxWidth: 440, margin: '0 auto 16px', background: T.tint, border: `1px solid ${T.hairline}`, borderRadius: 12, padding: '14px 16px', color: T.ink, fontSize: 13, lineHeight: 1.55 }}>
+            In July you found <strong>₹{returning.verdictAmount.toLocaleString('en-IN')}</strong> you could have saved. Let’s see what’s still fixable this year.
+          </div>
+        )}
         {!entered ? (
           <div style={{ maxWidth: 440, margin: '40px auto 0', background: T.card, border: `1.5px solid ${T.hairline}`, borderRadius: 16, padding: '24px 28px' }}>
             <div style={{ fontSize: 20, fontWeight: 800, color: T.ink, letterSpacing: '-0.02em', marginBottom: 6 }}>See your real tax — no signup.</div>
