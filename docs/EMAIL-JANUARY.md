@@ -35,7 +35,7 @@ Body:
 > One click shows what's still open — from your own numbers, with nothing to sell you
 > at the end.
 >
-> **[ See what's still fixable ]** → arthvo.com/try
+> **[ See what's still fixable ]** → arthvo.com/try?r={token}
 >
 > —
 > This is the one email we promised in July. There won't be another.
@@ -58,7 +58,7 @@ Body:
 > One click shows what's still fixable — from your own numbers, with nothing to sell
 > you at the end.
 >
-> **[ See what's still fixable ]** → arthvo.com/try
+> **[ See what's still fixable ]** → arthvo.com/try?r={token}
 >
 > —
 > This is the one email we promised in July. There won't be another.
@@ -86,6 +86,9 @@ Body:
 2. Store **capturedAt** and source — the email references "in July"; if captures happen
    in other months, swap the phrase for "when you last checked" (template conditional)
 3. Provider: not chosen yet (Resend / SES). Needs: template variables, one-click
-   unsubscribe header (RFC 8058), signed unsubscribe link → existing route
-4. Link target /try should preserve returning-user context if possible (their prior
-   verdict), so the click lands on "here's your gap" not a cold start
+   unsubscribe header (RFC 8058), unguessable token link → existing route
+4. CTA link format: **arthvo.com/try?r={token}** (the capture's unguessable token).
+   /try preserves returning-user context cross-device — it GETs
+   /api/email-capture/context?r={token} (returns only verdictFY + verdictAmount for a
+   non-unsubscribed capture) and shows the returning-user banner, so a click from
+   another device lands on "here's your gap" not a cold start. Local verdict wins if present.

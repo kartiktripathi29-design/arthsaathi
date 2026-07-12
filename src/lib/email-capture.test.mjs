@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   normalizeEmail, isValidEmail, checkRateLimit,
   captureEmail, unsubscribeByToken, submitCapture,
+  getCaptureContext, shouldFetchContext,
 } from './email-capture.ts'
 
 // Fake CaptureStore — in-memory, upsert by email; token set on CREATE only (mirrors the Prisma route).
@@ -19,6 +20,10 @@ function makeFakeStore() {
     async markUnsubscribed(token) {
       for (const r of byEmail.values()) if (r.unsubscribeToken === token) { r.unsubscribed = true; return true }
       return false
+    },
+    async contextByToken(token) {
+      for (const r of byEmail.values()) if (r.unsubscribeToken === token && !r.unsubscribed) return { verdictFY: r.verdictFY, verdictAmount: r.verdictAmount }
+      return null
     },
   }
 }
@@ -108,4 +113,42 @@ test('submitCapture NEVER throws — a capture failure cannot break the verdict'
   const ok = async () => ({ ok: true, status: 200 })
   const r2 = await submitCapture(ok, { email: 'a@b.co', verdictFY: 2025, verdictAmount: 1 })
   assert.deepEqual(r2, { ok: true, status: 200 })
+})
+
+// ── Cross-device rehydrate (getCaptureContext / shouldFetchContext) ─────────────
+test('getCaptureContext — a valid token hydrates ONLY the two verdict numbers', async () => {
+  const store = makeFakeStore()
+  await captureEmail(store, { email: 'x@y.co', verdictFY: 2025, verdictAmount: 41234 })
+  const token = store.byEmail.get('x@y.co').unsubscribeToken
+  const ctx = await getCaptureContext(store, token)
+  assert.deepEqual(ctx, { verdictFY: 2025, verdictAmount: 41234 })
+  assert.deepEqual(Object.keys(ctx).sort(), ['verdictAmount', 'verdictFY']) // never email or any other field
+})
+
+test('getCaptureContext — unknown token → null (page still works, route 404s)', async () => {
+  const store = makeFakeStore()
+  await captureEmail(store, { email: 'x@y.co', verdictFY: 2025, verdictAmount: 41234 })
+  assert.equal(await getCaptureContext(store, 'tok_this-token-does-not-exist'), null)
+})
+
+test('getCaptureContext — an obviously-short token is rejected without a lookup', async () => {
+  const store = makeFakeStore()
+  assert.equal(await getCaptureContext(store, 'short'), null)
+  assert.equal(await getCaptureContext(store, null), null)
+})
+
+test('getCaptureContext — an unsubscribed token → null (no rehydrate after opt-out)', async () => {
+  const store = makeFakeStore()
+  await captureEmail(store, { email: 'x@y.co', verdictFY: 2025, verdictAmount: 41234 })
+  const token = store.byEmail.get('x@y.co').unsubscribeToken
+  assert.equal(await unsubscribeByToken(store, token), true)
+  assert.equal(await getCaptureContext(store, token), null)
+})
+
+test('shouldFetchContext — local verdict always wins; fetch only for a real token with no local data', () => {
+  const token = 'tok_' + '0'.repeat(20)
+  assert.equal(shouldFetchContext(true, token), false) // local verdict present → never fetch
+  assert.equal(shouldFetchContext(false, token), true) // no local data + real token → fetch
+  assert.equal(shouldFetchContext(false, null), false) // no token → nothing to fetch
+  assert.equal(shouldFetchContext(false, 'short'), false) // obviously-bad token → skip
 })
