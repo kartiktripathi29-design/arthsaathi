@@ -91,6 +91,9 @@ const FY_2025_26: RuleSet = {
 // CONFIRMED-identical rule set (not a placeholder), kept as its own entry so a future budget can
 // diverge it by replacing this object without touching FY 2025-26. Sources: ITD portal (above),
 // Budget-2026 coverage (ClearTax / BusinessToday / Axis Max Life, Feb 2026).
+// WARNING: confirmed-COPY, NOT independently founder/CA signed off — see docs/fy26-27-verification.md.
+// "Plan ahead" therefore renders FY 2025-26 math under an FY 2026-27 label until the real enacted
+// Feb-2026 figures land (a separate task needing sign-off — do not invent values).
 const FY_2026_27: RuleSet = FY_2025_26
 
 export const TAX_RULES: Record<FY, RuleSet> = {
