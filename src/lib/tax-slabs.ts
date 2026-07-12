@@ -102,8 +102,22 @@ export const TAX_RULES: Record<FY, RuleSet> = {
 // resolves beyond this (see ./fy.ts).
 export const LATEST_ENACTED_FY: FY = Math.max(...Object.keys(TAX_RULES).map(Number))
 
-/** Every FY we have rules for, ascending. */
+/** Every FY we have a rule table entry for, ascending (a later entry MAY still be a copy). */
 export const ENACTED_FYS: FY[] = Object.keys(TAX_RULES).map(Number).sort((a, b) => a - b)
+
+// The newest FY whose rule set is INDEPENDENTLY enacted — i.e. NOT the same object as the prior
+// year's. FY_2026_27 = FY_2025_26 (a confirmed copy pending real Feb-2026 figures + founder/CA
+// sign-off — see docs/fy26-27-verification.md), so FY 2026-27 is NOT genuine and this resolves to
+// 2025. resolveFY() clamps to it and the FY picker disables anything above it, so a copied year is
+// never presented as real output. Auto-advances (and lifts the gate) the moment FY_2026_27 is given
+// its own object.
+export const LATEST_GENUINE_FY: FY = (() => {
+  let latest = ENACTED_FYS[0]
+  for (let i = 1; i < ENACTED_FYS.length; i++) {
+    if (TAX_RULES[ENACTED_FYS[i]] !== TAX_RULES[ENACTED_FYS[i - 1]]) latest = ENACTED_FYS[i]
+  }
+  return latest
+})()
 
 /** True if we have a complete rule set for this FY. */
 export function isEnactedFY(fy: FY): boolean {
