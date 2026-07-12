@@ -2,9 +2,9 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   fyFromYearMonth, fyFromSlipMonth, resolveFY, planAheadAvailable, fyOptions,
-  anchorFYFromSlips, PLAN_AHEAD_CONVERGED_HINT,
+  anchorFYFromSlips, FY_NOT_ENACTED_HINT,
 } from './fy.ts'
-import { LATEST_ENACTED_FY, fyLabel } from './tax-slabs.ts'
+import { LATEST_ENACTED_FY, LATEST_GENUINE_FY, TAX_RULES, fyLabel } from './tax-slabs.ts'
 
 // ── Apr–Mar boundary: a slip anchors to the FY of its month ──────────────────
 
@@ -21,44 +21,52 @@ test('fyFromSlipMonth: Mar-31 vs Apr-1 land on different FYs (the boundary itsel
   assert.equal(fyFromSlipMonth(new Date(2026, 3, 1)), 2026, 'Apr 1 2026 → FY 2026-27')
 })
 
-// ── resolveFY: two modes + the LATEST_ENACTED_FY cap ─────────────────────────
+// ── resolveFY: two modes, then clamped to the latest GENUINELY enacted FY (the gate) ─────────────
 
-test('resolveFY current-year returns the slip FY', () => {
+test('resolveFY current-year returns the slip FY, clamped to the latest genuine FY', () => {
   assert.equal(resolveFY(2025, 'current'), 2025)
-  assert.equal(resolveFY(2026, 'current'), 2026)
+  // A 2026 (FY 2026-27) slip clamps down to 2025 while FY 2026-27 is a copy — never shown as real.
+  assert.equal(resolveFY(2026, 'current'), 2025)
 })
 
-test('resolveFY plan-ahead is the next FY, capped at LATEST_ENACTED_FY', () => {
-  assert.equal(resolveFY(2025, 'plan_ahead'), 2026, 'Mar-26 slip → plan FY 2026-27')
-  // Anchor already at the latest enacted FY: plan-ahead must NOT run past it (no assumed continuation).
-  assert.equal(resolveFY(LATEST_ENACTED_FY, 'plan_ahead'), LATEST_ENACTED_FY)
-  assert.equal(resolveFY(2026, 'plan_ahead'), 2026)
+test('resolveFY plan-ahead is clamped to the latest genuine FY (never a copied year)', () => {
+  assert.equal(resolveFY(2025, 'plan_ahead'), 2025, 'Mar-26 slip cannot plan into the copied FY 2026-27')
+  assert.equal(resolveFY(2026, 'plan_ahead'), 2025)
 })
 
-// ── April convergence: both modes collapse → disable plan-ahead ──────────────
+// ── The FY 2026-27 GATE. These MUST FAIL the moment real FY 2026-27 rules are encoded (so the gate
+//    can't be forgotten) — i.e. once FY_2026_27 stops being the same object as FY_2025_26. ──────────
 
-test('April convergence: an Apr-2026 slip has plan-ahead disabled', () => {
-  const anchor = fyFromYearMonth(2026, 4) // 2026 = LATEST_ENACTED_FY
+test('GATE canary: FY 2026-27 is a copy of FY 2025-26, so the latest genuine FY is 2025', () => {
+  assert.equal(TAX_RULES[2026] === TAX_RULES[2025], true, 'FY26-27 is a copy — the gate applies')
+  assert.equal(LATEST_GENUINE_FY, 2025)
+  // The newest table entry is still 2026 — the gate keys off genuine-vs-copy, not the table max.
+  assert.equal(LATEST_ENACTED_FY, 2026)
+})
+
+test('GATE: no anchor/mode resolves to the copied FY 2026-27', () => {
+  for (const anchor of [2024, 2025, 2026, 2027, 9999]) {
+    for (const mode of ['current', 'plan_ahead']) {
+      assert.ok(resolveFY(anchor, mode) <= LATEST_GENUINE_FY, `${mode} @ ${anchor} must not exceed the genuine FY`)
+      assert.notEqual(resolveFY(anchor, mode), 2026, `${mode} @ ${anchor} must never resolve to FY 2026-27`)
+    }
+  }
+})
+
+test('GATE: the FY 2026-27 picker option is visible but disabled with the not-finalised hint', () => {
+  const anchor = fyFromYearMonth(2026, 3) // Mar-2026 → 2025
+  const plan = fyOptions(anchor).find(o => o.mode === 'plan_ahead')
+  assert.equal(plan.disabled, true, 'plan-ahead into FY 2026-27 is disabled while it is a copy')
+  assert.equal(plan.hint, FY_NOT_ENACTED_HINT)
+  assert.equal(plan.label, `Plan ahead — ${fyLabel(2026)}`, 'still shows the year, just disabled')
   assert.equal(planAheadAvailable(anchor), false)
-  const opts = fyOptions(anchor)
-  const current = opts.find(o => o.mode === 'current')
-  const plan = opts.find(o => o.mode === 'plan_ahead')
-  assert.equal(current.fy, 2026)
-  assert.equal(current.label, `This slip's year — ${fyLabel(2026)}`)
-  assert.equal(current.disabled, false)
-  assert.equal(plan.disabled, true)
-  assert.equal(plan.hint, PLAN_AHEAD_CONVERGED_HINT)
 })
 
-test('a Mar-2026 slip offers both distinct years', () => {
-  const anchor = fyFromYearMonth(2026, 3) // 2025
-  assert.equal(planAheadAvailable(anchor), true)
-  const opts = fyOptions(anchor)
-  assert.equal(opts.find(o => o.mode === 'current').fy, 2025)
-  assert.equal(opts.find(o => o.mode === 'plan_ahead').fy, 2026)
-  assert.equal(opts.find(o => o.mode === 'plan_ahead').disabled, false)
-  assert.equal(opts.find(o => o.mode === 'current').label, `This slip's year — ${fyLabel(2025)}`)
-  assert.equal(opts.find(o => o.mode === 'plan_ahead').label, `Plan ahead — ${fyLabel(2026)}`)
+test('current-year option always resolves to a genuine, selectable FY', () => {
+  const current = fyOptions(fyFromYearMonth(2026, 3)).find(o => o.mode === 'current')
+  assert.equal(current.disabled, false)
+  assert.equal(current.fy, 2025)
+  assert.equal(current.label, `This slip's year — ${fyLabel(2025)}`)
 })
 
 // ── Mixed-FY: slips spanning two FYs map to distinct FYs (sliced, never blended) ──

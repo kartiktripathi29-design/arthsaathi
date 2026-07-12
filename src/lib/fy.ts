@@ -9,7 +9,7 @@
 // Explicit .ts extension: this is a runtime import (LATEST_ENACTED_FY/fyLabel are values), and the
 // pure engine is exercised under `node --test`, whose ESM resolver needs the extension.
 // tsconfig has allowImportingTsExtensions + moduleResolution:bundler, so the build accepts it too.
-import { type FY, LATEST_ENACTED_FY, fyLabel } from './tax-slabs.ts'
+import { type FY, LATEST_ENACTED_FY, LATEST_GENUINE_FY, fyLabel } from './tax-slabs.ts'
 
 export type FYMode = 'current' | 'plan_ahead'
 
@@ -27,14 +27,24 @@ export function fyFromSlipMonth(date: Date): FY {
 // enacted FY, so there is no further year to plan for).
 export const PLAN_AHEAD_CONVERGED_HINT = "You're already in the year you'd be planning for."
 
+// Shown on a plan-ahead option whose target FY exists in the rule table but is a COPY of the prior
+// year (not independently enacted) — visible but disabled until real rules land.
+export const FY_NOT_ENACTED_HINT = "Available once next year's rules are finalised."
+
 /**
  * Resolve the FY to compute on, from the slip's anchor FY and the chosen mode.
  *   current    → the slip's own FY
- *   plan_ahead → min(anchorFY + 1, LATEST_ENACTED_FY)  — capped at the newest enacted budget
+ *   plan_ahead → min(anchorFY + 1, LATEST_ENACTED_FY)  — the next FY, capped at the newest table entry
+ * …then GATED: the result is clamped to LATEST_GENUINE_FY so a copied / not-signed-off rule set never
+ * surfaces (see below).
  */
 export function resolveFY(anchorFY: FY, mode: FYMode): FY {
-  if (mode === 'current') return anchorFY
-  return Math.min(anchorFY + 1, LATEST_ENACTED_FY)
+  const derived = mode === 'current' ? anchorFY : Math.min(anchorFY + 1, LATEST_ENACTED_FY)
+  // GATE (layer 2 — logic clamp): never resolve beyond the latest GENUINELY enacted FY. FY 2026-27
+  // mirrors FY 2025-26 today, so it must never surface as real output — even if a stale
+  // av_selected_fy_mode or a URL param asks for it. Auto-lifts when real FY 2026-27 rules are
+  // encoded (LATEST_GENUINE_FY then advances). See docs/fy26-27-verification.md.
+  return Math.min(derived, LATEST_GENUINE_FY)
 }
 
 /** Plan-ahead is offered only when it resolves to a DIFFERENT FY than current-year. */
@@ -82,17 +92,20 @@ export function anchorFYFromSlips(slips: { year: number; monthNum: number }[]): 
  * state — the ONE source screens read so nothing hardcodes an FY label. Label copy lives here.
  */
 export function fyOptions(anchorFY: FY): FYOption[] {
-  const current = resolveFY(anchorFY, 'current')
-  const plan = resolveFY(anchorFY, 'plan_ahead')
-  const converged = plan === current
+  const current = resolveFY(anchorFY, 'current')            // already clamped to LATEST_GENUINE_FY
+  const rawPlan = Math.min(anchorFY + 1, LATEST_ENACTED_FY) // the year they'd plan for, pre-gate
+  const gated = rawPlan > LATEST_GENUINE_FY                 // exists in the table but isn't genuine (a copy)
+  const converged = resolveFY(anchorFY, 'plan_ahead') === current
   return [
+    // GATE (layer 1 — UI): current always resolves to a genuine FY; the plan-ahead option is shown but
+    // disabled when its target year isn't independently enacted yet.
     { mode: 'current', fy: current, label: `This slip's year — ${fyLabel(current)}`, disabled: false },
     {
       mode: 'plan_ahead',
-      fy: plan,
-      label: `Plan ahead — ${fyLabel(plan)}`,
-      disabled: converged,
-      ...(converged ? { hint: PLAN_AHEAD_CONVERGED_HINT } : {}),
+      fy: rawPlan, // label the year they'd plan for even when disabled, so the hint reads correctly
+      label: `Plan ahead — ${fyLabel(rawPlan)}`,
+      disabled: gated || converged,
+      ...(gated ? { hint: FY_NOT_ENACTED_HINT } : converged ? { hint: PLAN_AHEAD_CONVERGED_HINT } : {}),
     },
   ]
 }
