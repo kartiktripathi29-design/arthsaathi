@@ -4,6 +4,7 @@ import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { createRequire } from 'module'
 import { normalizeReturn } from '@/lib/itr-parse'
+import { isAnthropicOutage, UPSTREAM_BUSY_MESSAGE } from '@/lib/anthropic-error'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 export const maxDuration = 60
@@ -191,6 +192,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, data })
   } catch (error: any) {
     console.error('ITR parse error:', error)
+    if (isAnthropicOutage(error)) return NextResponse.json({ error: 'upstream_busy', message: UPSTREAM_BUSY_MESSAGE }, { status: 503 })
     return NextResponse.json({ error: error.message || 'Failed to parse return' }, { status: 500 })
   }
 }

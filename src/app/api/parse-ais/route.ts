@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { createRequire } from 'module'
+import { isAnthropicOutage, UPSTREAM_BUSY_MESSAGE } from '@/lib/anthropic-error'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 export const maxDuration = 60
@@ -136,6 +137,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, data: parsed })
   } catch (error: any) {
     console.error('AIS parse error:', error)
+    if (isAnthropicOutage(error)) return NextResponse.json({ error: 'upstream_busy', message: UPSTREAM_BUSY_MESSAGE }, { status: 503 })
     return NextResponse.json({ error: error.message || 'Failed to parse document' }, { status: 500 })
   }
 }

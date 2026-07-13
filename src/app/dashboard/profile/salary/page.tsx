@@ -1020,7 +1020,7 @@ export default function SalaryPageCompleteFinal() {
         body: JSON.stringify({ base64Data: base64, mediaType: file.type, fileName: file.name }),
       })
       const json = await res.json()
-      if (!res.ok) throw new Error(json?.error || 'Parse failed')
+      if (!res.ok) throw new Error(json?.message || json?.error || 'Parse failed')
       const parsed = Array.isArray(json?.data) ? json.data[0] : null
       if (!parsed) throw new Error('No slip data returned')
 
