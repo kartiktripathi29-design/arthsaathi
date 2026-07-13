@@ -9,6 +9,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { useAppStore, type AppUser } from '@/store/AppStore'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+import { PHONE_AUTH_ENABLED } from '@/lib/authFlags'
 import { tokens as T } from '@/lib/tokens'
 import Logo from '@/components/Logo'
 import { ThemeToggle, useArthvoTheme, useThemedBase } from '@/components/ThemeToggle'
@@ -183,10 +184,10 @@ function LoginForm() {
     <Shell>
       <div style={{ textAlign: 'center', marginBottom: 24 }}>
         <h1 style={{ fontSize: 28, fontWeight: 800, color: C.ink, letterSpacing: '-0.025em', marginBottom: 6 }}>Welcome back</h1>
-        <p style={{ fontSize: 14, color: C.sub }}>Sign in with your email or mobile number.</p>
+        <p style={{ fontSize: 14, color: C.sub }}>{PHONE_AUTH_ENABLED ? 'Sign in with your email or mobile number.' : 'Sign in with your email.'}</p>
       </div>
       <form onSubmit={e => { e.preventDefault(); signIn() }} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <IdentifierToggle kind={kind} setKind={setKind} />
+        {PHONE_AUTH_ENABLED && <IdentifierToggle kind={kind} setKind={setKind} />}
         <IdentifierField kind={kind} email={email} setEmail={setEmail} phone={phone} setPhone={setPhone} />
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -214,7 +215,7 @@ function LoginForm() {
       </div>
       {mode === 'send' && (
         <form onSubmit={e => { e.preventDefault(); sendReset() }} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <IdentifierToggle kind={kind} setKind={setKind} />
+          {PHONE_AUTH_ENABLED && <IdentifierToggle kind={kind} setKind={setKind} />}
           <IdentifierField kind={kind} email={email} setEmail={setEmail} phone={phone} setPhone={setPhone} />
           <button type="submit" disabled={loading || !idValid} className="cta" style={cta}>{loading ? 'Sending…' : 'Send code →'}</button>
         </form>

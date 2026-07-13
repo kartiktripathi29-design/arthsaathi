@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { useAppStore } from '@/store/AppStore'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+import { PHONE_AUTH_ENABLED } from '@/lib/authFlags'
 import { tokens as T } from '@/lib/tokens'
 import Logo from '@/components/Logo'
 import { ThemeToggle, useArthvoTheme, useThemedBase } from '@/components/ThemeToggle'
@@ -174,7 +175,7 @@ export default function SignupPage() {
         <>
           <h1 style={{ fontSize: 26, fontWeight: 800, color: T.ink, letterSpacing: '-0.025em', marginBottom: 6 }}>Create your account</h1>
           <p style={{ fontSize: 14, color: T.muted, marginBottom: 22 }}>We’ll send a one-time code to verify it’s you.</p>
-          <IdentifierToggle kind={kind} setKind={setKind} />
+          {PHONE_AUTH_ENABLED && <IdentifierToggle kind={kind} setKind={setKind} />}
           {kind === 'email' ? (
             <>
               <label style={label}>Email address</label>
