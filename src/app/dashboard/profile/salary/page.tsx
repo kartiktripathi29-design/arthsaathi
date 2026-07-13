@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { seedIfMissing, verifyIdentity, setStoredIdentity } from '@/lib/identity'
+import { fetchWithTimeout } from '@/lib/fetchWithTimeout'
 import { confirmDialog, passwordDialog } from '@/components/Dialog'
 import { estimateAnnualTax, fyLabel, type SeniorStatus } from '@/lib/tax-slabs'
 import { anchorFYFromSlips } from '@/lib/fy'
@@ -307,6 +308,7 @@ export default function SalaryPageCompleteFinal() {
   const [monthUploadKey, setMonthUploadKey] = useState<string>('')
   const [monthUploadFile, setMonthUploadFile] = useState<File | null>(null)
   const [monthUploadBusy, setMonthUploadBusy] = useState(false)
+  const [monthUploadSlow, setMonthUploadSlow] = useState(false)
   const [monthUploadError, setMonthUploadError] = useState<string | null>(null)
 
   // Manual-entry state — separate from upload, so user can type numbers directly.
@@ -1007,6 +1009,7 @@ export default function SalaryPageCompleteFinal() {
     if (!emp) return
 
     setMonthUploadBusy(true)
+    setMonthUploadSlow(false)
     try {
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader()
@@ -1014,11 +1017,12 @@ export default function SalaryPageCompleteFinal() {
         reader.onerror = () => reject(new Error('Could not read file'))
         reader.readAsDataURL(file)
       })
-      const res = await fetch('/api/parse-salary', {
+      // 45s timeout (route caps at 60s) so a stalled upstream can't hang the spinner; reassure after 10s.
+      const res = await fetchWithTimeout('/api/parse-salary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ base64Data: base64, mediaType: file.type, fileName: file.name }),
-      })
+      }, { timeoutMs: 45_000, slowAfterMs: 10_000, onSlow: () => setMonthUploadSlow(true) })
       const json = await res.json()
       if (!res.ok) throw new Error(json?.message || json?.error || 'Parse failed')
       const parsed = Array.isArray(json?.data) ? json.data[0] : null
@@ -1168,6 +1172,7 @@ export default function SalaryPageCompleteFinal() {
       setMonthUploadError(e?.message || 'Upload failed')
     } finally {
       setMonthUploadBusy(false)
+      setMonthUploadSlow(false)
     }
   }
 
@@ -1939,7 +1944,7 @@ export default function SalaryPageCompleteFinal() {
                     }}
                     style={{ fontSize: 12, fontFamily: 'inherit', color: C.text }}
                   />
-                  {monthUploadBusy && <span style={{ fontSize: 11, color: C.muted }}>Parsing…</span>}
+                  {monthUploadBusy && <span style={{ fontSize: 11, color: C.muted }}>{monthUploadSlow ? 'Still working — large or slow file…' : 'Parsing…'}</span>}
                 </div>
                 {monthUploadError && <p style={{ fontSize: 11, color: C.danger, margin: '8px 0 0' }}>{monthUploadError}</p>}
 
