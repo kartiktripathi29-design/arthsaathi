@@ -308,7 +308,9 @@ export default function DocumentsPage() {
           body: JSON.stringify({ base64Data: base64, mediaType, fileName: file.name })
         })
         const json = await res.json()
-        if (!res.ok) throw new Error(json?.error || `Parse failed for ${file.name}`)
+        // Prefer the server's human `message` (e.g. the honest "reader overloaded, retry" on a 503)
+        // over the machine `error` code, so a real outage never surfaces as "upstream_busy".
+        if (!res.ok) throw new Error(json?.message || json?.error || `Parse failed for ${file.name}`)
         return { file, json }
       }))
 

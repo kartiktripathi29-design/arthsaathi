@@ -3,6 +3,7 @@ import { parseOfferLetterFromBase64, parseOfferLetterFromText, parseOfferLetterM
 import { normalizePdfBase64 } from '@/lib/pdfNormalize'
 import { extractPdfText } from '@/lib/pdfText'
 import { extractDocxText } from '@/lib/docxText'
+import { isAnthropicOutage, UPSTREAM_BUSY_MESSAGE } from '@/lib/anthropic-error'
 
 export const maxDuration = 60
 
@@ -94,6 +95,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ data: parsed })
   } catch (err: any) {
     console.error('Offer letter parse error:', err)
+    if (isAnthropicOutage(err)) return NextResponse.json({ error: 'upstream_busy', message: UPSTREAM_BUSY_MESSAGE }, { status: 503 })
     return NextResponse.json({ error: err.message || 'Failed to parse offer letter' }, { status: 500 })
   }
 }

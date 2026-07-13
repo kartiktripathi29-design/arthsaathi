@@ -6,6 +6,7 @@ import type { ParsedSalaryData } from '@/types'
 import { prisma } from "@/lib/db"
 import { logActivity } from "@/lib/activity"
 import { getUser } from "@/lib/auth"
+import { isAnthropicOutage, UPSTREAM_BUSY_MESSAGE } from "@/lib/anthropic-error"
 
 export const maxDuration = 60
 
@@ -32,6 +33,9 @@ export async function POST(req: NextRequest) {
     let pagesToParse: Array<{ base64: string; mediaType: 'application/pdf' | 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' }> = []
     const parsedSlips: ParsedSalaryData[] = []
     const errors: string[] = []
+    // Set when ANY page's failure was an Anthropic outage (overloaded/rate-limited/5xx), so that if we
+    // end up with zero slips we can say "reader is busy, retry" instead of blaming the user's document.
+    let upstreamOutage = false
 
     // ─── EXCEL / CSV ────────────────────────────────────────────────
     // The vision model can't read spreadsheet bytes, so convert the workbook to CSV-like text
@@ -69,6 +73,7 @@ export async function POST(req: NextRequest) {
         parsedSlips.push(await parseSalaryFromText(sheetText))
       } catch (e: any) {
         console.error('[parse-salary] Excel parse failed:', e?.message || e)
+        if (isAnthropicOutage(e)) upstreamOutage = true
         errors.push(`Spreadsheet: ${e?.message || 'parse failed'}`)
       }
     } else if (mediaType === 'application/pdf') {
@@ -137,6 +142,7 @@ export async function POST(req: NextRequest) {
           parsedSlips.push(r.value)
         } else {
           console.error(`[parse-salary] Page ${idx + 1} REJECTED:`, r.reason?.message || r.reason)
+          if (isAnthropicOutage(r.reason)) upstreamOutage = true
           errors.push(`Page ${idx + 1}: ${r.reason?.message || 'parse failed'}`)
         }
       })
@@ -160,11 +166,21 @@ export async function POST(req: NextRequest) {
         }
       } catch (fallbackErr: any) {
         console.error('[parse-salary] Fallback whole-PDF parse failed:', fallbackErr?.message || fallbackErr)
+        if (isAnthropicOutage(fallbackErr)) upstreamOutage = true
         errors.push(`Whole-PDF fallback: ${fallbackErr?.message || 'parse failed'}`)
       }
     }
 
     if (validSlips.length === 0) {
+      // Distinguish "the AI reader was overloaded" (transient, retryable) from "we read it fine but the
+      // document isn't a usable slip" (the user needs to act). Blaming the document during an Anthropic
+      // outage is the worst message — retrying is exactly what fixes it.
+      if (upstreamOutage) {
+        return NextResponse.json(
+          { error: 'upstream_busy', message: UPSTREAM_BUSY_MESSAGE, details: errors },
+          { status: 503 }
+        )
+      }
       return NextResponse.json(
         { error: 'Could not extract salary data from any page. Please ensure the document is a clear salary slip.', details: errors },
         { status: 422 }
@@ -233,6 +249,9 @@ export async function POST(req: NextRequest) {
     return response
   } catch (error: any) {
     console.error('Salary parse error:', error)
+    if (isAnthropicOutage(error)) {
+      return NextResponse.json({ error: 'upstream_busy', message: UPSTREAM_BUSY_MESSAGE }, { status: 503 })
+    }
     return NextResponse.json(
       { error: error.message || 'Failed to parse salary slip' },
       { status: 500 }
