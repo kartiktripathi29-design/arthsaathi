@@ -10,6 +10,7 @@ import toast from 'react-hot-toast'
 import { useAppStore, type AppUser } from '@/store/AppStore'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { PHONE_AUTH_ENABLED } from '@/lib/authFlags'
+import { getSiteURL } from '@/lib/siteUrl'
 import { tokens as T } from '@/lib/tokens'
 import Logo from '@/components/Logo'
 import { ThemeToggle, useArthvoTheme, useThemedBase } from '@/components/ThemeToggle'
@@ -149,7 +150,7 @@ function LoginForm() {
     setLoading(true)
     try {
       const { error } = kind === 'email'
-        ? await supa().auth.signInWithOtp({ email, options: { shouldCreateUser: false } })
+        ? await supa().auth.signInWithOtp({ email, options: { shouldCreateUser: false, emailRedirectTo: `${getSiteURL()}/auth/callback` } })
         : await supa().auth.signInWithOtp({ phone: e164(), options: { shouldCreateUser: false } })
       if (error) { toast.error(error.message); return }
       setMode('otp'); toast.success(`Code sent to ${idLabel}`)

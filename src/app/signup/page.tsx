@@ -12,6 +12,7 @@ import toast from 'react-hot-toast'
 import { useAppStore } from '@/store/AppStore'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { PHONE_AUTH_ENABLED } from '@/lib/authFlags'
+import { getSiteURL } from '@/lib/siteUrl'
 import { tokens as T } from '@/lib/tokens'
 import Logo from '@/components/Logo'
 import { ThemeToggle, useArthvoTheme, useThemedBase } from '@/components/ThemeToggle'
@@ -116,7 +117,7 @@ export default function SignupPage() {
     try {
       const supabase = createSupabaseBrowserClient()
       const { error } = kind === 'email'
-        ? await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } })
+        ? await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true, emailRedirectTo: `${getSiteURL()}/auth/callback` } })
         : await supabase.auth.signInWithOtp({ phone: e164(), options: { shouldCreateUser: true } })
       if (error) { toast.error(error.message); return }
       setStep('otp')
