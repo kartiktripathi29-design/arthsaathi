@@ -20,7 +20,7 @@ function fireEvent(event: 'capture_shown' | 'capture_submitted' | 'capture_dismi
 export default function EmailCapture() {
   const selFY = useSelectedFY()
   const [email, setEmail] = useState('')
-  const [status, setStatus] = useState<'idle' | 'submitting' | 'done' | 'invalid' | 'failed'>('idle')
+  const [status, setStatus] = useState<'idle' | 'submitting' | 'done' | 'invalid' | 'failed' | 'rate_limited'>('idle')
   const [dismissed, setDismissed] = useState(false)
   const shownFired = useRef(false)
 
@@ -44,7 +44,9 @@ export default function EmailCapture() {
       if (!Number.isInteger(verdictFY)) { setStatus('failed'); return }
       const res = await submitCapture(fetch, { email: email.trim(), verdictFY: verdictFY as number, verdictAmount })
       if (res.ok) { setStatus('done'); fireEvent('capture_submitted') }
-      else { setStatus(res.status === 400 ? 'invalid' : 'failed') } // 400 = bad email; else a save failure
+      // 400 = bad email; 429 = too many from this network (shared office IP) — a distinct, friendly
+      // "wait a minute" state so a real user isn't told their save failed; else a genuine save failure.
+      else { setStatus(res.status === 400 ? 'invalid' : res.status === 429 ? 'rate_limited' : 'failed') }
     } catch {
       setStatus('failed') // a capture failure must never break the page
     }
@@ -79,7 +81,7 @@ export default function EmailCapture() {
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', flex: 1, minWidth: 200, border: `1.5px solid ${status === 'invalid' ? T.marigold : T.hairline}`, borderRadius: 10, overflow: 'hidden', background: T.card }}>
           <input type="email" inputMode="email" value={email} autoComplete="email"
-            onChange={e => { setEmail(e.target.value); if (status === 'invalid' || status === 'failed') setStatus('idle') }}
+            onChange={e => { setEmail(e.target.value); if (status === 'invalid' || status === 'failed' || status === 'rate_limited') setStatus('idle') }}
             onKeyDown={e => { if (e.key === 'Enter') onSubmit() }}
             placeholder="you@email.com"
             style={{ flex: 1, width: '100%', padding: '11px 12px', border: 'none', outline: 'none', fontSize: 14, fontFamily: '"Sora",sans-serif', background: 'transparent', color: T.ink }} />
@@ -94,6 +96,9 @@ export default function EmailCapture() {
       )}
       {status === 'failed' && (
         <div style={{ fontSize: 11.5, color: T.marigold, marginTop: 8 }}>Couldn’t save that just now — please try again in a moment.</div>
+      )}
+      {status === 'rate_limited' && (
+        <div style={{ fontSize: 11.5, color: T.muted, marginTop: 8 }}>A lot of sign-ups from your network right now — please wait a minute and try again.</div>
       )}
       <div style={{ fontSize: 11, color: T.muted, marginTop: 10 }}>
         One reminder email. Unsubscribe with one click. No marketing.
