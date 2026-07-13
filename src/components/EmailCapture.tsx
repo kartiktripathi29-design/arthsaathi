@@ -9,7 +9,7 @@ import { computeQuickVerdict } from '@/lib/quick-verdict'
 import { useSelectedFY } from '@/lib/useSelectedFY'
 import { isValidEmail, submitCapture } from '@/lib/email-capture'
 
-function fireEvent(event: 'capture_shown' | 'capture_submitted' | 'capture_dismissed') {
+function fireEvent(event: 'capture_shown' | 'capture_submitted' | 'capture_dismissed' | 'capture_ok' | 'capture_fail') {
   try {
     void fetch('/api/analytics/capture', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event }),
@@ -43,12 +43,17 @@ export default function EmailCapture() {
       const verdictFY = selFY?.fy
       if (!Number.isInteger(verdictFY)) { setStatus('failed'); return }
       const res = await submitCapture(fetch, { email: email.trim(), verdictFY: verdictFY as number, verdictAmount })
-      if (res.ok) { setStatus('done'); fireEvent('capture_submitted') }
+      if (res.ok) { setStatus('done'); fireEvent('capture_submitted'); fireEvent('capture_ok') }
       // 400 = bad email; 429 = too many from this network (shared office IP) — a distinct, friendly
       // "wait a minute" state so a real user isn't told their save failed; else a genuine save failure.
-      else { setStatus(res.status === 400 ? 'invalid' : res.status === 429 ? 'rate_limited' : 'failed') }
+      else {
+        const s = res.status === 400 ? 'invalid' : res.status === 429 ? 'rate_limited' : 'failed'
+        setStatus(s)
+        if (s !== 'invalid') fireEvent('capture_fail') // count real save failures / rate-limits, not typos
+      }
     } catch {
       setStatus('failed') // a capture failure must never break the page
+      fireEvent('capture_fail')
     }
   }
 

@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db"
 import { logActivity } from "@/lib/activity"
 import { getUser } from "@/lib/auth"
 import { isAnthropicOutage, UPSTREAM_BUSY_MESSAGE } from "@/lib/anthropic-error"
+import { recordEvent } from "@/lib/analytics"
 
 export const maxDuration = 60
 
@@ -176,11 +177,13 @@ export async function POST(req: NextRequest) {
       // document isn't a usable slip" (the user needs to act). Blaming the document during an Anthropic
       // outage is the worst message — retrying is exactly what fixes it.
       if (upstreamOutage) {
+        await recordEvent('parse_fail_upstream')
         return NextResponse.json(
           { error: 'upstream_busy', message: UPSTREAM_BUSY_MESSAGE, details: errors },
           { status: 503 }
         )
       }
+      await recordEvent('parse_fail_input')
       return NextResponse.json(
         { error: 'Could not extract salary data from any page. Please ensure the document is a clear salary slip.', details: errors },
         { status: 422 }
@@ -246,12 +249,15 @@ export async function POST(req: NextRequest) {
       }
     })
 
+    await recordEvent('parse_ok')
     return response
   } catch (error: any) {
     console.error('Salary parse error:', error)
     if (isAnthropicOutage(error)) {
+      await recordEvent('parse_fail_upstream')
       return NextResponse.json({ error: 'upstream_busy', message: UPSTREAM_BUSY_MESSAGE }, { status: 503 })
     }
+    await recordEvent('parse_fail_input')
     return NextResponse.json(
       { error: error.message || 'Failed to parse salary slip' },
       { status: 500 }

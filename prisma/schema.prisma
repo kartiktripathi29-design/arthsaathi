@@ -345,3 +345,16 @@ model AnalyticsCounter {
   count     Int      @default(0)
   updatedAt DateTime @updatedAt
 }
+
+// Time-stamped funnel/health events (one row per occurrence) — the AnalyticsCounter above is cumulative
+// only, so it can't answer "how many in the last hour", which is what /api/health needs to spot a launch
+// failure spike in real time. Keys: try_visit, verdict_rendered, capture_ok, capture_fail, parse_ok,
+// parse_fail_upstream, parse_fail_input. Holds NO PII — just a key and a timestamp. Pruned by /api/health.
+model AnalyticsEvent {
+  id  String   @id @default(cuid())
+  key String
+  at  DateTime @default(now())
+
+  @@index([key, at])
+  @@index([at])
+}

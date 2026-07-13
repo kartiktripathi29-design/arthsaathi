@@ -5,7 +5,7 @@
 // they want to SAVE / get the exact, file-ready breakdown. Everything is written to the same
 // localStorage keys, so after they sign up the dashboard already has their numbers (same origin).
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import ProvisionalVerdict from '@/components/ProvisionalVerdict'
 import EmailCapture from '@/components/EmailCapture'
@@ -17,6 +17,15 @@ import { tokens as T } from '@/lib/tokens'
 
 const num = (s: string) => Math.max(0, parseFloat((s || '').replace(/,/g, '')) || 0)
 const writeJSON = (k: string, o: any) => { try { localStorage.setItem(k, JSON.stringify(o)) } catch {} }
+// Fire-and-forget funnel ping for launch monitoring (server counts it into /api/health). Never throws,
+// never blocks the page — a failed ping must be invisible to the visitor.
+const pingAnalytics = (event: string) => {
+  try {
+    void fetch('/api/analytics/capture', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event }),
+    }).catch(() => {})
+  } catch { /* never surface */ }
+}
 
 export default function TryPage() {
   // /try lives outside /dashboard, so it gets none of the dashboard layout's theming — wire the shared
@@ -28,6 +37,14 @@ export default function TryPage() {
   const [entered, setEntered] = useState(false)
   const [version, setVersion] = useState(0)
   const [returning, setReturning] = useState<{ verdictFY: number; verdictAmount: number | null } | null>(null)
+
+  // Funnel analytics for launch monitoring (fire-and-forget). try_visit once on mount; verdict_rendered
+  // once when the answer screen first shows. Both feed /api/health's last-hour view.
+  useEffect(() => { pingAnalytics('try_visit') }, [])
+  const verdictFired = useRef(false)
+  useEffect(() => {
+    if (entered && !verdictFired.current) { verdictFired.current = true; pingAnalytics('verdict_rendered') }
+  }, [entered])
 
   const seed = (monthlyStr: string) => {
     const m = num(monthlyStr)
