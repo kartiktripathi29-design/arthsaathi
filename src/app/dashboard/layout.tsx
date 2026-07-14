@@ -8,7 +8,7 @@ import { useUser } from '@/lib/useUser'
 import { tokens as T } from '@/lib/tokens'
 import Logo from '@/components/Logo'
 import { ThemeToggle, useThemedBase } from '@/components/ThemeToggle'
-import { useSelectedFY } from '@/lib/useSelectedFY'
+import { useSelectedFY, setSelectedFYMode } from '@/lib/useSelectedFY'
 
 const SUPABASE_CONFIGURED = !!process.env.NEXT_PUBLIC_SUPABASE_URL
 
@@ -221,6 +221,11 @@ function TopBar({ theme, setTheme, resolved }: { theme: ThemeMode; setTheme: (t:
   // so the chip resurfaces here in the top bar as a tap-to-open dropdown.
   const [menuOpen, setMenuOpen] = useState(false)
   const chipRef = useRef<HTMLDivElement>(null)
+  // FY picker dropdown — the FY label is a tap-to-open menu (current year vs plan ahead). Options,
+  // labels, disabled state and hints all come from the resolver via selFY.options; switching just
+  // calls setSelectedFYMode, which persists and notifies every screen that reads useSelectedFY.
+  const [fyOpen, setFyOpen] = useState(false)
+  const fyRef = useRef<HTMLDivElement>(null)
 
   const initials = user?.name?.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase() || '?'
 
@@ -244,6 +249,16 @@ function TopBar({ theme, setTheme, resolved }: { theme: ThemeMode; setTheme: (t:
     document.addEventListener('mousedown', onDocClick)
     return () => document.removeEventListener('mousedown', onDocClick)
   }, [menuOpen])
+
+  // Close the FY picker on any tap outside it.
+  useEffect(() => {
+    if (!fyOpen) return
+    const onDocClick = (e: MouseEvent) => {
+      if (fyRef.current && !fyRef.current.contains(e.target as Node)) setFyOpen(false)
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [fyOpen])
 
   const pageTitle = pathname === '/dashboard' ? 'Dashboard'
     : pathname.startsWith('/dashboard/profile/documents') ? 'Documents'
@@ -274,7 +289,51 @@ function TopBar({ theme, setTheme, resolved }: { theme: ThemeMode; setTheme: (t:
       </Link>
       <h1 className="dash-toptitle" style={{ fontSize: 13, fontWeight: 600, color: T.ink, margin: 0 }}>{pageTitle}</h1>
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-        {selFY && <span style={{ fontSize: 11, color: T.muted }}>{selFY.label}</span>}
+        {selFY && (
+          <div ref={fyRef} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <button
+              onClick={() => setFyOpen(o => !o)}
+              aria-haspopup="menu" aria-expanded={fyOpen} aria-label={`Financial year ${selFY.label} — change`}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 3, padding: '2px 4px',
+                fontSize: 11, color: T.muted, fontWeight: 500, fontFamily: 'inherit',
+                background: 'transparent', border: 'none', cursor: 'pointer', borderRadius: 4,
+              }}>
+              {selFY.label}
+              <span aria-hidden style={{ fontSize: 8, opacity: 0.7, transform: fyOpen ? 'rotate(180deg)' : 'none' }}>▾</span>
+            </button>
+            {fyOpen && (
+              <div role="menu" style={{
+                position: 'absolute', top: 'calc(100% + 8px)', right: 0, minWidth: 230,
+                background: T.card, border: `1px solid ${T.hairline}`, borderRadius: 10,
+                boxShadow: '0 6px 24px rgba(0,0,0,0.12)', padding: 6, zIndex: 70,
+              }}>
+                <div style={{ padding: '4px 10px 6px', fontSize: 10, color: T.muted, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Financial year</div>
+                {selFY.options.map(o => {
+                  const active = o.mode === selFY.mode
+                  return (
+                    <button key={o.mode} role="menuitemradio" aria-checked={active} title={o.hint}
+                      disabled={o.disabled}
+                      onClick={() => { if (!o.disabled) { setSelectedFYMode(o.mode); setFyOpen(false) } }}
+                      style={{
+                        display: 'block', width: '100%', textAlign: 'left', marginTop: 2,
+                        padding: '8px 10px', borderRadius: 6, border: 'none',
+                        background: active ? T.teal : 'transparent',
+                        color: o.disabled ? T.muted : active ? T.onTeal : T.ink,
+                        fontSize: 12, fontWeight: active ? 600 : 500, fontFamily: 'inherit',
+                        cursor: o.disabled ? 'not-allowed' : 'pointer', opacity: o.disabled ? 0.6 : 1,
+                      }}>
+                      {o.label}
+                      {o.hint && (
+                        <span style={{ display: 'block', fontSize: 10, fontWeight: 400, marginTop: 2, color: active ? T.onTeal : T.muted, opacity: 0.9 }}>{o.hint}</span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
         <span className="dash-topbadge" style={{
           fontSize: 11, background: T.card, color: T.teal,
           padding: '2px 9px', borderRadius: 3, fontWeight: 500,
