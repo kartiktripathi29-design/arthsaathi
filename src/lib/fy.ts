@@ -90,8 +90,14 @@ export function anchorFYFromSlips(slips: { year: number; monthNum: number }[]): 
 /**
  * The two mode options for a slip's anchor FY, with their resolved FY, display label and disabled
  * state — the ONE source screens read so nothing hardcodes an FY label. Label copy lives here.
+ *
+ * `hasSlip` gates the honesty of the current-year label: only claim "This slip's year" when the
+ * anchor actually came from a parsed slip. With no slip the anchor is a today's-date fallback, so the
+ * label reads "This year" — it must not assert a slip fact we don't have. (NOTE: a separate, deeper
+ * mislabel remains when a real slip's true FY is clamped by LATEST_GENUINE_FY — see
+ * docs/fy-fact-vs-intent-plan.md; that one needs a design decision, not a copy swap.)
  */
-export function fyOptions(anchorFY: FY): FYOption[] {
+export function fyOptions(anchorFY: FY, hasSlip = false): FYOption[] {
   const current = resolveFY(anchorFY, 'current')            // already clamped to LATEST_GENUINE_FY
   const rawPlan = Math.min(anchorFY + 1, LATEST_ENACTED_FY) // the year they'd plan for, pre-gate
   const gated = rawPlan > LATEST_GENUINE_FY                 // exists in the table but isn't genuine (a copy)
@@ -99,7 +105,7 @@ export function fyOptions(anchorFY: FY): FYOption[] {
   return [
     // GATE (layer 1 — UI): current always resolves to a genuine FY; the plan-ahead option is shown but
     // disabled when its target year isn't independently enacted yet.
-    { mode: 'current', fy: current, label: `This slip's year — ${fyLabel(current)}`, disabled: false },
+    { mode: 'current', fy: current, label: `${hasSlip ? "This slip's year" : 'This year'} — ${fyLabel(current)}`, disabled: false },
     {
       mode: 'plan_ahead',
       fy: rawPlan, // label the year they'd plan for even when disabled, so the hint reads correctly
