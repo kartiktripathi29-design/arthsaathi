@@ -23,9 +23,11 @@ const FY_CHANGED_EVENT = 'av-fy-changed'
 // Pure resolver from stored values — kept separate so the logic is deterministic and screens agree.
 export function resolveSelectedFY(summaryRaw: string | null, modeRaw: string | null, now: Date): SelectedFY {
   let anchor: FY
+  let hasSlip = false // true only when the anchor came from a parsed slip, not the today's-date fallback
   try {
     const s = summaryRaw ? JSON.parse(summaryRaw) : null
-    anchor = s && Number.isFinite(s.fyStartYear) ? s.fyStartYear : fyFromSlipMonth(now)
+    if (s && Number.isFinite(s.fyStartYear)) { anchor = s.fyStartYear; hasSlip = true }
+    else { anchor = fyFromSlipMonth(now) }
   } catch {
     anchor = fyFromSlipMonth(now)
   }
@@ -34,7 +36,7 @@ export function resolveSelectedFY(summaryRaw: string | null, modeRaw: string | n
   const wantPlan = modeRaw === 'plan_ahead'
   const mode: FYMode = wantPlan && resolveFY(anchor, 'plan_ahead') !== anchor ? 'plan_ahead' : 'current'
   const fy = resolveFY(anchor, mode)
-  return { anchorFY: anchor, mode, fy, label: fyLabel(fy), ayLabel: ayLabel(fy), options: fyOptions(anchor) }
+  return { anchorFY: anchor, mode, fy, label: fyLabel(fy), ayLabel: ayLabel(fy), options: fyOptions(anchor, hasSlip) }
 }
 
 /** Persist the chosen mode and notify same-tab listeners. */
