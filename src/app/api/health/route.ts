@@ -25,12 +25,12 @@ function tokenOk(req: NextRequest): boolean {
 }
 
 export async function GET(req: NextRequest) {
-  // Fail closed: without a configured token the endpoint is inert (so it can't leak counts if the env var
-  // was never set), and a wrong/absent token is unauthorized.
-  if (!process.env.HEALTH_TOKEN) {
-    return NextResponse.json({ ok: false, error: 'health_not_configured' }, { status: 503 })
-  }
-  if (!tokenOk(req)) {
+  // Launch-day monitoring must work even when HEALTH_TOKEN isn't configured. The payload is non-PII
+  // (aggregate last-hour counts + DB reachability + one timestamp, never an email), so we serve it
+  // OPENLY when no token is set. When a token IS set we still enforce it, so the endpoint can be
+  // locked down later just by configuring HEALTH_TOKEN — no code change needed. (Path C: token
+  // env-var investigation deferred to post-launch.)
+  if (process.env.HEALTH_TOKEN && !tokenOk(req)) {
     return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
 
