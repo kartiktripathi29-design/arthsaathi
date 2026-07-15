@@ -12,6 +12,7 @@ import toast from 'react-hot-toast'
 import { useAppStore } from '@/store/AppStore'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { PHONE_AUTH_ENABLED } from '@/lib/authFlags'
+import { reconcileDeviceOwner } from '@/lib/deviceData'
 import { tokens as T } from '@/lib/tokens'
 import Logo from '@/components/Logo'
 import { ThemeToggle, useArthvoTheme, useThemedBase } from '@/components/ThemeToggle'
@@ -99,6 +100,8 @@ export default function SignupPage() {
   const idLabel = kind === 'email' ? email : `+91 ${phone}`
 
   const finishUser = (resolvedEmail: string) => {
+    // BUG-1: a fresh signup always starts empty, so it never inherits this device's prior tax data.
+    reconcileDeviceOwner(resolvedEmail || (kind === 'email' ? email : `${phone}@arthvo.local`), { isSignup: true })
     setUser({
       email: resolvedEmail || (kind === 'email' ? email : `${phone}@arthvo.local`),
       name: (resolvedEmail || (kind === 'email' ? email : `User ${phone.slice(-4)}`)).split('@')[0],

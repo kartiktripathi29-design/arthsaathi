@@ -10,6 +10,7 @@ import toast from 'react-hot-toast'
 import { useAppStore, type AppUser } from '@/store/AppStore'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { PHONE_AUTH_ENABLED } from '@/lib/authFlags'
+import { reconcileDeviceOwner } from '@/lib/deviceData'
 import { tokens as T } from '@/lib/tokens'
 import Logo from '@/components/Logo'
 import { ThemeToggle, useArthvoTheme, useThemedBase } from '@/components/ThemeToggle'
@@ -125,6 +126,8 @@ function LoginForm() {
 
   const mirror = (u: { email?: string | null; created_at?: string }) => {
     const e = u.email || (kind === 'email' ? email : `${phone}@arthvo.local`)
+    // BUG-1: clear only if a *different* account previously claimed this device.
+    reconcileDeviceOwner(e, { isSignup: false })
     const user: AppUser = { email: e, name: e.split('@')[0], provider: 'email', createdAt: u.created_at || new Date().toISOString() }
     setUser(user)
   }
