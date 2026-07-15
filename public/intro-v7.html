@@ -364,7 +364,14 @@
   .step h4{font-size:15.5px;font-weight:700;color:var(--text);margin-bottom:8px;letter-spacing:-0.01em}
   .step p{font-size:13px;color:var(--muted);line-height:1.7;font-weight:300}
 
+  #skip{position:fixed;bottom:22px;right:24px;z-index:21;background:rgba(230,207,167,.1);
+    border:1px solid rgba(230,207,167,.32);color:var(--lite);font-family:inherit;font-size:12px;
+    font-weight:600;letter-spacing:.04em;padding:8px 16px;border-radius:20px;cursor:pointer;
+    transition:background .2s,border-color .2s,opacity .2s;opacity:.6}
+  #skip:hover{background:rgba(230,207,167,.2);border-color:var(--wm);opacity:1}
+
   @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+  @media (prefers-reduced-motion: reduce){#skip{display:none}}
 </style>
 </head>
 <body>
@@ -375,6 +382,7 @@
   <div id="flash" aria-hidden="true"></div>
   <div id="grain" aria-hidden="true"></div>
   <div id="vig" aria-hidden="true"></div>
+  <button id="skip" type="button" aria-label="Skip intro">Skip &rarr;</button>
 
   <!-- B1: the coin — salary arrives -->
   <section class="scene" id="b1">
@@ -632,6 +640,8 @@
     });
     vc.addEventListener('mouseleave',()=>vc.style.transform='none');
   }
+  const _skip=B('skip');if(_skip)_skip.addEventListener('click',land);
+  addEventListener('keydown',e=>{if(e.key==='Escape')land();});
   if(reduced){land();return;}
 
   const t0=performance.now();
