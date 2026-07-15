@@ -117,6 +117,29 @@ export default function SignupPage() {
     if (!CONFIGURED) { setStep('password'); return } // mock: skip OTP
     setLoading(true)
     try {
+      // BUG-2: reject an already-registered email BEFORE any OTP is sent or password is set.
+      // Deterministic server-side check (auth.users) — signInWithOtp would otherwise silently sign an
+      // existing user in and the later updateUser would overwrite their password.
+      // FAIL-SAFE: rate-limited → ask the user to wait; check errored/unreachable → FALL THROUGH to the
+      // normal signup flow. It can only ADD a block for a positively-confirmed existing email — it can
+      // never break a legitimate new signup, even during a DB/API outage.
+      if (kind === 'email') {
+        let exists = false
+        try {
+          const r = await fetch('/api/auth/email-exists', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }),
+          })
+          if (r.status === 429) { toast.error('Too many attempts — please wait a minute and try again.'); return }
+          if (r.ok) exists = (await r.json())?.exists === true
+          // non-ok (check unavailable) → leave exists=false and proceed (fail-safe)
+        } catch {
+          // check unreachable → proceed with the normal signup flow (fail-safe)
+        }
+        if (exists) {
+          toast.error('An account already exists with this email. Please log in, or reset your password.')
+          return // no OTP, no password change
+        }
+      }
       const supabase = createSupabaseBrowserClient()
       const { error } = kind === 'email'
         ? await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } })
