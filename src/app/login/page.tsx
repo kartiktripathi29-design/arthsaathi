@@ -186,7 +186,7 @@ function LoginForm() {
   if (mode === 'login') return (
     <Shell>
       <div style={{ textAlign: 'center', marginBottom: 24 }}>
-        <h1 style={{ fontSize: 28, fontWeight: 800, color: C.ink, letterSpacing: '-0.025em', marginBottom: 6 }}>Welcome back</h1>
+        <h1 style={{ fontSize: 28, fontWeight: 800, color: C.ink, letterSpacing: '-0.025em', marginBottom: 6 }}>Welcome to ArthVo</h1>
         <p style={{ fontSize: 14, color: C.sub }}>{PHONE_AUTH_ENABLED ? 'Sign in with your email or mobile number.' : 'Sign in with your email.'}</p>
       </div>
       <form onSubmit={e => { e.preventDefault(); signIn() }} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -262,7 +262,7 @@ function MockLogin() {
   return (
     <Shell>
       <div style={{ textAlign: 'center', marginBottom: 24 }}>
-        <h1 style={{ fontSize: 28, fontWeight: 800, color: C.ink, letterSpacing: '-0.025em', marginBottom: 6 }}>Welcome back</h1>
+        <h1 style={{ fontSize: 28, fontWeight: 800, color: C.ink, letterSpacing: '-0.025em', marginBottom: 6 }}>Welcome to ArthVo</h1>
         <p style={{ fontSize: 14, color: C.sub }}>Sign in with your mobile number and password.</p>
       </div>
       <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
