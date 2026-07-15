@@ -119,8 +119,10 @@ export default function SignupPage() {
     try {
       // BUG-2: reject an already-registered email BEFORE any OTP is sent or password is set.
       // Deterministic server-side check (auth.users) — signInWithOtp would otherwise silently sign an
-      // existing user in and the later updateUser would overwrite their password. Fail-closed: if the
-      // check can't run, stop rather than risk the overwrite path.
+      // existing user in and the later updateUser would overwrite their password.
+      // FAIL-SAFE: rate-limited → ask the user to wait; check errored/unreachable → FALL THROUGH to the
+      // normal signup flow. It can only ADD a block for a positively-confirmed existing email — it can
+      // never break a legitimate new signup, even during a DB/API outage.
       if (kind === 'email') {
         let exists = false
         try {
@@ -128,10 +130,10 @@ export default function SignupPage() {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }),
           })
           if (r.status === 429) { toast.error('Too many attempts — please wait a minute and try again.'); return }
-          if (!r.ok) { toast.error('Could not verify that email just now — please try again.'); return }
-          exists = (await r.json())?.exists === true
+          if (r.ok) exists = (await r.json())?.exists === true
+          // non-ok (check unavailable) → leave exists=false and proceed (fail-safe)
         } catch {
-          toast.error('Could not verify that email just now — please try again.'); return
+          // check unreachable → proceed with the normal signup flow (fail-safe)
         }
         if (exists) {
           toast.error('An account already exists with this email. Please log in, or reset your password.')
