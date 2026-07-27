@@ -6,6 +6,7 @@ import { seedIfMissing, verifyIdentity, setStoredIdentity } from '@/lib/identity
 import { confirmDialog, passwordDialog } from '@/components/Dialog'
 import { GuideStrip } from '@/components/GuideStrip'
 import DataAssurance from '@/components/DataAssurance'
+import { fetchWithTimeout } from '@/lib/fetchWithTimeout'
 
 import { tokens as T } from '@/lib/tokens'
 
@@ -298,17 +299,21 @@ export default function DocumentsPage() {
         localStorage.setItem('av_uploaded_docs', JSON.stringify(docs))
       }
 
-      // Parse every salary file in parallel, then aggregate the slip arrays.
+      // Parse every salary file in parallel, then aggregate the slip arrays. Each request is bounded by a
+      // 45s timeout (the route caps at 60s) so a stalled upstream can't leave the spinner up forever; after
+      // 10s we reassure that a slow file is still being worked, not stuck.
       const results = await Promise.allSettled(salaryFiles.map(async (file) => {
         const base64 = await readFileAsBase64(file)
         const mediaType = file.type as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' | 'application/pdf'
-        const res = await fetch('/api/parse-salary', {
+        const res = await fetchWithTimeout('/api/parse-salary', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ base64Data: base64, mediaType, fileName: file.name })
-        })
+        }, { timeoutMs: 45_000, slowAfterMs: 10_000, onSlow: () => setUploadProgress('Still working — large or slow file…') })
         const json = await res.json()
-        if (!res.ok) throw new Error(json?.error || `Parse failed for ${file.name}`)
+        // Prefer the server's human `message` (e.g. the honest "reader overloaded, retry" on a 503)
+        // over the machine `error` code, so a real outage never surfaces as "upstream_busy".
+        if (!res.ok) throw new Error(json?.message || json?.error || `Parse failed for ${file.name}`)
         return { file, json }
       }))
 

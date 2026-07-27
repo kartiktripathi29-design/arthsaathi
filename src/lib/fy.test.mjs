@@ -63,10 +63,20 @@ test('GATE: the FY 2026-27 picker option is visible but disabled with the not-fi
 })
 
 test('current-year option always resolves to a genuine, selectable FY', () => {
-  const current = fyOptions(fyFromYearMonth(2026, 3)).find(o => o.mode === 'current')
+  const current = fyOptions(fyFromYearMonth(2026, 3), true).find(o => o.mode === 'current')
   assert.equal(current.disabled, false)
   assert.equal(current.fy, 2025)
   assert.equal(current.label, `This slip's year — ${fyLabel(2025)}`)
+})
+
+test('current-year label is honest: "This slip\'s year" only with a parsed slip, else "This year"', () => {
+  const anchor = fyFromYearMonth(2026, 3)
+  const withSlip = fyOptions(anchor, true).find(o => o.mode === 'current')
+  const noSlip = fyOptions(anchor, false).find(o => o.mode === 'current')
+  assert.equal(withSlip.label, `This slip's year — ${fyLabel(2025)}`)
+  assert.equal(noSlip.label, `This year — ${fyLabel(2025)}`, 'no parsed slip → must not claim a slip fact')
+  // default (no arg) is the safe, non-asserting wording
+  assert.equal(fyOptions(anchor).find(o => o.mode === 'current').label, noSlip.label)
 })
 
 // ── Mixed-FY: slips spanning two FYs map to distinct FYs (sliced, never blended) ──

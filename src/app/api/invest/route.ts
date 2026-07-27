@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { generateInvestmentPlan } from '@/lib/claude'
+import { PHASE_2_ENABLED } from '@/lib/phase'
 
 export const maxDuration = 60
 
 export async function POST(req: NextRequest) {
+  // Phase-2 gate. The investment planner is a Phase-2 feature and its page already redirects away while
+  // Phase-2 is off — but the endpoint was reachable directly and each hit burns an Anthropic call.
+  // Return 404 (not 403) so we don't advertise it exists. Same UI-gated≠API-gated fix as #29.
+  if (!PHASE_2_ENABLED) return new NextResponse(null, { status: 404 })
   try {
     const body = await req.json()
     const { monthlyInvestable, annualIncome, age, goals, riskProfile } = body
