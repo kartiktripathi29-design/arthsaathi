@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { computeQuickVerdict, type QuickVerdict } from '@/lib/quick-verdict'
 import { applyRentToExemptions } from '@/lib/quick-inputs'
+import { CAP_80C, CAP_24B, CAP_NPS } from '@/lib/verdict-engine'
 import VerdictBar from '@/components/VerdictBar'
 import { tokens as T } from '@/lib/tokens'
 
@@ -88,12 +89,17 @@ export default function ProvisionalVerdict({
   const input: React.CSSProperties = { flex: 1, padding: '9px 10px', border: 'none', fontSize: 14, fontFamily: '"Sora",sans-serif', width: '100%', background: 'transparent', color: T.ink }
   const rupee: React.CSSProperties = { padding: '9px 10px', fontSize: 13, color: T.teal, fontWeight: 700, borderRight: `1px solid ${T.hairline}` }
 
-  const questions: { label: string; sub: string; val: string; on: (s: string) => void; ph: string }[] = [
+  // `cap` marks the fields with a fixed statutory ceiling (80C ₹1.5L, 24(b) ₹2L, NPS ₹50k). HRA is
+  // monthly rent (no input ceiling — the exemption is computed via Rule 2A) and 80D's cap is senior-
+  // dependent, so both are left unclamped. The engine already caps the MATH; this only aligns what the
+  // field SHOWS with what actually counts, so a fat-fingered ₹2,00,000,199,999 doesn't sit there looking
+  // as if it all applies.
+  const questions: { label: string; sub: string; val: string; on: (s: string) => void; ph: string; cap?: number }[] = [
     { label: 'House rent (HRA)', sub: 'monthly rent you pay', val: rent, on: onRent, ph: 'e.g. 30,000' },
-    { label: 'Tax-saving investments (80C)', sub: 'PPF · ELSS · LIC — yearly', val: c80, on: s => onDed('ppf', s, setC80), ph: 'up to 1,50,000' },
-    { label: 'Home loan interest (24b)', sub: 'yearly interest — up to 2L', val: hl, on: s => onDed('homeLoanInterest', s, setHl), ph: 'up to 2,00,000' },
+    { label: 'Tax-saving investments (80C)', sub: 'PPF · ELSS · LIC — yearly', val: c80, on: s => onDed('ppf', s, setC80), ph: 'up to 1,50,000', cap: CAP_80C },
+    { label: 'Home loan interest (24b)', sub: 'yearly interest — up to 2L', val: hl, on: s => onDed('homeLoanInterest', s, setHl), ph: 'up to 2,00,000', cap: CAP_24B },
     { label: 'Health insurance (80D)', sub: 'yearly premium', val: d80, on: s => onDed('selfFamily', s, setD80), ph: 'e.g. 25,000' },
-    { label: 'Pension savings (NPS)', sub: '80CCD(1B) — yearly', val: nps, on: s => onDed('nps', s, setNps), ph: 'up to 50,000' },
+    { label: 'Pension savings (NPS)', sub: '80CCD(1B) — yearly', val: nps, on: s => onDed('nps', s, setNps), ph: 'up to 50,000', cap: CAP_NPS },
   ]
 
   return (
@@ -141,16 +147,27 @@ export default function ProvisionalVerdict({
       <div style={{ ...card, padding: 18, marginBottom: 20 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: T.teal, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 14 }}>Make it exact</div>
         <div className="pv-questions">
-          {questions.map(q => (
-            <div key={q.label}>
-              <div style={{ fontSize: 12.5, fontWeight: 600, color: T.ink, marginBottom: 2 }}>{q.label}</div>
-              <div style={{ fontSize: 10, color: T.muted, marginBottom: 6 }}>{q.sub}</div>
-              <div style={fieldWrap}>
-                <span style={rupee}>₹</span>
-                <input type="tel" inputMode="numeric" value={q.val} onChange={e => q.on(e.target.value)} placeholder={q.ph} style={input} />
+          {questions.map(q => {
+            const over = q.cap != null && num(q.val) > q.cap
+            return (
+              <div key={q.label}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: T.ink, marginBottom: 2 }}>{q.label}</div>
+                <div style={{ fontSize: 10, color: T.muted, marginBottom: 6 }}>{q.sub}</div>
+                <div style={fieldWrap}>
+                  <span style={rupee}>₹</span>
+                  <input
+                    type="tel" inputMode="numeric" value={q.val}
+                    onChange={e => q.on(e.target.value)}
+                    onBlur={q.cap != null ? () => { if (num(q.val) > q.cap!) q.on(String(q.cap)) } : undefined}
+                    placeholder={q.ph} style={input}
+                  />
+                </div>
+                {over && (
+                  <div style={{ fontSize: 10, color: T.teal, marginTop: 4 }}>Only {fmt(q.cap!)} counts — the annual cap.</div>
+                )}
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
 
