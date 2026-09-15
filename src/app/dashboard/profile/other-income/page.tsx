@@ -115,6 +115,7 @@ export default function OtherIncomePage() {
   const [openForm, setOpenForm] = useState<OtherIncomeEntry | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [aisData, setAisData] = useState<any>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   useEffect(() => {
     const data = localStorage.getItem('av_other_income')
@@ -164,21 +165,39 @@ export default function OtherIncomePage() {
     return 0
   }
 
+  // Does this entry actually carry a non-zero amount for its type? Checked against the raw inputs
+  // (not getTaxablePreview) since exemptions can legitimately bring the taxable preview to ₹0 even
+  // when real income was entered (e.g. LTCG exactly at the ₹1.25L exemption).
+  const hasIncomeEntered = (e: OtherIncomeEntry): boolean => {
+    if (e.type === 'freelance') return (e.grossReceipts || 0) > 0
+    if (e.type === 'equity') return (Array.isArray(e.rows) ? e.rows : []).some((r: EquityRow) => (r.ltcg || 0) > 0 || (r.stcg || 0) > 0)
+    if (e.type === 'crypto') return (e.cryptoGains || 0) > 0
+    if (e.type === 'fno') return (e.fnoNetProfit || 0) > 0
+    if (e.type === 'interest') return (e.fdInterest || 0) > 0 || (e.savingsInterest || 0) > 0 || (e.dividends || 0) > 0
+    if (e.type === 'other') return (e.otherAmount || 0) > 0
+    return false
+  }
+
   const handleSave = () => {
-    if (openForm) {
-      // For equity, sync the legacy aggregate fields from the rows before saving.
-      const normalized = syncEquityLegacy(openForm)
-      const saved = { ...normalized, amount: getTaxablePreview(normalized) }
-      const updated = entries.filter(e => e.id !== openForm.id)
-      const next = [...updated, saved]
-      setEntries(next)
-      localStorage.setItem('av_other_income', JSON.stringify(next))
-      setOpenForm(null)
+    if (!openForm) return
+    if (!hasIncomeEntered(openForm)) {
+      setSaveError('Enter an amount before saving — this source is currently ₹0.')
+      return
     }
+    setSaveError(null)
+    // For equity, sync the legacy aggregate fields from the rows before saving.
+    const normalized = syncEquityLegacy(openForm)
+    const saved = { ...normalized, amount: getTaxablePreview(normalized) }
+    const updated = entries.filter(e => e.id !== openForm.id)
+    const next = [...updated, saved]
+    setEntries(next)
+    localStorage.setItem('av_other_income', JSON.stringify(next))
+    setOpenForm(null)
   }
 
   const handleAdd = (type: string) => {
     const newEntry: OtherIncomeEntry = { id: Date.now().toString(), type: type as any, sourceName: '', amount: 0, grossReceipts: 0, expenses: 0, ltcgGains: 0, stcgGains: 0, ltcgAsset: 'listed_equity', stcgAsset: 'listed_equity', rows: type === 'equity' ? [{ asset: 'listed_equity', ltcg: 0, stcg: 0 }] : undefined, cryptoGains: 0, cryptoTDS: 0, fnoNetProfit: 0, fdInterest: 0, savingsInterest: 0, dividends: 0, otherAmount: 0, declarationMethod: 'presumptive_44ada' }
+    setSaveError(null)
     setOpenForm(newEntry)
     setMenuOpen(false)
   }
@@ -307,7 +326,7 @@ export default function OtherIncomePage() {
                   <p style={{ fontSize: 11, color: C.muted, margin: '0 0 4px' }}>Taxable</p>
                   <p style={{ fontSize: 14, fontWeight: 700, color: C.fg, margin: 0 }}>{fmt(getTaxablePreview(entry))}</p>
                 </div>
-                <button onClick={() => setOpenForm(entry)} style={{ padding: '6px 12px', background: C.wl, color: C.fg, border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>Edit</button>
+                <button onClick={() => { setSaveError(null); setOpenForm(entry) }} style={{ padding: '6px 12px', background: C.wl, color: C.fg, border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>Edit</button>
                 <button onClick={() => handleDelete(entry.id)} style={{ padding: '6px 12px', background: T.card, color: C.danger, border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>Delete</button>
               </div>
             </div>
@@ -462,10 +481,11 @@ export default function OtherIncomePage() {
                 <p style={{ fontSize: 11, color: C.muted, margin: '0 0 6px' }}>Taxable amount from this source</p>
                 <p style={{ fontSize: 16, fontWeight: 700, color: C.fg, margin: 0 }}>{fmt(getTaxablePreview(openForm))}</p>
               </div>
+              {saveError && <p style={{ fontSize: 11.5, color: C.danger, margin: 0 }}>{saveError}</p>}
             </div>
 
             <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
-              <button onClick={() => setOpenForm(null)} style={{ flex: 1, padding: '10px', background: C.card, color: C.muted, border: `1px solid ${C.border}`, borderRadius: 5, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+              <button onClick={() => { setSaveError(null); setOpenForm(null) }} style={{ flex: 1, padding: '10px', background: C.card, color: C.muted, border: `1px solid ${C.border}`, borderRadius: 5, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
               <button onClick={handleSave} style={{ flex: 1, padding: '10px', background: C.fg, color: T.onTeal, border: 'none', borderRadius: 5, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
             </div>
           </div>
