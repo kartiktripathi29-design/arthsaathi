@@ -327,7 +327,7 @@ HOW ARTHVO IS ORGANISED (use this to point people to the right place):
 - Your Tax — compares Old vs New regime, shows your tax, which ITR form to file, and where you can save more.
 - Dashboard — a visual summary of your tax picture.
 - "Computation for your CA" — a printable statement to hand to a tax consultant.
-- Investing basics — how common savings and investment options work (lock-in, risk, tax treatment).
+- Investments — pick a risk appetite and goals to see an example monthly investment plan built from your salary.
 Note: ArthVo has no dedicated house-property/rental section yet — for rental income, suggest "Other" under
 Other earnings and to mention it to their CA.
 
