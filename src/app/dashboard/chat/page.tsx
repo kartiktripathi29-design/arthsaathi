@@ -1,7 +1,7 @@
 'use client'
-// Phase-1 help chat ("ArthVo Guide"): helps people USE the app and understand fields — no financial
-// advice (guardrails live in the system prompt, lib/claude.ts → buildChatSystem). Streams the answer
-// from /api/chat (Server-Sent Events).
+// Help chat ("ArthVo Guide"): helps people use the app and explains tax/investing concepts, using their
+// own computed figures to illustrate — no financial advice (guardrails live in the system prompt,
+// lib/claude.ts → buildChatSystem). Streams the answer from /api/chat (Server-Sent Events).
 import { useState, useRef, useEffect } from 'react'
 import { tokens as T } from '@/lib/tokens'
 
@@ -13,9 +13,12 @@ const SUGGESTIONS = [
   'Where do I put my FD interest?',
   'What counts as an allowance?',
   "What does '87A rebate' mean?",
-  'Which section is my rental income?',
+  'How is my tax worked out?',
   "What's the difference between old and new regime?",
+  'How do PPF and ELSS differ?',
 ]
+
+const inr = (n: unknown) => typeof n === 'number' && isFinite(n) ? `₹${Math.round(n).toLocaleString('en-IN')}` : null
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([])
@@ -23,16 +26,34 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  // Phase-1 context = where the user is in the flow (navigation help only — no amounts, no advice).
+  // Context = where the user is in the flow, plus the figures "Your Tax" already computed (from the
+  // av_tax_overview snapshot) so the guide can explain how rules apply to them. Explain, never advise.
   const buildContext = () => {
     const has = (k: string) => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return Array.isArray(v) ? v.length > 0 : !!v } catch { return false } }
-    return [
+    const lines = [
       `Salary added: ${has('av_salary_timeline') ? 'yes' : 'no'}`,
       `Other earnings added: ${has('av_other_income') ? 'yes' : 'no'}`,
       `Allowances added: ${has('av_exemptions') ? 'yes' : 'no'}`,
       `Deductions added: ${has('av_deductions') ? 'yes' : 'no'}`,
       `Tax computed (visited Your Tax): ${has('av_tax_overview') ? 'yes' : 'no'}`,
-    ].join(' · ')
+    ]
+    try {
+      const s = JSON.parse(localStorage.getItem('av_tax_overview') || 'null')
+      if (s) {
+        const figs: [string, unknown][] = [
+          ['Gross salary (year)', s.grossSalary], ['Other income taxed at slab rates', s.slabOtherIncome],
+          ['Special-rate income (e.g. capital gains)', s.specialIncome],
+          ['Tax under new regime', s.newTotal], ['Tax under old regime', s.oldTotal],
+          ['TDS already paid', s.tdsPaid], ['80C used', s.sec80C], ['80D used', s.sec80D],
+          ['NPS 80CCD(1B) used', s.nps], ['Home-loan interest 24(b) used', s.sec24b],
+          ['Old-regime taxable income', s.taxableOld],
+        ]
+        for (const [label, v] of figs) { const f = inr(v); if (f) lines.push(`${label}: ${f}`) }
+        if (s.recommendation) lines.push(`Lower-tax regime per Your Tax: ${s.recommendation}`)
+        if (s.itrForm) lines.push(`ITR form per Your Tax: ${s.itrForm}`)
+      }
+    } catch {}
+    return lines.join('\n')
   }
 
   const send = async (text: string) => {
@@ -86,7 +107,7 @@ export default function ChatPage() {
     <div style={{ fontFamily: '"Sora",-apple-system,sans-serif', maxWidth: 720, height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
       <div style={{ marginBottom: 16, flexShrink: 0 }}>
         <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: '0 0 4px', letterSpacing: '-0.02em' }}>Ask ArthVo</h2>
-        <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>Stuck on a field? I'll explain it or tell you where it goes. (I help you use the app — not financial advice.)</p>
+        <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>Ask about a field, a tax rule or how an investment option works. I explain — I don&apos;t give financial advice.</p>
       </div>
 
       <div style={{ flex: 1, background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: '16px', overflow: 'auto', marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -95,7 +116,7 @@ export default function ChatPage() {
             <Avatar size={48} />
             <div>
               <p style={{ fontSize: 15, fontWeight: 600, color: C.text, margin: '0 0 4px' }}>{greeting}! I'm the ArthVo Guide.</p>
-              <p style={{ fontSize: 12.5, color: C.muted, margin: 0, maxWidth: 400 }}>Ask me how to use ArthVo or what something on your screen means. No question is too small.</p>
+              <p style={{ fontSize: 12.5, color: C.muted, margin: 0, maxWidth: 400 }}>Ask me how to use ArthVo, how your tax is worked out, or how savings options like PPF and NPS work. No question is too small.</p>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginTop: 4 }}>
               {SUGGESTIONS.map(s => (
@@ -123,10 +144,10 @@ export default function ChatPage() {
       <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
         <input value={input} onChange={e => setInput(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input) } }}
-          placeholder="Ask how to use ArthVo or what a field means…"
+          placeholder="Ask about a field, a tax rule or an investment option…"
           style={{ flex: 1, padding: '10px 14px', border: `1px solid ${C.border}`, borderRadius: 5, fontSize: 13, fontFamily: 'inherit', outline: 'none', color: C.text, background: C.card }} />
         <button onClick={() => send(input)} disabled={!input.trim() || loading}
-          style={{ padding: '10px 18px', background: input.trim() && !loading ? C.fg : '#C8D4C8', color: input.trim() && !loading ? C.wheat : '#8A9A8A', border: 'none', borderRadius: 5, fontSize: 13, fontWeight: 600, cursor: input.trim() && !loading ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}>
+          style={{ padding: '10px 18px', background: input.trim() && !loading ? C.fg : C.border, color: input.trim() && !loading ? C.wheat : C.muted, border: 'none', borderRadius: 5, fontSize: 13, fontWeight: 600, cursor: input.trim() && !loading ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}>
           Send →
         </button>
       </div>

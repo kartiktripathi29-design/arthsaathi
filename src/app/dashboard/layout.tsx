@@ -8,6 +8,7 @@ import { useUser } from '@/lib/useUser'
 import { tokens as T } from '@/lib/tokens'
 import Logo from '@/components/Logo'
 import { ThemeToggle, useThemedBase } from '@/components/ThemeToggle'
+import { INVEST_GUIDE_ENABLED } from '@/lib/phase'
 
 const SUPABASE_CONFIGURED = !!process.env.NEXT_PUBLIC_SUPABASE_URL
 
@@ -175,6 +176,21 @@ function Sidebar() {
         }}>
           Ask ArthVo
         </Link>
+
+        {INVEST_GUIDE_ENABLED && (
+          <Link href="/dashboard/invest" style={{
+            display: 'flex', alignItems: 'center', gap: 9,
+            padding: '10px 16px', textDecoration: 'none',
+            fontSize: 13, fontFamily: 'inherit',
+            borderLeft: `2px solid ${isActive('/dashboard/invest') ? C.accent : 'transparent'}`,
+            background: isActive('/dashboard/invest') ? T.tint : 'transparent',
+            color: isActive('/dashboard/invest') ? C.accent : C.nav,
+            fontWeight: isActive('/dashboard/invest') ? 600 : 500,
+            transition: 'all 0.15s',
+          }}>
+            Investing basics
+          </Link>
+        )}
       </nav>
 
       <div style={{ padding: 10, borderTop: `1px solid ${C.railLine}` }}>
@@ -250,6 +266,8 @@ function TopBar({ theme, setTheme, resolved }: { theme: ThemeMode; setTheme: (t:
     : pathname.startsWith('/dashboard/profile/deductions') ? 'Deductions'
     : pathname.startsWith('/dashboard/tax/past-years') ? 'Past years'
     : pathname.startsWith('/dashboard/tax') ? 'Your Tax'
+    : pathname.startsWith('/dashboard/chat') ? 'Ask ArthVo'
+    : pathname.startsWith('/dashboard/invest') ? 'Investing basics'
     : 'Dashboard'
 
   return (
@@ -298,6 +316,16 @@ function TopBar({ theme, setTheme, resolved }: { theme: ThemeMode; setTheme: (t:
                 <div style={{ fontSize: 12, color: T.ink, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name}</div>
                 <div style={{ fontSize: 10, color: T.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(user as any).phone || (user as any).email || ''}</div>
               </div>
+              {/* Ask ArthVo + Investing basics have no bottom tab (the bar stays at 4), so mobile reaches them here. */}
+              {[
+                { label: 'Ask ArthVo', href: '/dashboard/chat' },
+                ...(INVEST_GUIDE_ENABLED ? [{ label: 'Investing basics', href: '/dashboard/invest' }] : []),
+              ].map(item => (
+                <Link key={item.href} href={item.href} onClick={() => setMenuOpen(false)} style={{
+                  display: 'block', padding: '8px 10px', borderTop: `1px solid ${T.hairline}`,
+                  color: T.nav, fontSize: 12, textDecoration: 'none',
+                }}>{item.label}</Link>
+              ))}
               <button onClick={handleSignOut} style={{
                 width: '100%', textAlign: 'left', padding: '8px 10px', marginTop: 2,
                 background: 'transparent', border: 'none', borderTop: `1px solid ${T.hairline}`,

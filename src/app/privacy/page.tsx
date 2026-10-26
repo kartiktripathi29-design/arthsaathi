@@ -50,7 +50,7 @@ export default function PrivacyPage() {
             list: [
               'Salary slip documents — uploaded voluntarily by you for AI parsing. These are sent to Anthropic\'s Claude API for processing and are immediately discarded after the parsed data is returned. We do not store the raw document.',
               'Parsed salary data — the structured numbers extracted from your salary slip (Basic, HRA, PF, Net Pay etc.). These are stored only in your browser\'s localStorage on your own device. They are never sent to our database.',
-              'Chat messages — questions you ask the AI advisor. These are sent to Anthropic\'s Claude API to generate a response and are not stored in our database.',
+              'Chat messages — questions you ask the Ask ArthVo guide, along with the tax figures ArthVo has computed for you (so it can explain them). These are sent to Anthropic\'s Claude API to generate a response and are not stored in our database.',
               'Usage analytics — anonymous data about which pages you visit, via Vercel Analytics. No personal information is collected.',
             ],
           },
