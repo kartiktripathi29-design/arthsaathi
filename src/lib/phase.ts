@@ -6,7 +6,8 @@
 // layers read THIS one constant. No env var: flip it to turn Phase-2 on everywhere at once.
 export const PHASE_2_ENABLED = false
 
-// Investments page (/dashboard/invest) — split out of Phase-2 so it can ship on its own. It builds its
-// plan client-side and calls no API; the AI plan route (/api/invest) stays behind PHASE_2_ENABLED.
+// Investment education (/dashboard/invest) — split out of Phase-2 so it can ship on its own. It is
+// education-only (no product picks or amounts) and calls no API; the AI plan route (/api/invest) stays
+// behind PHASE_2_ENABLED.
 // Flip to false to hide the page and its nav links.
 export const INVEST_ENABLED = true

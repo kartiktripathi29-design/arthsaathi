@@ -175,7 +175,7 @@ function Sidebar() {
             fontWeight: isActive('/dashboard/invest') ? 600 : 500,
             transition: 'all 0.15s',
           }}>
-            Investments
+            Investment education
           </Link>
         )}
 
@@ -267,7 +267,7 @@ function TopBar({ theme, setTheme, resolved }: { theme: ThemeMode; setTheme: (t:
     : pathname.startsWith('/dashboard/tax/past-years') ? 'Past years'
     : pathname.startsWith('/dashboard/tax') ? 'Your Tax'
     : pathname.startsWith('/dashboard/chat') ? 'Ask ArthVo'
-    : pathname.startsWith('/dashboard/invest') ? 'Investments'
+    : pathname.startsWith('/dashboard/invest') ? 'Investment education'
     : 'Dashboard'
 
   return (
@@ -316,9 +316,9 @@ function TopBar({ theme, setTheme, resolved }: { theme: ThemeMode; setTheme: (t:
                 <div style={{ fontSize: 12, color: T.ink, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name}</div>
                 <div style={{ fontSize: 10, color: T.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(user as any).phone || (user as any).email || ''}</div>
               </div>
-              {/* Ask ArthVo + Investments have no bottom tab (the bar stays at 4), so mobile reaches them here. */}
+              {/* Ask ArthVo + Investment education have no bottom tab (the bar stays at 4), so mobile reaches them here. */}
               {[
-                ...(INVEST_ENABLED ? [{ label: 'Investments', href: '/dashboard/invest' }] : []),
+                ...(INVEST_ENABLED ? [{ label: 'Investment education', href: '/dashboard/invest' }] : []),
                 { label: 'Ask ArthVo', href: '/dashboard/chat' },
               ].map(item => (
                 <Link key={item.href} href={item.href} onClick={() => setMenuOpen(false)} style={{
