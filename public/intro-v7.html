@@ -329,6 +329,9 @@
     transition:opacity .9s cubic-bezier(.16,1,.3,1),transform .9s cubic-bezier(.16,1,.3,1),filter .9s ease;
     transition-delay:var(--rd,0s)}
   #landing.in .rise{opacity:1;transform:none;filter:blur(0)}
+  .embedded .nav{display:none}
+  .embedded #landing{min-height:0}
+  .embedded body.landed{overflow:hidden}
   .nav{display:flex;justify-content:space-between;align-items:center;max-width:1080px;margin:0 auto;padding:26px 28px}
   .wordmark{font-size:19px;font-weight:800;color:var(--text);letter-spacing:-0.02em}
   .wordmark span{color:var(--fg)}
@@ -625,12 +628,21 @@
   const hide=el=>el.classList.remove('on');
 
   const TOTAL=45000;
+  /* Embedded in the site page: hand over the header + footer and report height so the frame can
+     join the page flow once the intro ends. */
+  const embedded=window.parent!==window;
+  if(embedded)document.documentElement.classList.add('embedded');
+  let hasLanded=false;
+  const report=()=>{if(embedded&&hasLanded)parent.postMessage({type:'arthvo:landing',height:landing.offsetHeight},location.origin);};
+  addEventListener('message',e=>{if(e.origin===location.origin&&e.data==='arthvo:ping')report();});
   function land(){
     timers.forEach(clearTimeout);timers=[];dustOn=false;
     stage.classList.add('dissolve');
     landing.classList.add('in');
     landing.setAttribute('aria-hidden','false');
     document.body.classList.add('landed');
+    hasLanded=true;report();
+    if(embedded)new ResizeObserver(report).observe(landing);
     later(()=>stage.remove(),2200);
     const vc=B('vcard');
     vc.addEventListener('mousemove',e=>{

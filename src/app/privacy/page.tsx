@@ -1,20 +1,13 @@
 import Link from 'next/link'
+import SiteHeader from '@/components/SiteHeader'
+import SiteFooter from '@/components/SiteFooter'
 import { tokens as T } from '@/lib/tokens'
 
 export default function PrivacyPage() {
   return (
     <div style={{ minHeight: '100vh', background: T.paper, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
 
-      {/* Nav */}
-      <nav style={{ background: T.teal, padding: '16px 48px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 32, height: 32, background: T.taupe, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 16, color: T.teal }}>₹</div>
-          <span style={{ fontWeight: 700, fontSize: 16, color: T.ivory }}>ArthVo</span>
-        </Link>
-        <Link href="/dashboard" style={{ fontSize: 13, color: 'rgba(244,238,224,0.6)', textDecoration: 'none' }}>
-          ← Back to Dashboard
-        </Link>
-      </nav>
+      <SiteHeader />
 
       {/* Content */}
       <div style={{ maxWidth: 760, margin: '0 auto', padding: '48px 24px' }}>
@@ -131,6 +124,7 @@ export default function PrivacyPage() {
           </Link>
         </div>
       </div>
+      <SiteFooter />
     </div>
   )
 }

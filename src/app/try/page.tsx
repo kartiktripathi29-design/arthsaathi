@@ -6,12 +6,12 @@
 // localStorage keys, so after they sign up the dashboard already has their numbers (same origin).
 
 import { useEffect, useRef, useState } from 'react'
-import Link from 'next/link'
 import ProvisionalVerdict from '@/components/ProvisionalVerdict'
 import EmailCapture from '@/components/EmailCapture'
 import { shouldFetchContext } from '@/lib/email-capture'
 import DataAssurance from '@/components/DataAssurance'
-import Logo from '@/components/Logo'
+import SiteHeader from '@/components/SiteHeader'
+import SiteFooter from '@/components/SiteFooter'
 import { ThemeToggle, useArthvoTheme, useThemedBase } from '@/components/ThemeToggle'
 import { tokens as T } from '@/lib/tokens'
 
@@ -109,18 +109,11 @@ export default function TryPage() {
   }, [])
 
   return (
-    <div data-theme={resolved} suppressHydrationWarning style={{ minHeight: '100vh', background: T.paper, color: T.ink, fontFamily: '"Sora",-apple-system,sans-serif' }}>
+    <div data-theme={resolved} suppressHydrationWarning style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: T.paper, color: T.ink, fontFamily: '"Sora",-apple-system,sans-serif' }}>
       <style>{`.btn-ghost{transition:background .15s} .btn-ghost:hover{background:var(--tint) !important}`}</style>
-      {/* Public header — no account required */}
-      <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 28px', borderBottom: `1px solid ${T.hairline}` }}>
-        <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center' }}><Logo variant="onLight" size={30} /></Link>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
-          <Link href="/login" style={{ fontSize: 13, color: T.muted, fontWeight: 500, textDecoration: 'none' }}>Sign in</Link>
-          <ThemeToggle theme={theme} setTheme={setTheme} resolved={resolved} />
-        </div>
-      </nav>
+      <SiteHeader actions={<ThemeToggle theme={theme} setTheme={setTheme} resolved={resolved} />} />
 
-      <div style={{ padding: '28px 20px 60px' }}>
+      <div style={{ flex: 1, padding: '28px 20px 60px' }}>
         {returning && typeof returning.verdictAmount === 'number' && returning.verdictAmount > 0 && (
           <div style={{ maxWidth: 440, margin: '0 auto 16px', background: T.tint, border: `1px solid ${T.hairline}`, borderRadius: 12, padding: '14px 16px', color: T.ink, fontSize: 13, lineHeight: 1.55 }}>
             In July you found <strong>₹{returning.verdictAmount.toLocaleString('en-IN')}</strong> you could have saved. Let’s see what’s still fixable this year.
@@ -163,6 +156,7 @@ export default function TryPage() {
           </>
         )}
       </div>
+      <SiteFooter />
     </div>
   )
 }

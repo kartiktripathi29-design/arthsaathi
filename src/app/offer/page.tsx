@@ -9,7 +9,8 @@ import toast from 'react-hot-toast'
 import { passwordDialog } from '@/components/Dialog'
 import { newRegimeAnnualTax } from '@/lib/tax-slabs'
 import { tokens as T } from '@/lib/tokens'
-import Logo from '@/components/Logo'
+import SiteHeader from '@/components/SiteHeader'
+import SiteFooter from '@/components/SiteFooter'
 import { ThemeToggle, useArthvoTheme, useThemedBase } from '@/components/ThemeToggle'
 
 interface OfferData {
@@ -96,17 +97,7 @@ export default function OfferParserPage() {
         .btn-ghost:hover { background: var(--tint) !important; }
       `}</style>
 
-      <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, padding: '18px 52px', borderBottom: `1px solid ${T.hairline}` }}>
-        <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 11, flexShrink: 0 }}>
-          <Logo variant="onLight" size={30} />
-        </Link>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0 }}>
-          <div style={{ fontSize: 13, color: T.muted }}>
-            <Link href="/login" style={{ color: T.teal, fontWeight: 600, textDecoration: 'none' }}>Sign in</Link>
-          </div>
-          <ThemeToggle theme={theme} setTheme={setTheme} resolved={resolved} />
-        </div>
-      </nav>
+      <SiteHeader actions={<ThemeToggle theme={theme} setTheme={setTheme} resolved={resolved} />} />
 
       <div style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: '40px 24px 64px' }}>
         <div style={{ width: '100%', maxWidth: 760 }}>
@@ -155,6 +146,7 @@ export default function OfferParserPage() {
           {status === 'done' && data && <Breakdown data={data} onReset={reset} />}
         </div>
       </div>
+      <SiteFooter />
     </div>
   )
 }

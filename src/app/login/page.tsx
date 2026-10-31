@@ -12,7 +12,8 @@ import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { PHONE_AUTH_ENABLED } from '@/lib/authFlags'
 import { reconcileDeviceOwner } from '@/lib/deviceData'
 import { tokens as T } from '@/lib/tokens'
-import Logo from '@/components/Logo'
+import SiteHeader from '@/components/SiteHeader'
+import SiteFooter from '@/components/SiteFooter'
 import { ThemeToggle, useArthvoTheme, useThemedBase } from '@/components/ThemeToggle'
 
 const C = { green: T.teal, ink: T.ink, sub: T.muted, line: T.hairline }
@@ -36,27 +37,8 @@ function Shell({ children }: { children: React.ReactNode }) {
         .otp-input { text-align: center; letter-spacing: .5em; font-size: 18px; font-weight: 600; }
         .btn-ghost { transition: background .15s; }
         .btn-ghost:hover { background: var(--tint) !important; }
-        .auth-nav-prompt-short { display: none; }   /* desktop shows the full prompt */
-        /* Mobile: the whole nav sits on ONE line aligned with the logo — logo left, prompt + toggle
-           right, no wrapping. The prompt is nowrap + smaller, swaps to a shorter label, and the gap
-           tightens so it fits beside the logo and toggle at phone widths. The toggle keeps its size. */
-        @media (max-width: 480px) {
-          .auth-nav { padding-left: 16px !important; padding-right: 16px !important; }
-          .auth-nav-actions { flex-shrink: 1 !important; min-width: 0; gap: 8px !important; }
-          .auth-nav-prompt { white-space: nowrap; font-size: 11px !important; line-height: 1.2; }
-          .auth-nav-prompt-full { display: none; }
-          .auth-nav-prompt-short { display: inline; }
-        }
       `}</style>
-      <nav className="auth-nav" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, padding: '18px 52px', borderBottom: `1px solid ${T.hairline}` }}>
-        <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 11, flexShrink: 0 }}>
-          <Logo variant="onLight" size={32} />
-        </Link>
-        <div className="auth-nav-actions" style={{ display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0 }}>
-          <div className="auth-nav-prompt" style={{ fontSize: 13, color: C.sub }}><span className="auth-nav-prompt-full">New to ArthVo?</span><span className="auth-nav-prompt-short">New here?</span>{' '}<Link href="/signup" style={{ color: C.green, fontWeight: 600, textDecoration: 'none' }}>Sign up</Link></div>
-          <ThemeToggle theme={theme} setTheme={setTheme} resolved={resolved} />
-        </div>
-      </nav>
+      <SiteHeader actions={<ThemeToggle theme={theme} setTheme={setTheme} resolved={resolved} />} />
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 24px' }}>
         <div style={{ width: '100%', maxWidth: 420 }}>
           {children}
@@ -66,6 +48,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           </p>
         </div>
       </div>
+      <SiteFooter />
     </div>
   )
 }

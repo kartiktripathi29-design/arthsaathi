@@ -2,6 +2,8 @@
 // Looks the row up by token, sets unsubscribed = true (idempotent), and renders a plain confirmation.
 // Built now, ships with capture — even though no email is sent yet.
 import { prisma } from '@/lib/db'
+import SiteHeader from '@/components/SiteHeader'
+import SiteFooter from '@/components/SiteFooter'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -21,7 +23,7 @@ export default async function UnsubscribePage({ searchParams }: { searchParams: 
   const result = await applyUnsubscribe(token)
 
   const wrap: React.CSSProperties = {
-    minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
     padding: 24, background: '#f7f6f2', fontFamily: '"Sora",-apple-system,sans-serif',
   }
   const card: React.CSSProperties = {
@@ -30,6 +32,8 @@ export default async function UnsubscribePage({ searchParams }: { searchParams: 
   }
 
   return (
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <SiteHeader />
     <div style={wrap}>
       <div style={card}>
         {result === 'done' ? (
@@ -49,6 +53,8 @@ export default async function UnsubscribePage({ searchParams }: { searchParams: 
           </>
         )}
       </div>
+    </div>
+    <SiteFooter />
     </div>
   )
 }
