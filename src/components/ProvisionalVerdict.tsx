@@ -125,21 +125,23 @@ export default function ProvisionalVerdict({
           <div className="pv-regime" style={{ marginBottom: 8 }}>
             <div style={{ background: T.tint, borderRadius: 10, padding: '14px 16px' }}>
               <div style={{ fontSize: 10, fontWeight: 600, color: T.teal, letterSpacing: '0.04em', marginBottom: 6 }}>New regime</div>
-              <div style={{ fontSize: 26, fontWeight: 800, color: T.teal, letterSpacing: '-0.02em' }}>{fmt(v.range.newTax)}</div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: T.teal, letterSpacing: '-0.02em' }}>{fmt(v.newTotal)}</div>
             </div>
             <div style={{ background: T.paper, border: `1px solid ${T.hairline}`, borderRadius: 10, padding: '14px 16px' }}>
               <div style={{ fontSize: 10, fontWeight: 600, color: T.muted, letterSpacing: '0.04em', marginBottom: 6 }}>Old regime</div>
-              <div style={{ fontSize: 26, fontWeight: 800, color: T.ink, letterSpacing: '-0.02em' }}>{fmt(v.range.oldBare)}</div>
-              {v.range.oldTypical < v.range.oldBare && (
+              <div style={{ fontSize: 26, fontWeight: 800, color: T.ink, letterSpacing: '-0.02em' }}>{fmt(v.oldTotal)}</div>
+              {!v.hasDeductions && v.oldTypical < v.oldTotal && (
                 <div style={{ marginTop: 8 }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: T.teal }}>↓ with typical deductions</div>
-                  <div style={{ fontSize: 17, fontWeight: 800, color: T.teal }}>~{fmt(v.range.oldTypical)}</div>
+                  <div style={{ fontSize: 17, fontWeight: 800, color: T.teal }}>~{fmt(v.oldTypical)}</div>
                 </div>
               )}
             </div>
           </div>
           <div style={{ fontSize: 12.5, textAlign: 'center', color: T.muted }}>
-            <span style={{ color: T.ink, fontWeight: 700 }}>Your real answer sits in this range.</span> The questions below decide where.
+            {v.hasDeductions
+              ? <><span style={{ color: T.ink, fontWeight: 700 }}>Updated with what you&apos;ve entered.</span> Fill in the rest below to make it exact.</>
+              : <><span style={{ color: T.ink, fontWeight: 700 }}>Your real answer sits in this range.</span> The questions below decide where.</>}
           </div>
         </div>
       )}

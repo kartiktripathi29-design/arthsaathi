@@ -8,7 +8,7 @@
 // Productionising this means extracting the optimizer's computation into one shared engine that both
 // screens call (so there is literally one code path). For the prototype we replicate the subset.
 
-import { estimateAnnualTax, type SeniorStatus } from './tax-slabs'
+import type { SeniorStatus } from './tax-slabs'
 import { getSalaryFacts } from './salary-facts'
 import { computeRegimeCore, cap80DSelf, cap80DParents, CAP_80C, CAP_24B, CAP_NPS, CAP_80TTA, CAP_80TTB } from './verdict-engine'
 
@@ -18,8 +18,10 @@ export interface QuickVerdict {
   newTotal: number
   oldTotal: number
   savings: number
-  // First-look range straight off the slip (salary only) — same framing as the landing card.
-  range: { newTax: number; oldBare: number; oldTypical: number }
+  // First-look old-regime bill assuming typical deductions — same framing as the landing card.
+  oldTypical: number
+  // True once any deduction or rent is on file, including a rent too low to earn an HRA exemption.
+  hasDeductions: boolean
   // 0–100 confidence the answer is exact, plus the single biggest thing that would raise it.
   exactness: { pct: number; nextStep: string | null }
 }
@@ -32,11 +34,11 @@ function readJSON(key: string): any {
 
 const EMPTY: QuickVerdict = {
   hasSalary: false, recommendation: 'new', newTotal: 0, oldTotal: 0, savings: 0,
-  range: { newTax: 0, oldBare: 0, oldTypical: 0 }, exactness: { pct: 0, nextStep: 'Upload a salary slip' },
+  oldTypical: 0, hasDeductions: false, exactness: { pct: 0, nextStep: 'Upload a salary slip' },
 }
 
-// Typical deductions almost any salaried investor can claim — used only for the salary-only "range"
-// preview (₹1.5L 80C + ₹50k NPS + ₹25k 80D). Mirrors the landing card's assumption.
+// Typical deductions almost any salaried investor can claim — used only for the first-look preview
+// before any deduction is entered (₹1.5L 80C + ₹50k NPS + ₹25k 80D). Mirrors the landing card's assumption.
 const TYPICAL_DEDUCTIONS = 225000
 
 export function computeQuickVerdict(): QuickVerdict {
@@ -85,11 +87,10 @@ export function computeQuickVerdict(): QuickVerdict {
     annualGross: gross, slabOtherIncome, totalExemptions, totalDeductions, seniorStatus: senior,
   })
 
-  const range = {
-    newTax: estimateAnnualTax(gross, 'new', senior),
-    oldBare: estimateAnnualTax(gross, 'old', senior),
-    oldTypical: estimateAnnualTax(gross - TYPICAL_DEDUCTIONS, 'old', senior),
-  }
+  const { oldTotal: oldTypical } = computeRegimeCore({
+    annualGross: gross, slabOtherIncome, totalExemptions: 0, totalDeductions: TYPICAL_DEDUCTIONS, seniorStatus: senior,
+  })
+  const hasDeductions = totalDeductions > 0 || totalExemptions > 0 || n(hra.rentPaid) > 0
 
   // Exactness — weighted signals, summing to 100 when everything is supplied.
   let pct = 0
@@ -106,5 +107,5 @@ export function computeQuickVerdict(): QuickVerdict {
   if (ais && Number(ais.totalTaxCredit) > 0) pct += 15; else missing.push('Add AIS / 26AS for exact TDS')
   pct = Math.min(100, pct)
 
-  return { hasSalary: true, recommendation, newTotal, oldTotal, savings, range, exactness: { pct, nextStep: missing[0] || null } }
+  return { hasSalary: true, recommendation, newTotal, oldTotal, savings, oldTypical, hasDeductions, exactness: { pct, nextStep: missing[0] || null } }
 }
