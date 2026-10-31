@@ -9,7 +9,7 @@ import Link from 'next/link'
 import { computeQuickVerdict, type QuickVerdict } from '@/lib/quick-verdict'
 import { applyRentToExemptions } from '@/lib/quick-inputs'
 import { CAP_80C, CAP_24B, CAP_NPS } from '@/lib/verdict-engine'
-import VerdictBar from '@/components/VerdictBar'
+import VerdictBar, { focusField } from '@/components/VerdictBar'
 import { tokens as T } from '@/lib/tokens'
 
 const fmt = (v: number) => `₹${Math.abs(Math.round(v)).toLocaleString('en-IN')}`
@@ -30,6 +30,15 @@ export interface ProvisionalVerdictProps {
   secondaryLabel?: string
   // Bump to force a re-read when salary is set/changed by a parent (e.g. the public /try salary gate).
   version?: number
+  // Where the bar's slip and AIS items link. Null leaves them as plain text (pre-auth /try).
+  uploadHref?: string | null
+}
+
+const FIELD_ACTIONS = {
+  rent: () => focusField('pv-field-rent'),
+  '80c': () => focusField('pv-field-80c'),
+  '80d': () => focusField('pv-field-80d'),
+  nps: () => focusField('pv-field-nps'),
 }
 
 export default function ProvisionalVerdict({
@@ -42,6 +51,7 @@ export default function ProvisionalVerdict({
   secondaryHref,
   secondaryLabel,
   version = 0,
+  uploadHref = '/dashboard/profile/documents',
 }: ProvisionalVerdictProps) {
   const [v, setV] = useState<QuickVerdict | null>(null)
   const [rent, setRent] = useState('')
@@ -94,12 +104,12 @@ export default function ProvisionalVerdict({
   // dependent, so both are left unclamped. The engine already caps the MATH; this only aligns what the
   // field SHOWS with what actually counts, so a fat-fingered ₹2,00,000,199,999 doesn't sit there looking
   // as if it all applies.
-  const questions: { label: string; sub: string; val: string; on: (s: string) => void; ph: string; cap?: number }[] = [
-    { label: 'House rent (HRA)', sub: 'monthly rent you pay', val: rent, on: onRent, ph: 'e.g. 30,000' },
-    { label: 'Tax-saving investments (80C)', sub: 'PPF · ELSS · LIC — yearly', val: c80, on: s => onDed('ppf', s, setC80), ph: 'up to 1,50,000', cap: CAP_80C },
-    { label: 'Home loan interest (24b)', sub: 'yearly interest — up to 2L', val: hl, on: s => onDed('homeLoanInterest', s, setHl), ph: 'up to 2,00,000', cap: CAP_24B },
-    { label: 'Health insurance (80D)', sub: 'yearly premium', val: d80, on: s => onDed('selfFamily', s, setD80), ph: 'e.g. 25,000' },
-    { label: 'Pension savings (NPS)', sub: '80CCD(1B) — yearly', val: nps, on: s => onDed('nps', s, setNps), ph: 'up to 50,000', cap: CAP_NPS },
+  const questions: { id: string; label: string; sub: string; val: string; on: (s: string) => void; ph: string; cap?: number }[] = [
+    { id: 'pv-field-rent', label: 'House rent (HRA)', sub: 'monthly rent you pay', val: rent, on: onRent, ph: 'e.g. 30,000' },
+    { id: 'pv-field-80c', label: 'Tax-saving investments (80C)', sub: 'PPF · ELSS · LIC — yearly', val: c80, on: s => onDed('ppf', s, setC80), ph: 'up to 1,50,000', cap: CAP_80C },
+    { id: 'pv-field-24b', label: 'Home loan interest (24b)', sub: 'yearly interest — up to 2L', val: hl, on: s => onDed('homeLoanInterest', s, setHl), ph: 'up to 2,00,000', cap: CAP_24B },
+    { id: 'pv-field-80d', label: 'Health insurance (80D)', sub: 'yearly premium', val: d80, on: s => onDed('selfFamily', s, setD80), ph: 'e.g. 25,000' },
+    { id: 'pv-field-nps', label: 'Pension savings (NPS)', sub: '80CCD(1B) — yearly', val: nps, on: s => onDed('nps', s, setNps), ph: 'up to 50,000', cap: CAP_NPS },
   ]
 
   return (
@@ -115,7 +125,7 @@ export default function ProvisionalVerdict({
           .pv-questions { grid-template-columns: 1fr; }
         }
       `}</style>
-      <VerdictBar verdict={v} />
+      <VerdictBar verdict={v} itemActions={FIELD_ACTIONS} itemHrefs={{ slip: uploadHref, ais: uploadHref }} />
 
       <h1 style={{ fontSize: 22, fontWeight: 800, color: T.ink, margin: '0 0 4px', letterSpacing: '-0.02em' }}>{heading}</h1>
       <p style={{ fontSize: 13, color: T.muted, margin: '0 0 16px' }}>{subheading}</p>
@@ -158,7 +168,7 @@ export default function ProvisionalVerdict({
                 <div style={fieldWrap}>
                   <span style={rupee}>₹</span>
                   <input
-                    type="tel" inputMode="numeric" value={q.val}
+                    id={q.id} type="tel" inputMode="numeric" value={q.val}
                     onChange={e => q.on(e.target.value)}
                     onBlur={q.cap != null ? () => { if (num(q.val) > q.cap!) q.on(String(q.cap)) } : undefined}
                     placeholder={q.ph} style={input}

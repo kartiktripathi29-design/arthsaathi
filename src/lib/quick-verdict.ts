@@ -12,6 +12,10 @@ import type { SeniorStatus } from './tax-slabs'
 import { getSalaryFacts } from './salary-facts'
 import { computeRegimeCore, cap80DSelf, cap80DParents, CAP_80C, CAP_24B, CAP_NPS, CAP_80TTA, CAP_80TTB } from './verdict-engine'
 
+export type ExactnessKey = 'salary' | 'slip' | 'rent' | '80c' | '80d' | 'nps' | 'ais'
+// One weighted exactness signal. `adds` is what's still to earn, so the percentages always reach 100.
+export interface ExactnessItem { key: ExactnessKey; label: string; done: boolean; adds: number }
+
 export interface QuickVerdict {
   hasSalary: boolean
   recommendation: 'new' | 'old'
@@ -22,8 +26,8 @@ export interface QuickVerdict {
   oldTypical: number
   // True once any deduction or rent is on file, including a rent too low to earn an HRA exemption.
   hasDeductions: boolean
-  // 0–100 confidence the answer is exact, plus the single biggest thing that would raise it.
-  exactness: { pct: number; nextStep: string | null }
+  // 0–100 confidence the answer is exact, plus the signals behind it.
+  exactness: { pct: number; items: ExactnessItem[] }
 }
 
 const n = (v: unknown) => Math.max(0, Number(v) || 0)
@@ -34,7 +38,7 @@ function readJSON(key: string): any {
 
 const EMPTY: QuickVerdict = {
   hasSalary: false, recommendation: 'new', newTotal: 0, oldTotal: 0, savings: 0,
-  oldTypical: 0, hasDeductions: false, exactness: { pct: 0, nextStep: 'Upload a salary slip' },
+  oldTypical: 0, hasDeductions: false, exactness: { pct: 0, items: [] },
 }
 
 // Typical deductions almost any salaried investor can claim — used only for the first-look preview
@@ -93,19 +97,24 @@ export function computeQuickVerdict(): QuickVerdict {
   const hasDeductions = totalDeductions > 0 || totalExemptions > 0 || n(hra.rentPaid) > 0
 
   // Exactness — weighted signals, summing to 100 when everything is supplied.
-  let pct = 0
-  const missing: string[] = []
-  // A synthetic /try summary is an estimate, not a real slip — it earns no confidence and still asks
-  // for the real slip, so the bar can't present invented salary as "exact".
-  if (facts.source === 'summary' && !facts.synthetic) pct += 30
-  else if (facts.source === 'slip-average') { pct += 15; missing.push('Add the rest of your salary slips') }
-  else missing.push('Add a salary slip')
-  if (n(hra.rentPaid) > 0 || hra.noRent) pct += 20; else missing.push('Add your rent (HRA)')
-  if (sec80C > 0) pct += 20; else missing.push('Add 80C investments')
-  if (sec80D > 0) pct += 10; else missing.push('Add health insurance (80D)')
-  if (nps > 0) pct += 5
-  if (ais && Number(ais.totalTaxCredit) > 0) pct += 15; else missing.push('Add AIS / 26AS for exact TDS')
-  pct = Math.min(100, pct)
+  const signal = (key: ExactnessKey, label: string, adds: number): ExactnessItem => ({ key, label, done: adds === 0, adds })
+  const item = (key: ExactnessKey, done: boolean, doneLabel: string, todoLabel: string, weight: number) =>
+    signal(key, done ? doneLabel : todoLabel, done ? 0 : weight)
+  const items = [
+    // A synthetic /try summary is an estimate, not a real slip — it earns no confidence and still asks
+    // for the real slip, so the bar can't present invented salary as "exact". The 0% item just shows
+    // the salary was counted.
+    ...(facts.synthetic ? [signal('salary', 'Salary (estimate)', 0)] : []),
+    facts.source === 'slip-average'
+      ? signal('slip', 'Add the rest of your slips', 15)
+      : item('slip', facts.source === 'summary' && !facts.synthetic, 'Salary slip', 'Add salary slip', 30),
+    item('rent', n(hra.rentPaid) > 0 || !!hra.noRent, 'Rent', 'Add rent', 20),
+    item('80c', sec80C > 0, '80C', 'Add 80C', 20),
+    item('80d', sec80D > 0, '80D', 'Add 80D', 10),
+    item('nps', nps > 0, 'NPS', 'Add NPS', 5),
+    item('ais', !!ais && Number(ais.totalTaxCredit) > 0, 'AIS / 26AS', 'Add AIS / 26AS', 15),
+  ]
+  const pct = 100 - items.reduce((t, i) => t + i.adds, 0)
 
-  return { hasSalary: true, recommendation, newTotal, oldTotal, savings, oldTypical, hasDeductions, exactness: { pct, nextStep: missing[0] || null } }
+  return { hasSalary: true, recommendation, newTotal, oldTotal, savings, oldTypical, hasDeductions, exactness: { pct, items } }
 }

@@ -5,17 +5,17 @@
 // without threading into each page's own save logic. Skips the state update when nothing changed.
 
 import { useEffect, useRef, useState } from 'react'
-import VerdictBar from './VerdictBar'
+import VerdictBar, { type VerdictBarProps } from './VerdictBar'
 import { computeQuickVerdict, type QuickVerdict } from '@/lib/quick-verdict'
 
-export default function VerdictBarLive() {
+export default function VerdictBarLive({ itemActions }: Pick<VerdictBarProps, 'itemActions'>) {
   const [v, setV] = useState<QuickVerdict | null>(null)
   const last = useRef('')
 
   useEffect(() => {
     const tick = () => {
       const next = computeQuickVerdict()
-      const sig = `${next.hasSalary}|${next.recommendation}|${next.savings}|${next.exactness.pct}|${next.exactness.nextStep}`
+      const sig = `${next.hasSalary}|${next.recommendation}|${next.savings}|${next.exactness.pct}|${next.exactness.items.map(i => i.label).join()}`
       if (sig !== last.current) { last.current = sig; setV(next) }
     }
     tick()
@@ -24,5 +24,5 @@ export default function VerdictBarLive() {
     return () => { clearInterval(id); window.removeEventListener('focus', tick) }
   }, [])
 
-  return <VerdictBar verdict={v} />
+  return <VerdictBar verdict={v} itemActions={itemActions} />
 }

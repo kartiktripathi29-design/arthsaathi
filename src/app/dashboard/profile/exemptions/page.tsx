@@ -5,6 +5,7 @@ import { computeAnnualHraExemption, type HraMonth } from '@/lib/salary-analytics
 import { getSalaryFacts } from '@/lib/salary-facts'
 import { GuideStrip } from '@/components/GuideStrip'
 import VerdictBarLive from '@/components/VerdictBarLive'
+import { focusField } from '@/components/VerdictBar'
 
 import { tokens as T } from '@/lib/tokens'
 
@@ -325,7 +326,13 @@ export default function ExemptionsPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '20px 0' }}>
-      <VerdictBarLive />
+      <VerdictBarLive itemActions={{
+        rent: () => {
+          // Open the panel, then focus the field once it has rendered.
+          setExpanded(prev => prev.includes('hra') ? prev : [...prev, 'hra'])
+          requestAnimationFrame(() => focusField('exm-rent'))
+        },
+      }} />
       <h1 style={{ fontSize: 22, fontWeight: 700, color: C.fg, margin: '0 0 8px' }}>Allowances</h1>
       <p style={{ fontSize: 13, color: C.muted, margin: '0 0 24px' }}>Income that is completely tax-free — <span style={{ whiteSpace: 'nowrap' }}>Old Regime only · Section 10</span></p>
 
@@ -374,7 +381,7 @@ export default function ExemptionsPage() {
               <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 5, fontWeight: 500 }}>Monthly rent paid</label>
               <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden' }}>
                 <span style={{ padding: '8px 10px', background: C.wl, fontSize: 11, fontWeight: 600, color: C.fg }}>₹</span>
-                <input type="text" inputMode="numeric"
+                <input id="exm-rent" type="text" inputMode="numeric"
                   value={s.rentPaid > 0 ? s.rentPaid : ''}
                   onChange={(e) => update('rentPaid', parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0)}
                   placeholder="0"

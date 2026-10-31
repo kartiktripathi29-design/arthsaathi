@@ -149,6 +149,7 @@ export default function TryPage() {
             </div>
             <ProvisionalVerdict
               version={version}
+              uploadHref={null}
               heading="Your answer — no signup needed"
               subheading="Old vs new regime on your salary. Refine it below; sign up only when you want to save it."
               ctaHref="/signup"
