@@ -19,7 +19,7 @@ import { MIN_PLAUSIBLE_CTC, monthlyInHandFromGross, monthlyStructure, toMonthlyG
 const SALARY_TYPES: { type: SalaryInputType; label: string; placeholder: string; source: string }[] = [
   { type: 'gross', label: 'Gross monthly', placeholder: 'e.g. 1,20,000', source: '' },
   { type: 'ctc', label: 'Annual CTC', placeholder: 'e.g. 12,00,000', source: 'CTC' },
-  { type: 'inhand', label: 'Monthly in‑hand', placeholder: 'e.g. 75,000', source: 'in-hand pay' },
+  { type: 'inhand', label: 'Monthly in‑hand', placeholder: 'e.g. 75,000', source: 'in‑hand pay' },
 ]
 
 const num =(s: string) => Math.max(0, parseFloat((s || '').replace(/,/g, '')) || 0)
