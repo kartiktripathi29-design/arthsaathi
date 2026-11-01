@@ -34,9 +34,23 @@ export interface PasswordOptions {
   placeholder?: string
 }
 
+export interface ChoiceOption<V extends string> {
+  value: V
+  label: string
+  primary?: boolean
+}
+
+export interface ChoiceOptions<V extends string> {
+  title?: string
+  message: string
+  options: ChoiceOption<V>[]
+  fallback: V // what a confirmed native dialog means if the host isn't mounted
+}
+
 type DialogRequest =
   | { kind: 'confirm'; opts: ConfirmOptions; resolve: (v: boolean) => void }
   | { kind: 'password'; opts: PasswordOptions; resolve: (v: string | null) => void }
+  | { kind: 'choice'; opts: ChoiceOptions<string>; resolve: (v: string | null) => void }
 
 // Bridge between the imperative API and the mounted host.
 let emit: ((req: DialogRequest) => void) | null = null
@@ -57,6 +71,14 @@ export function passwordDialog(opts: PasswordOptions | string = {}): Promise<str
   return new Promise((resolve) => {
     if (!emit) { resolve(typeof window !== 'undefined' ? window.prompt(o.message || '') : null); return }
     emit({ kind: 'password', opts: o, resolve })
+  })
+}
+
+/** Offer several actions. Resolves the chosen value, or null if dismissed. */
+export function choiceDialog<V extends string>(opts: ChoiceOptions<V>): Promise<V | null> {
+  return new Promise((resolve) => {
+    if (!emit) { resolve(typeof window !== 'undefined' && window.confirm(opts.message) ? opts.fallback : null); return }
+    emit({ kind: 'choice', opts, resolve: resolve as (v: string | null) => void })
   })
 }
 
@@ -97,7 +119,7 @@ export function DialogHost() {
   }
 
   const isConfirm = req.kind === 'confirm'
-  const title = req.opts.title || (isConfirm ? 'Please confirm' : 'Enter password')
+  const title = req.opts.title || (req.kind === 'password' ? 'Enter password' : 'Please confirm')
   const danger = isConfirm && (req.opts as ConfirmOptions).danger
 
   return (
@@ -124,6 +146,21 @@ export function DialogHost() {
           />
         )}
 
+        {req.kind === 'choice' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {req.opts.options.map((o) => (
+              <button
+                key={o.value}
+                autoFocus={o.primary}
+                onClick={() => finish(o.value)}
+                style={{ ...btnBase, flex: 'none', background: o.primary ? C.fg : C.wl, color: o.primary ? T.onTeal : C.fg }}
+              >
+                {o.label}
+              </button>
+            ))}
+            <button onClick={cancel} style={{ ...btnBase, flex: 'none', background: 'transparent', color: C.muted }}>Cancel</button>
+          </div>
+        ) : (
         <div style={{ display: 'flex', gap: 10 }}>
           <button
             onClick={cancel}
@@ -139,6 +176,7 @@ export function DialogHost() {
             {req.opts.confirmLabel || (isConfirm ? 'Confirm' : 'Submit')}
           </button>
         </div>
+        )}
       </div>
     </div>
   )

@@ -7,6 +7,7 @@ import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { useUser } from '@/lib/useUser'
 import { tokens as T } from '@/lib/tokens'
 import Logo from '@/components/Logo'
+import { confirmSignOut } from '@/components/signOutPrompt'
 import { ThemeToggle, useThemedBase } from '@/components/ThemeToggle'
 
 const SUPABASE_CONFIGURED = !!process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -25,6 +26,7 @@ function Sidebar() {
   // Clear the real Supabase session (when configured) before wiping local state, otherwise the
   // auth cookie lingers and Proxy keeps treating the user as signed in.
   const handleSignOut = async () => {
+    if (!(await confirmSignOut())) return
     try {
       if (SUPABASE_CONFIGURED) await createSupabaseBrowserClient().auth.signOut()
     } catch {
@@ -223,6 +225,7 @@ function TopBar({ theme, setTheme, resolved }: { theme: ThemeMode; setTheme: (t:
 
   // Same teardown as the sidebar's sign-out: clear the Supabase session before wiping local state.
   const handleSignOut = async () => {
+    if (!(await confirmSignOut())) return
     try {
       if (SUPABASE_CONFIGURED) await createSupabaseBrowserClient().auth.signOut()
     } catch {

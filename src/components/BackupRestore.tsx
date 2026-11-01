@@ -9,7 +9,8 @@
 import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { confirmDialog } from '@/components/Dialog'
-import { collectAppData, applyAppData, makeBackupEnvelope, readBackupEnvelope } from '@/lib/backupSync'
+import { applyAppData, readBackupEnvelope } from '@/lib/backupSync'
+import { downloadBackupFile } from '@/lib/backupDownload'
 import { useUser } from '@/lib/useUser'
 
 import { tokens as T } from '@/lib/tokens'
@@ -32,11 +33,6 @@ function timeAgo(iso: string): string {
   return `${d} day${d > 1 ? 's' : ''} ago`
 }
 
-function collectBackup(): { keys: number; json: string } {
-  const data = collectAppData()
-  return { keys: Object.keys(data).length, json: JSON.stringify(makeBackupEnvelope(data), null, 2) }
-}
-
 export default function BackupRestore() {
   const fileRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
@@ -53,17 +49,8 @@ export default function BackupRestore() {
   }, [])
 
   const download = () => {
-    const { keys, json } = collectBackup()
+    const keys = downloadBackupFile()
     if (keys === 0) { toast.error('No saved data to back up yet.'); return }
-    const blob = new Blob([json], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `arthvo-backup-${new Date().toISOString().slice(0, 10)}.json`
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(url)
     toast.success(`Exported ${keys} item${keys > 1 ? 's' : ''}.`)
   }
 
