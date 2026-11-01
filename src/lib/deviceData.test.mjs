@@ -14,7 +14,7 @@ class MemStorage {
 globalThis.window = globalThis
 globalThis.localStorage = new MemStorage()
 
-const { reconcileDeviceOwner, clearTaxData } = await import('./deviceData.ts')
+const { reconcileDeviceOwner, clearTaxData, clearDeviceOnLogout } = await import('./deviceData.ts')
 
 const OWNER = 'arthvo_data_owner'
 // Seed a realistic "device already has someone's tax data" state.
@@ -70,4 +70,18 @@ test('PRESERVE — UI prefs and non-app keys survive a clear', () => {
   assert.equal(localStorage.getItem('av_theme'), 'dark', 'theme pref preserved')
   assert.equal(localStorage.getItem('supabase.auth.token'), 'sess', 'non-app key untouched')
   assert.equal(localStorage.getItem('av_salary_timeline'), null, 'financial data cleared')
+})
+
+test('LOGOUT — clears all app data, the owner tag and the sync clock, but keeps UI prefs', () => {
+  localStorage.setItem('av_salary_timeline', '[1]')
+  localStorage.setItem('av_some_future_key', '1')
+  localStorage.setItem('as_user', '{}')
+  localStorage.setItem('av_theme', 'dark')
+  localStorage.setItem(OWNER, 'a@x.com')
+  localStorage.setItem('arthvo_cloud_synced_at', '2026-01-01')
+  clearDeviceOnLogout()
+  for (const k of ['av_salary_timeline', 'av_some_future_key', 'as_user', OWNER, 'arthvo_cloud_synced_at']) {
+    assert.equal(localStorage.getItem(k), null, k)
+  }
+  assert.equal(localStorage.getItem('av_theme'), 'dark')
 })

@@ -76,7 +76,7 @@ export default function PrivacyPage() {
             title: '5. Where your data is stored',
             content: 'In your browser:',
             list: [
-              'Your salary details, tax inputs, AIS data and the identity details used to check that new slips are yours, including your full PAN. This is not encrypted. It stays there after you sign out, so anyone using the same browser could see it. To remove it, clear this site\'s data in your browser settings.',
+              'Your salary details, tax inputs, AIS data and the identity details used to check that new slips are yours, including your full PAN. This is not encrypted. Until you sign out, anyone using the same browser could see it. Signing out removes it from this browser, and it can\'t be restored unless you have a backup.',
               'Backup files you download contain the same data and are not encrypted.',
             ],
           },
@@ -95,7 +95,7 @@ export default function PrivacyPage() {
           },
           {
             title: '6. Deleting or changing your data',
-            content: `There is no "Delete my data" option in ArthVo yet. Signing out does not delete anything from our servers, and clears only some of what is in your browser. To ask us to access, correct or delete what we hold about you, ${CONTACT}. We handle these requests by hand.`,
+            content: `There is no "Delete my data" option in ArthVo yet. Signing out clears your ArthVo data from this browser, but does not delete anything from our servers. To ask us to access, correct or delete what we hold about you, ${CONTACT}. We handle these requests by hand.`,
           },
           {
             title: '7. Your rights under the DPDP Act 2023',

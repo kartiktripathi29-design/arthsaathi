@@ -1,5 +1,6 @@
 'use client'
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { clearDeviceOnLogout } from '@/lib/deviceData'
 import type { ParsedSalaryData, TaxComparison, FinancialGoal, InvestmentPlan } from '@/types'
 
 export interface AppUser {
@@ -109,7 +110,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setUserState(null)
     setSalaryState(null); setAisDataState(null); setOtherIncomeState(null)
     setTaxComparisonState(null); setInvestPlanState(null); setGoalsState([])
-    ;['as_user','as_salary','as_ais','as_other_income','as_tax','as_invest','as_goals'].forEach(k => localStorage.removeItem(k))
+    clearDeviceOnLogout()
   }, [])
 
   return (

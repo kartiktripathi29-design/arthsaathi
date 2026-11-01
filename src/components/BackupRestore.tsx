@@ -129,8 +129,8 @@ export default function BackupRestore() {
       <p style={{ fontSize: 13, fontWeight: 700, color: C.fg, margin: '0 0 4px' }}>Back up your data</p>
       <p style={{ fontSize: 11.5, color: C.muted, margin: '0 0 12px', lineHeight: 1.5 }}>
         {AUTO_BACKUP
-          ? 'Sign in to back up your data to your account automatically. Until then it’s saved in this browser only — download a copy to keep it safe or move it to another device.'
-          : 'Your salary, exemptions, deductions and tax inputs are saved in this browser and aren’t backed up automatically. Download a backup to keep them safe or move them to another device — clearing your browser or switching devices otherwise loses them. Figures read from slips you upload while signed in are also saved to your account, but can’t be restored from there.'}
+          ? 'Sign in to back up your data to your account automatically. Until then it’s saved in this browser only and is cleared when you sign out — download a copy to keep it safe or move it to another device.'
+          : 'Your salary, exemptions, deductions and tax inputs are saved in this browser and aren’t backed up automatically. Download a backup to keep them safe or move them to another device — signing out, clearing your browser or switching devices otherwise loses them. Figures read from slips you upload while signed in are also saved to your account, but can’t be restored from there.'}
       </p>
       <ManualButtons primary={true} />
     </div>

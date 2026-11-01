@@ -31,6 +31,18 @@ export function clearTaxData(): void {
 }
 
 /**
+ * Sign-out: nothing personal stays in this browser. Also drops the owner tag (it holds their email or
+ * phone) and the sync clock. With an old clock, the next sign-in would treat the empty browser as
+ * up to date and overwrite the cloud backup with nothing.
+ */
+export function clearDeviceOnLogout(): void {
+  if (typeof window === 'undefined') return
+  clearTaxData()
+  localStorage.removeItem(OWNER_KEY)
+  localStorage.removeItem('arthvo_cloud_synced_at')
+}
+
+/**
  * Reconcile this device's local data with the account that just authenticated.
  * @param identity stable per-account id — we use the account email
  * @param opts.isSignup true on a fresh signup (always start empty), false on login
