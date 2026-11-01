@@ -12,7 +12,6 @@ export async function POST(req: NextRequest) {
 
   try {
     const text = await req.text();
-    console.log('[CAS SAVE] Raw body:', text?.slice(0, 200));
     if (!text || text.trim() === '') {
       return NextResponse.json({ error: 'Empty request body' }, { status: 400 });
     }

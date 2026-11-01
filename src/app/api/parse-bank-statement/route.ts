@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
         if (localResult && localResult.transactions.length >= 2) {
           log(`local PDF parse done — ${localResult.transactions.length} txns`)
           const v = localResult.validation
-          log(`validation: ${v.matches ? 'MATCHES ✓' : 'MISMATCH ✗ (' + v.computedClosing + ' vs ' + v.actualClosing + ')'}`)
+          log(`validation: ${v.matches ? 'MATCHES' : 'MISMATCH'}`)
 
           // Run pipeline on PDF result too
           try {
@@ -435,6 +435,6 @@ async function persistStatement(
       bank: localResult.bank || 'unknown',
     })
   } catch (e) {
-    console.error('[persistStatement]', e)
+    console.error('[persistStatement]', (e as Error)?.name)
   }
 }

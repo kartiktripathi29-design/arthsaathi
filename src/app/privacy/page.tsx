@@ -85,9 +85,9 @@ export default function PrivacyPage() {
             content: null,
             list: [
               'Parsed slips — if you upload while signed in, we save everything read from the slip, including employer, pay period, net pay and, where shown, your name, full PAN and last 4 digits of Aadhaar. We do not encrypt these records ourselves.',
-              'Activity records — linked to your account: for example, that a slip was read, how many, and its net pay. We do not encrypt these ourselves.',
+              'Activity records — linked to your account: for example, that a slip was read and how many. We do not encrypt these ourselves.',
               'Account and reminder details — as listed in section 2.',
-              'Server logs — our logs record the gross pay, net pay and month read from each slip page, without your name. Error logs can include error details.',
+              'Server logs — our logs record that a slip page was read, without its figures. Error logs can include error details.',
               'Cloud backup — not switched on today. When it is on, a copy of your browser data, including your full PAN, is saved to your account, encrypted. We hold the key, so we are able to decrypt it.',
               'Bank statements — this feature is off today. Statements read while it was on may still be stored, including their transaction data.',
               'We do not delete any of this automatically. It stays until it is removed by hand.',

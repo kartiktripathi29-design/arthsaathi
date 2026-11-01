@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
       )
       settled.forEach((r, idx) => {
         if (r.status === 'fulfilled') {
-          console.log(`[parse-salary] Page ${idx + 1} parsed: gross=${r.value?.grossSalary || 0}, net=${r.value?.netSalary || 0}, month=${r.value?.month || '?'}`)
+          console.log(`[parse-salary] Page ${idx + 1} parsed`)
           parsedSlips.push(r.value)
         } else {
           console.error(`[parse-salary] Page ${idx + 1} REJECTED:`, r.reason?.message || r.reason)
@@ -160,7 +160,6 @@ export async function POST(req: NextRequest) {
       console.log('[parse-salary] All per-page parses empty. Falling back to whole-PDF parse.')
       try {
         const wholeParsed = await parseSalaryFromBase64(await normalizePdfBase64(base64Data), 'application/pdf')
-        console.log(`[parse-salary] Fallback whole-PDF parse: gross=${wholeParsed?.grossSalary || 0}, net=${wholeParsed?.netSalary || 0}`)
         if (wholeParsed && (wholeParsed.grossSalary || wholeParsed.netSalary)) {
           validSlips = [wholeParsed]
           console.log('[parse-salary] Fallback succeeded — using whole-PDF parse.')
@@ -242,10 +241,10 @@ export async function POST(req: NextRequest) {
         }
         await logActivity(user.id, 'SALARY_PARSE_SUCCESS', null, {
           count: validSlips.length,
-          netPay: validSlips[0]?.netSalary || (validSlips[0] as any)?.netPay,
         })
       } catch (e: any) {
-        console.error("[parse-salary] DB WRITE ERROR:", e); console.error("[parse-salary] Stack:", e?.stack)
+        // Log only the error type and code: Prisma messages can quote the slip being written.
+        console.error("[parse-salary] DB WRITE ERROR:", e?.name, e?.code)
       }
     })
 
