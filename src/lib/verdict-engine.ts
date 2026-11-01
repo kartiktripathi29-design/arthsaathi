@@ -99,25 +99,31 @@ export type RegimeOutlook =
   | { kind: 'old-could-win'; breakEven: number }
   | { kind: 'old-wins'; margin: number }
   | { kind: 'needs-more'; more: number }
+  | { kind: 'old-unlikely' }
+
+// The most someone could realistically claim: the 80C, 80D, NPS and home-loan caps, plus their HRA.
+export function realisticMaxDeductions(senior: SeniorStatus, parentsSenior: boolean, possibleHra: number): number {
+  return CAP_80C + cap80DTotal(senior, parentsSenior) + CAP_NPS + CAP_24B + possibleHra
+}
 
 export interface RegimeOutlookInput extends Omit<RegimeCoreInput, 'totalExemptions' | 'totalDeductions'> {
   claimed: number // deductions and exemptions counted so far
   hasEntered: boolean // whether anything has been entered, even if it counts for ₹0
   oldTypical: number // old-regime tax with typical deductions
+  realisticMax: number // see realisticMaxDeductions
 }
 
 // Which message the regime cards should carry, and the figure that goes in it.
-export function regimeOutlook({ claimed, hasEntered, oldTypical, ...core }: RegimeOutlookInput): RegimeOutlook {
+export function regimeOutlook({ claimed, hasEntered, oldTypical, realisticMax, ...core }: RegimeOutlookInput): RegimeOutlook {
   const breakEven = breakEvenDeductions(core)
   if (breakEven === null) return { kind: 'new-tax-zero' }
   const { newTotal } = computeRegimeCore({ ...core, totalExemptions: 0, totalDeductions: 0 })
+  const outOfReach = breakEven > realisticMax
   if (!hasEntered) {
-    return newTotal < oldTypical
-      ? { kind: 'new-wins-typical', margin: oldTypical - newTotal }
-      : { kind: 'old-could-win', breakEven }
+    if (newTotal < oldTypical) return { kind: 'new-wins-typical', margin: oldTypical - newTotal }
+    return outOfReach ? { kind: 'old-unlikely' } : { kind: 'old-could-win', breakEven }
   }
   const { oldTotal } = computeRegimeCore({ ...core, totalExemptions: 0, totalDeductions: claimed })
-  return oldTotal < newTotal
-    ? { kind: 'old-wins', margin: newTotal - oldTotal }
-    : { kind: 'needs-more', more: breakEven - claimed }
+  if (oldTotal < newTotal) return { kind: 'old-wins', margin: newTotal - oldTotal }
+  return outOfReach ? { kind: 'old-unlikely' } : { kind: 'needs-more', more: breakEven - claimed }
 }

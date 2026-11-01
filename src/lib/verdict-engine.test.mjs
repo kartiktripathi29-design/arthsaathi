@@ -1,11 +1,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { breakEvenDeductions, computeRegimeCore, regimeOutlook } from './verdict-engine.ts'
+import { breakEvenDeductions, computeRegimeCore, realisticMaxDeductions, regimeOutlook } from './verdict-engine.ts'
 
 const TYPICAL = 225000
 const totals = (annualGross, totalDeductions, seniorStatus = 'normal') =>
   computeRegimeCore({ annualGross, totalExemptions: 0, totalDeductions, seniorStatus })
-const outlook = (annualGross, claimed, hasEntered, seniorStatus = 'normal') => regimeOutlook({
+const outlook = (annualGross, claimed, hasEntered, seniorStatus = 'normal', realisticMax = Infinity) => regimeOutlook({
+  realisticMax,
   annualGross, seniorStatus, claimed, hasEntered, oldTypical: totals(annualGross, TYPICAL, seniorStatus).oldTotal,
 })
 
@@ -35,7 +36,7 @@ test('old regime could win when typical deductions already beat the new regime',
   const gross = 2400000
   const { newTotal } = totals(gross, 0)
   assert.deepEqual(
-    regimeOutlook({ annualGross: gross, claimed: 0, hasEntered: false, oldTypical: newTotal - 1 }),
+    regimeOutlook({ annualGross: gross, claimed: 0, hasEntered: false, oldTypical: newTotal - 1, realisticMax: Infinity }),
     { kind: 'old-could-win', breakEven: breakEvenDeductions({ annualGross: gross }) },
   )
 })
@@ -55,4 +56,29 @@ test('other income moves the break-even', () => {
   const salaryOnly = breakEvenDeductions({ annualGross: 1400000 })
   const withOther = breakEvenDeductions({ annualGross: 1400000, slabOtherIncome: 600000 })
   assert.notEqual(salaryOnly, withOther)
+})
+
+test('realistic maximum adds the caps and HRA, and follows senior 80D limits', () => {
+  assert.equal(realisticMaxDeductions('normal', false, 0), 450000)
+  assert.equal(realisticMaxDeductions('normal', false, 300000), 750000)
+  assert.equal(realisticMaxDeductions('senior', true, 0), 500000)
+})
+
+test('says old is unlikely instead of a figure when break-even is out of reach', () => {
+  const max = realisticMaxDeductions('normal', false, 0)
+  assert.deepEqual(outlook(8995248, 200000, true, 'normal', max), { kind: 'old-unlikely' })
+})
+
+test('keeps the figure when break-even is within reach', () => {
+  const x = breakEvenDeductions({ annualGross: 8995248 })
+  assert.deepEqual(outlook(8995248, 200000, true, 'normal', x), { kind: 'needs-more', more: x - 200000 })
+})
+
+test('first-look "old could win" also becomes unlikely when out of reach', () => {
+  const gross = 2400000
+  const { newTotal } = totals(gross, 0)
+  assert.deepEqual(
+    regimeOutlook({ annualGross: gross, claimed: 0, hasEntered: false, oldTypical: newTotal - 1, realisticMax: 100000 }),
+    { kind: 'old-unlikely' },
+  )
 })

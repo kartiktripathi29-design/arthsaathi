@@ -10,7 +10,8 @@
 
 import type { SeniorStatus } from './tax-slabs'
 import { getSalaryFacts } from './salary-facts'
-import { computeRegimeCore, regimeOutlook, cap80DSelf, cap80DParents, CAP_80C, CAP_24B, CAP_NPS, CAP_80TTA, CAP_80TTB, type RegimeOutlook } from './verdict-engine'
+import { BASIC_SHARE, HRA_SHARE } from './salary-input'
+import { computeRegimeCore, regimeOutlook, realisticMaxDeductions, cap80DSelf, cap80DParents, CAP_80C, CAP_24B, CAP_NPS, CAP_80TTA, CAP_80TTB, type RegimeOutlook } from './verdict-engine'
 
 export type ExactnessKey = 'salary' | 'slip' | 'rent' | '80c' | '80d' | 'nps' | 'ais'
 // One weighted exactness signal. `adds` is what's still to earn, so the percentages always reach 100.
@@ -98,8 +99,19 @@ export function computeQuickVerdict(): QuickVerdict {
   const { oldTotal: oldTypical } = computeRegimeCore({
     annualGross: gross, slabOtherIncome, totalExemptions: 0, totalDeductions: TYPICAL_DEDUCTIONS, seniorStatus: senior,
   })
+  // HRA they could claim: what their rent earns once it's entered, ₹0 if they pay none, otherwise the
+  // most the rules allow on their pay, since we don't yet know their rent.
+  const metroShare = hra.isMetro === false ? 0.4 : 0.5
+  const hraMonths = facts.hraBasis.length ? facts.hraBasis : Array.from({ length: 12 }, () => ({
+    basic: (gross / 12) * BASIC_SHARE, hra: (gross / 12) * HRA_SHARE,
+  }))
+  const possibleHra = n(hra.rentPaid) > 0 ? hraExempt
+    : hra.noRent ? 0
+    : hraMonths.reduce((t, m) => t + Math.min(n(m.hra), n(m.basic) * metroShare), 0)
+
   const outlook = regimeOutlook({
     annualGross: gross, slabOtherIncome, seniorStatus: senior, oldTypical,
+    realisticMax: realisticMaxDeductions(senior, parentsSenior, possibleHra),
     claimed: totalDeductions + totalExemptions,
     // A rent too low to earn an HRA exemption still counts as having entered something.
     hasEntered: totalDeductions > 0 || totalExemptions > 0 || n(hra.rentPaid) > 0,

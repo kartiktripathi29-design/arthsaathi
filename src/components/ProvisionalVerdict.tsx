@@ -48,6 +48,7 @@ function outlookText(o: RegimeOutlook): string {
     case 'old-could-win': return `The old regime could win if your deductions exceed ${fmt(o.breakEven)}. Answer the questions below to check.`
     case 'old-wins': return `With what you've entered, the old regime wins by ${fmt(o.margin)}.`
     case 'needs-more': return `You'd need ${fmt(o.more)} more in deductions for the old regime to win.`
+    case 'old-unlikely': return 'The old regime is unlikely to win for you, even with maximum deductions.'
   }
 }
 
