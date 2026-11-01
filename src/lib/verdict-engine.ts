@@ -6,7 +6,7 @@
 // tax-slabs.ts slab math. The old FY 2024-25 tax-engine.ts it used to warn against has been retired
 // and its regime-computation folded into tax-slabs.ts.
 
-import { slabBreakdown, type SeniorStatus } from './tax-slabs'
+import { slabBreakdown, type SeniorStatus } from './tax-slabs.ts'
 
 // Standard deduction by regime.
 export const STD_DEDUCTION = { new: 75000, old: 50000 } as const
@@ -69,4 +69,55 @@ export function computeRegimeCore(i: RegimeCoreInput): RegimeCore {
     recommendation: newTotal <= oldTotal ? 'new' : 'old',
     savings: Math.abs(newTotal - oldTotal),
   }
+}
+
+// The smallest whole-rupee total of deductions and exemptions at which the old regime costs less than
+// the new one. Null when the new regime's tax is ₹0, since the old regime can't beat that. This is the
+// arithmetic only: the amount may be more than the statutory caps let someone actually claim.
+export function breakEvenDeductions(i: Omit<RegimeCoreInput, 'totalExemptions' | 'totalDeductions'>): number | null {
+  const oldBeatsNew = (deductions: number) => {
+    const { oldTotal, newTotal } = computeRegimeCore({ ...i, totalExemptions: 0, totalDeductions: deductions })
+    return oldTotal < newTotal
+  }
+  const { newTotal, oldBreak } = computeRegimeCore({ ...i, totalExemptions: 0, totalDeductions: 0 })
+  if (newTotal - (i.specialTaxTotal ?? 0) <= 0) return null
+  if (oldBreak.total < newTotal - (i.specialTaxTotal ?? 0)) return 0
+  // Old-regime tax only falls as deductions rise, so a binary search finds the first winning rupee.
+  let lo = 0
+  let hi = i.annualGross + (i.slabOtherIncome ?? 0)
+  while (hi - lo > 1) {
+    const mid = Math.floor((lo + hi) / 2)
+    if (oldBeatsNew(mid)) hi = mid
+    else lo = mid
+  }
+  return hi
+}
+
+export type RegimeOutlook =
+  | { kind: 'new-tax-zero' }
+  | { kind: 'new-wins-typical'; margin: number }
+  | { kind: 'old-could-win'; breakEven: number }
+  | { kind: 'old-wins'; margin: number }
+  | { kind: 'needs-more'; more: number }
+
+export interface RegimeOutlookInput extends Omit<RegimeCoreInput, 'totalExemptions' | 'totalDeductions'> {
+  claimed: number // deductions and exemptions counted so far
+  hasEntered: boolean // whether anything has been entered, even if it counts for ₹0
+  oldTypical: number // old-regime tax with typical deductions
+}
+
+// Which message the regime cards should carry, and the figure that goes in it.
+export function regimeOutlook({ claimed, hasEntered, oldTypical, ...core }: RegimeOutlookInput): RegimeOutlook {
+  const breakEven = breakEvenDeductions(core)
+  if (breakEven === null) return { kind: 'new-tax-zero' }
+  const { newTotal } = computeRegimeCore({ ...core, totalExemptions: 0, totalDeductions: 0 })
+  if (!hasEntered) {
+    return newTotal < oldTypical
+      ? { kind: 'new-wins-typical', margin: oldTypical - newTotal }
+      : { kind: 'old-could-win', breakEven }
+  }
+  const { oldTotal } = computeRegimeCore({ ...core, totalExemptions: 0, totalDeductions: claimed })
+  return oldTotal < newTotal
+    ? { kind: 'old-wins', margin: newTotal - oldTotal }
+    : { kind: 'needs-more', more: breakEven - claimed }
 }

@@ -10,7 +10,7 @@
 
 import type { SeniorStatus } from './tax-slabs'
 import { getSalaryFacts } from './salary-facts'
-import { computeRegimeCore, cap80DSelf, cap80DParents, CAP_80C, CAP_24B, CAP_NPS, CAP_80TTA, CAP_80TTB } from './verdict-engine'
+import { computeRegimeCore, regimeOutlook, cap80DSelf, cap80DParents, CAP_80C, CAP_24B, CAP_NPS, CAP_80TTA, CAP_80TTB, type RegimeOutlook } from './verdict-engine'
 
 export type ExactnessKey = 'salary' | 'slip' | 'rent' | '80c' | '80d' | 'nps' | 'ais'
 // One weighted exactness signal. `adds` is what's still to earn, so the percentages always reach 100.
@@ -22,10 +22,8 @@ export interface QuickVerdict {
   newTotal: number
   oldTotal: number
   savings: number
-  // First-look old-regime bill assuming typical deductions — same framing as the landing card.
-  oldTypical: number
-  // True once any deduction or rent is on file, including a rent too low to earn an HRA exemption.
-  hasDeductions: boolean
+  // What it would take for the old regime to win, for the line under the regime cards.
+  outlook: RegimeOutlook
   // 0–100 confidence the answer is exact, plus the signals behind it.
   exactness: { pct: number; items: ExactnessItem[] }
 }
@@ -38,7 +36,7 @@ function readJSON(key: string): any {
 
 const EMPTY: QuickVerdict = {
   hasSalary: false, recommendation: 'new', newTotal: 0, oldTotal: 0, savings: 0,
-  oldTypical: 0, hasDeductions: false, exactness: { pct: 0, items: [] },
+  outlook: { kind: 'new-tax-zero' }, exactness: { pct: 0, items: [] },
 }
 
 // Typical deductions almost any salaried investor can claim — used only for the first-look preview
@@ -100,7 +98,12 @@ export function computeQuickVerdict(): QuickVerdict {
   const { oldTotal: oldTypical } = computeRegimeCore({
     annualGross: gross, slabOtherIncome, totalExemptions: 0, totalDeductions: TYPICAL_DEDUCTIONS, seniorStatus: senior,
   })
-  const hasDeductions = totalDeductions > 0 || totalExemptions > 0 || n(hra.rentPaid) > 0
+  const outlook = regimeOutlook({
+    annualGross: gross, slabOtherIncome, seniorStatus: senior, oldTypical,
+    claimed: totalDeductions + totalExemptions,
+    // A rent too low to earn an HRA exemption still counts as having entered something.
+    hasEntered: totalDeductions > 0 || totalExemptions > 0 || n(hra.rentPaid) > 0,
+  })
 
   // Exactness — weighted signals, summing to 100 when everything is supplied.
   const signal = (key: ExactnessKey, label: string, adds: number): ExactnessItem => ({ key, label, done: adds === 0, adds })
@@ -122,5 +125,5 @@ export function computeQuickVerdict(): QuickVerdict {
   ]
   const pct = 100 - items.reduce((t, i) => t + i.adds, 0)
 
-  return { hasSalary: true, recommendation, newTotal, oldTotal, savings, oldTypical, hasDeductions, exactness: { pct, items } }
+  return { hasSalary: true, recommendation, newTotal, oldTotal, savings, outlook, exactness: { pct, items } }
 }

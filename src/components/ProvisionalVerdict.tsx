@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { computeQuickVerdict, type QuickVerdict } from '@/lib/quick-verdict'
 import { applyRentToExemptions } from '@/lib/quick-inputs'
-import { CAP_80C, CAP_24B, CAP_NPS } from '@/lib/verdict-engine'
+import { CAP_80C, CAP_24B, CAP_NPS, type RegimeOutlook } from '@/lib/verdict-engine'
 import VerdictBar, { focusField } from '@/components/VerdictBar'
 import { tokens as T } from '@/lib/tokens'
 
@@ -39,6 +39,16 @@ const FIELD_ACTIONS = {
   '80c': () => focusField('pv-field-80c'),
   '80d': () => focusField('pv-field-80d'),
   nps: () => focusField('pv-field-nps'),
+}
+
+function outlookText(o: RegimeOutlook): string {
+  switch (o.kind) {
+    case 'new-tax-zero': return 'Your new regime tax is ₹0, so the old regime can never win.'
+    case 'new-wins-typical': return `Even with typical deductions, the new regime wins by ~${fmt(o.margin)}.`
+    case 'old-could-win': return `The old regime could win if your deductions exceed ${fmt(o.breakEven)}. Answer the questions below to check.`
+    case 'old-wins': return `With what you've entered, the old regime wins by ${fmt(o.margin)}.`
+    case 'needs-more': return `You'd need ${fmt(o.more)} more in deductions for the old regime to win.`
+  }
 }
 
 export default function ProvisionalVerdict({
@@ -140,18 +150,10 @@ export default function ProvisionalVerdict({
             <div style={{ background: T.paper, border: `1px solid ${T.hairline}`, borderRadius: 10, padding: '14px 16px' }}>
               <div style={{ fontSize: 10, fontWeight: 600, color: T.muted, letterSpacing: '0.04em', marginBottom: 6 }}>Old regime</div>
               <div style={{ fontSize: 26, fontWeight: 800, color: T.ink, letterSpacing: '-0.02em' }}>{fmt(v.oldTotal)}</div>
-              {!v.hasDeductions && v.oldTypical < v.oldTotal && (
-                <div style={{ marginTop: 8 }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: T.teal }}>↓ with typical deductions</div>
-                  <div style={{ fontSize: 17, fontWeight: 800, color: T.teal }}>~{fmt(v.oldTypical)}</div>
-                </div>
-              )}
             </div>
           </div>
-          <div style={{ fontSize: 12.5, textAlign: 'center', color: T.muted }}>
-            {v.hasDeductions
-              ? <><span style={{ color: T.ink, fontWeight: 700 }}>Updated with what you&apos;ve entered.</span> Fill in the rest below to make it exact.</>
-              : <><span style={{ color: T.ink, fontWeight: 700 }}>Your real answer sits in this range.</span> The questions below decide where.</>}
+          <div style={{ fontSize: 13, fontWeight: 600, textAlign: 'center', color: T.ink, lineHeight: 1.5, marginTop: 12 }}>
+            {outlookText(v.outlook)}
           </div>
         </div>
       )}
