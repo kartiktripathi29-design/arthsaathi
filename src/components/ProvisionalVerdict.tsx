@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { computeQuickVerdict, type QuickVerdict } from '@/lib/quick-verdict'
 import { applyRentToExemptions } from '@/lib/quick-inputs'
-import { CAP_80C, CAP_24B, CAP_NPS, type RegimeOutlook } from '@/lib/verdict-engine'
+import { CAP_80C, CAP_24B, CAP_NPS, regimeOutlookText } from '@/lib/verdict-engine'
 import VerdictBar, { focusField } from '@/components/VerdictBar'
 import { tokens as T } from '@/lib/tokens'
 
@@ -39,17 +39,6 @@ const FIELD_ACTIONS = {
   '80c': () => focusField('pv-field-80c'),
   '80d': () => focusField('pv-field-80d'),
   nps: () => focusField('pv-field-nps'),
-}
-
-function outlookText(o: RegimeOutlook): string {
-  switch (o.kind) {
-    case 'new-tax-zero': return 'Your new regime tax is ₹0, so the old regime can never win.'
-    case 'new-wins-typical': return `Even with typical deductions, the new regime wins by ~${fmt(o.margin)}.`
-    case 'old-could-win': return `The old regime could win if your deductions exceed ${fmt(o.breakEven)}. Answer the questions below to check.`
-    case 'old-wins': return `With what you've entered, the old regime wins by ${fmt(o.margin)}.`
-    case 'needs-more': return `You'd need ${fmt(o.more)} more in deductions for the old regime to win.`
-    case 'old-unlikely': return 'The old regime is unlikely to win for you, even with maximum deductions.'
-  }
 }
 
 export default function ProvisionalVerdict({
@@ -154,7 +143,7 @@ export default function ProvisionalVerdict({
             </div>
           </div>
           <div style={{ fontSize: 13, fontWeight: 600, textAlign: 'center', color: T.ink, lineHeight: 1.5, marginTop: 12 }}>
-            {outlookText(v.outlook)}
+            {regimeOutlookText(v.outlook)}
           </div>
         </div>
       )}

@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { estimateAnnualTax } from '@/lib/tax-slabs'
+import { realisticMaxDeductions, regimeOutlook, regimeOutlookText } from '@/lib/verdict-engine'
 import { tokens as T } from '@/lib/tokens'
 
 export default function BgDemo({ monthly }: { monthly?: number | null }) {
@@ -18,22 +19,24 @@ export default function BgDemo({ monthly }: { monthly?: number | null }) {
   // still. estimateAnnualTax subtracts the ₹50k standard deduction itself, so passing (annual − 2.25L)
   // yields taxable = annual − 2.75L — no need to reach past the shared slab math.
   const ASSUMED_OLD_DEDUCTIONS = 225000
-  const oldTaxWithDeductions = estimateAnnualTax(annual - ASSUMED_OLD_DEDUCTIONS, 'old')
-  const oldMoves = oldTaxWithDeductions < oldTax
+  const outlookText = regimeOutlookText(regimeOutlook({
+    annualGross: annual, claimed: 0, hasEntered: false,
+    oldTypical: estimateAnnualTax(annual - ASSUMED_OLD_DEDUCTIONS, 'old'),
+    realisticMax: realisticMaxDeductions('normal', false, annual * 0.2),
+  }))
 
   // Count-up: animate both regime figures 0 → value over ~800ms ease-out whenever
   // `monthly` changes (and on first mount), rounding every frame. On the final frame
   // the figures flash marigold briefly before settling to their resting colors.
   const [displayNew, setDisplayNew] = useState(0)
   const [displayOld, setDisplayOld] = useState(0)
-  const [displayOldFloor, setDisplayOldFloor] = useState(0)
   const [flash, setFlash] = useState(false)
   const rafRef = useRef<number | null>(null)
   const flashRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     // No real salary yet → the card shows a prompt, not figures, so there's nothing to animate.
-    if (isExample) { setDisplayNew(0); setDisplayOld(0); setDisplayOldFloor(0); return }
+    if (isExample) { setDisplayNew(0); setDisplayOld(0); return }
     const DURATION = 800
     let startTs: number | null = null
     const easeOut = (t: number) => 1 - Math.pow(1 - t, 3)
@@ -43,13 +46,11 @@ export default function BgDemo({ monthly }: { monthly?: number | null }) {
       const e = easeOut(p)
       setDisplayNew(Math.round(newTax * e))
       setDisplayOld(Math.round(oldTax * e))
-      setDisplayOldFloor(Math.round(oldTaxWithDeductions * e))
       if (p < 1) {
         rafRef.current = requestAnimationFrame(tick)
       } else {
         setDisplayNew(newTax)
         setDisplayOld(oldTax)
-        setDisplayOldFloor(oldTaxWithDeductions)
         setFlash(true)
         flashRef.current = setTimeout(() => setFlash(false), 180)
       }
@@ -60,7 +61,7 @@ export default function BgDemo({ monthly }: { monthly?: number | null }) {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
       if (flashRef.current !== null) clearTimeout(flashRef.current)
     }
-  }, [newTax, oldTax, oldTaxWithDeductions, isExample])
+  }, [newTax, oldTax, isExample])
 
   const slots = [
     'House rent (HRA)',
@@ -111,19 +112,9 @@ export default function BgDemo({ monthly }: { monthly?: number | null }) {
                 <div style={{ background: T.paper, border: `1px solid ${T.hairline}`, borderRadius: 10, padding: '14px 16px' }}>
                   <div style={{ fontSize: 10, fontWeight: 600, color: T.muted, letterSpacing: '0.04em', marginBottom: 6 }}>Old regime</div>
                   <div style={{ fontSize: 26, fontWeight: 800, color: flash ? T.marigold : T.ink, transition: flash ? 'none' : 'color 450ms ease-out', letterSpacing: '-0.02em' }}>₹{Math.round(displayOld).toLocaleString('en-IN')}</div>
-                  {oldMoves && (
-                    <div style={{ marginTop: 8 }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: T.teal, letterSpacing: '-0.01em' }}>↓ with typical deductions</div>
-                      <div style={{ fontSize: 17, fontWeight: 800, color: T.teal, letterSpacing: '-0.02em' }}>~₹{Math.round(displayOldFloor).toLocaleString('en-IN')}</div>
-                      <div style={{ fontSize: 9.5, color: T.faint, marginTop: 2 }}>assumes ₹1.5L 80C + NPS + insurance</div>
-                    </div>
-                  )}
                 </div>
               </div>
-              <div style={{ fontSize: 12.5, textAlign: 'center', margin: '10px 0 0' }}>
-                <span style={{ color: T.ink, fontWeight: 700 }}>Your real answer sits in this range.</span>
-                <span style={{ color: T.muted }}> The four blanks below decide where.</span>
-              </div>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: T.ink, textAlign: 'center', margin: '10px 0 0' }}>{outlookText}</div>
             </>
           )}
         </div>

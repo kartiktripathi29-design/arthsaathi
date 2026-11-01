@@ -101,6 +101,20 @@ export type RegimeOutlook =
   | { kind: 'needs-more'; more: number }
   | { kind: 'old-unlikely' }
 
+const rupees = (v: number) => `₹${Math.round(v).toLocaleString('en-IN')}`
+
+// The one wording for the line under the regime figures, wherever they appear.
+export function regimeOutlookText(o: RegimeOutlook): string {
+  switch (o.kind) {
+    case 'new-tax-zero': return 'Your new regime tax is ₹0, so the old regime can never win.'
+    case 'new-wins-typical': return `Even with typical deductions, the new regime wins by ~${rupees(o.margin)}.`
+    case 'old-could-win': return `The old regime could win if your deductions exceed ${rupees(o.breakEven)}. Answer the questions below to check.`
+    case 'old-wins': return `With what you've entered, the old regime wins by ${rupees(o.margin)}.`
+    case 'needs-more': return `You'd need ${rupees(o.more)} more in deductions for the old regime to win.`
+    case 'old-unlikely': return 'The old regime is unlikely to win for you, even with maximum deductions.'
+  }
+}
+
 // The most someone could realistically claim: the 80C, 80D, NPS and home-loan caps, plus their HRA.
 export function realisticMaxDeductions(senior: SeniorStatus, parentsSenior: boolean, possibleHra: number): number {
   return CAP_80C + cap80DTotal(senior, parentsSenior) + CAP_NPS + CAP_24B + possibleHra
