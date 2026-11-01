@@ -92,7 +92,9 @@ redeploy to take effect.
 
 Source (single component): `src/components/DataAssurance.tsx:8`
 
-> **"Your salary slip is processed automatically — never seen by a human."**
+> **"Read automatically by AI, with no manual review step."**
+
+This replaced "no human ever sees your slip", because people with admin access to the database can view saved slip details.
 
 Rendered on exactly three surfaces:
 - Landing hero — `src/app/page.tsx:198`
@@ -101,8 +103,8 @@ Rendered on exactly three surfaces:
 
 | Claim | Verdict | Basis |
 |---|---|---|
-| "processed **automatically**" | **TRUE** | `parse-salary` → `parseSalaryFromBase64`/`parseSalaryFromText` (`src/lib/claude.ts`) — automated model pipeline, no human step. |
-| "**never seen by a human**" | **TRUE (literal) / AMBIGUOUS (disclosure)** | Sent to Anthropic's Claude API for automated OCR — no human reviews it. But the sentence doesn't disclose that the slip **leaves the device to a third-party model provider**; a reader could read "never seen" as "never leaves us." Literal claim holds; transparency gap remains. |
+| "read **automatically**" | **TRUE** | `parse-salary` → `parseSalaryFromBase64`/`parseSalaryFromText` (`src/lib/claude.ts`) — automated model pipeline, no human step. |
+| "**no manual review step**" | **TRUE** | Sent to Anthropic's Claude API for automated reading, and no product step has a person review it. The sentence doesn't say the slip goes to a third-party provider; the privacy policy does. |
 | *(implicit)* "not stored" | **NOT CLAIMED** | The component comment deliberately omits retention. So `salarySlip.upsert` and the `user-data` blob **do not contradict the printed sentence** — but *would* contradict a "stays on your device" claim. |
 
 Deliberately absent (per the component's own comment): the "never sold" claim and the
@@ -114,7 +116,7 @@ require sign-in ("…until you save").
 
 **Net:** after the guards, every claim in the assurance sentence is TRUE for
 Phase-1-reachable code. The only soft spot is the undisclosed third-party (Anthropic)
-transmission behind "never seen by a human."
+transmission behind this sentence.
 
 ---
 
@@ -135,7 +137,7 @@ transmission behind "never seen by a human."
 
 - ✅ **Phase-2 client guards** — *done (PR #31)*: the three `router.replace` redirects
   now read `PHASE_2_ENABLED`, so UI and API share the one flag literally.
-- **Transparency copy:** decide whether "never seen by a human" should disclose the
+- **Transparency copy:** decide whether the assurance should disclose the
   Anthropic transmission (or reword). Product/founder call.
 - **Re-enabling Phase-2:** flip `PHASE_2_ENABLED` → `true`, ensure `CASPARSER_API_KEY`
   is set, and re-confirm this assurance audit against the then-reachable bank/demat

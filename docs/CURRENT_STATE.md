@@ -16,7 +16,7 @@
 - **Final January email copy** (PR #41) — `docs/EMAIL-JANUARY.md` is the founder-final draft (no email is sent yet; the send itself is a future task).
 - **Derived FY resolution** (PR #33) — FY derived from the slip (Apr–Mar), never hardcoded; `tax-slabs.ts` year-parameterized; `fy.ts` + `useSelectedFY`; retired `tax-engine.ts`.
 - **Privacy guards** (PRs #29–#32) — Phase-2 gating (below); `PRIVACY-GUARD.md`; `NEXT_PUBLIC_CLOUD_SYNC=0` in prod.
-- **Data-assurance line** (PR #43) — single source `DataAssurance.tsx` on hero / `/try` / dashboard upload: "Read automatically by AI — no human ever sees your slip."
+- **Data-assurance line** (PR #43) — single source `DataAssurance.tsx` on hero / `/try` / dashboard upload: "Read automatically by AI, with no manual review step."
 - **AI parse routes on Sonnet** — `/api/parse-ais` (PR #45) and `/api/parse-itr` (PR #48) both run `claude-sonnet-4-6`; each verified live with an A/B showing identical extraction. No `claude-opus-4-5` remains in `src`.
 
 ## What's gated / disabled (intentional)
