@@ -16,6 +16,16 @@ export const maxDuration = 120
 
 const client = new Anthropic()
 
+function isOurBlobUrl(value: unknown): value is string {
+  if (typeof value !== 'string') return false
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && url.hostname.endsWith('.blob.vercel-storage.com')
+  } catch {
+    return false
+  }
+}
+
 export async function POST(req: NextRequest) {
   // Phase-2 gate. Bank-statement ingestion is a Phase-2 feature; while Phase-2 is off this route must
   // not parse a file or touch the DB. Return 404 (not 403) so we don't advertise the endpoint exists.
@@ -44,19 +54,26 @@ export async function POST(req: NextRequest) {
       password = body.password || ''
       fileName = body.fileName || 'statement'
       fileType = body.fileType || ''
-      log(`blob mode: downloading from ${blobUrl}`)
+      // Uploading needs a login, so this does too. Only our own blob store is ever fetched or deleted.
+      if (!(await userP)) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+      if (!isOurBlobUrl(blobUrl)) return NextResponse.json({ error: 'Invalid file location' }, { status: 400 })
+      log('blob mode: downloading')
 
-      const blobRes = await fetch(blobUrl)
-      if (!blobRes.ok) return NextResponse.json({ error: 'Failed to download file from storage' }, { status: 500 })
-      buffer = Buffer.from(await blobRes.arrayBuffer())
-      log(`blob downloaded (${buffer.length} bytes)`)
-
-      // Clean up blob after download
+      // Delete the file whether or not the download works; nothing after this needs it.
       try {
-        const { del } = await import('@vercel/blob')
-        await del(blobUrl)
-        log('blob deleted')
-      } catch {}
+        const blobRes = await fetch(blobUrl)
+        if (!blobRes.ok) return NextResponse.json({ error: 'Failed to download file from storage' }, { status: 500 })
+        buffer = Buffer.from(await blobRes.arrayBuffer())
+        log(`blob downloaded (${buffer.length} bytes)`)
+      } finally {
+        try {
+          const { del } = await import('@vercel/blob')
+          await del(blobUrl)
+          log('blob deleted')
+        } catch (e) {
+          console.error('[bank-parse] blob delete failed:', (e as Error)?.name)
+        }
+      }
     } else {
       // Direct file upload mode (for files under 4.5MB)
       const form = await req.formData()
