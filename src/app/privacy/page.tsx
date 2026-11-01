@@ -1,7 +1,14 @@
 import Link from 'next/link'
 import SiteHeader from '@/components/SiteHeader'
 import SiteFooter from '@/components/SiteFooter'
+import { siteConfig } from '@/lib/site-config'
 import { tokens as T } from '@/lib/tokens'
+
+// Today's data handling, as the code does it. Change this page in the same commit as any change to
+// what is stored, where, or who receives it.
+const CONTACT = siteConfig.email
+  ? `email ${siteConfig.email}`
+  : 'contact us (we have not published a privacy contact address yet)'
 
 export default function PrivacyPage() {
   return (
@@ -14,19 +21,19 @@ export default function PrivacyPage() {
 
         <div style={{ marginBottom: 40 }}>
           <h1 style={{ fontSize: 32, fontWeight: 800, color: T.ink, marginBottom: 8 }}>Privacy Policy</h1>
-          <div style={{ fontSize: 13, color: T.muted }}>Last updated: April 2025 · Effective immediately</div>
+          <div style={{ fontSize: 13, color: T.muted }}>Last updated: October 2026 · Effective immediately</div>
         </div>
 
         {/* Summary box */}
         <div style={{ background: T.tint, border: `1px solid ${T.slip.border}`, borderRadius: 14, padding: '20px 24px', marginBottom: 36 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: T.teal, marginBottom: 10 }}>Summary in plain English</div>
           {[
-            '✓ Your salary slip is processed by AI to extract numbers — it is NOT saved anywhere',
-            '✓ We do not sell your data to anyone, ever',
-            '✓ No salary document is stored on our servers',
-            '✓ Parsed salary numbers are saved only in your own browser (localStorage)',
-            '✓ You can delete all your data at any time using the Reset button in the sidebar',
-            '✓ The AI processing happens on Anthropic\'s servers (USA) under their privacy policy',
+            'Your slip file is read by AI and is not kept after it has been read.',
+            'What the AI reads from it is kept. It is saved in your browser and, if you are signed in, in our database.',
+            'Those saved figures can include your full PAN. They are not encrypted by us.',
+            'Your slips are sent to Anthropic (USA), an AI provider, to be read.',
+            'There is no self-service way to delete your data from our servers yet.',
+            'We do not sell your data.',
           ].map(point => (
             <div key={point} style={{ fontSize: 13, color: T.ink, marginBottom: 6, lineHeight: 1.6 }}>{point}</div>
           ))}
@@ -35,60 +42,87 @@ export default function PrivacyPage() {
         {[
           {
             title: '1. Who we are',
-            content: 'ArthVo is an AI-powered financial tool designed for India\'s working class. We provide salary-slip analysis and tax-regime comparison. Registered in India.',
+            content: 'ArthVo is an AI-powered financial tool designed for India\'s working class. We provide salary-slip analysis and tax-regime comparison.',
           },
           {
-            title: '2. What data we collect',
+            title: '2. What we collect',
             content: null,
             list: [
-              'Salary slip documents — uploaded voluntarily by you for AI parsing. These are sent to Anthropic\'s Claude API for processing and are immediately discarded after the parsed data is returned. We do not store the raw document.',
-              'Parsed salary data — the structured numbers extracted from your salary slip (Basic, HRA, PF, Net Pay etc.). These are stored only in your browser\'s localStorage on your own device. They are never sent to our database.',
-              'Chat messages — questions you ask the AI advisor. These are sent to Anthropic\'s Claude API to generate a response and are not stored in our database.',
-              'Usage analytics — anonymous data about which pages you visit, via Vercel Analytics. No personal information is collected.',
+              'Documents you upload — salary slips, offer letters, AIS / Form 26AS and filed returns, sent to us to be read.',
+              'What is read from them — pay figures, employer and pay period, and, where the document shows them, your name, full PAN and the last 4 digits of your Aadhaar.',
+              'Passwords for protected files — sent to our server only to open that file. We do not save them.',
+              'Numbers you type in — such as rent, deductions and other income. These stay in your browser unless cloud backup is on.',
+              'Account details — your email address, and a password that Supabase stores in hashed form.',
+              'Reminder sign-ups — if you ask for a reminder, your email, the saving figure shown to you, the financial year and when you agreed.',
+              'Chat messages — your questions, plus a note of which steps you have completed (no amounts). These are sent to Anthropic to generate a reply. We save only a count of messages, not their text.',
+              'Usage data — pages visited, through Vercel Analytics, and our own counts of events such as a slip being read. Those counts hold no personal information.',
             ],
           },
           {
             title: '3. How your salary slip is processed',
-            content: 'When you upload a salary slip, the following happens: (1) The file is sent from your browser to our server over an encrypted HTTPS connection. (2) Our server forwards it to Anthropic\'s Claude AI API for reading and extracting salary components. (3) The extracted data (just numbers and labels — no image) is returned to your browser. (4) The original file is discarded from server memory immediately. At no point is your salary slip saved to a database or storage system.',
+            content: 'When you upload a salary slip: (1) The file goes from your browser to our server over an encrypted HTTPS connection. (2) Our server sends its contents to Anthropic\'s Claude AI API, which reads it and extracts the details. (3) The extracted details come back to your browser and are saved there. (4) If you are signed in, our server also saves them to our database. (5) We do not save the file itself: it is held in memory while it is read, then discarded. Reading is automatic and no step in the product has a person review your slip, but people with administrative access to our database could view the saved details.',
           },
           {
             title: '4. Third parties who process your data',
             content: null,
             list: [
-              'Anthropic (USA) — processes salary slip documents and chat messages via their Claude AI API. Anthropic does not train its models on API customer data by default. See anthropic.com/privacy.',
-              'Vercel (USA) — hosts the ArthVo application. Vercel may log anonymous request metadata. See vercel.com/legal/privacy-policy.',
-              'We do not share your data with any other third party, advertiser, or data broker.',
+              'Anthropic (USA) — receives the full contents of documents you upload and your chat messages. Its own terms decide how long it keeps them and how it may use them. See anthropic.com/privacy.',
+              'Supabase — hosts our database and handles sign-in, so it holds everything listed under "On our servers" below.',
+              'Vercel (USA) — hosts ArthVo, provides usage analytics, and holds our server logs. See vercel.com/legal/privacy-policy.',
+              'We do not sell your data or share it with advertisers or data brokers.',
             ],
           },
           {
-            title: '5. Data storage and location',
-            content: 'Parsed salary numbers and tax calculations are stored only in your browser\'s localStorage — on your own device. This data never leaves your device unless you explicitly use a feature that sends it to the AI (such as the chat). We do not operate a user account database at this time. There is no server-side storage of personal financial data.',
-          },
-          {
-            title: '6. Your rights under DPDP Act 2023',
-            content: 'Under India\'s Digital Personal Data Protection Act 2023, you have the right to:',
+            title: '5. Where your data is stored',
+            content: 'In your browser:',
             list: [
-              'Access — know what data we hold about you',
-              'Correction — request correction of inaccurate data',
-              'Erasure — delete all your data (use the Reset button in the dashboard sidebar at any time)',
-              'Grievance redressal — raise a complaint with us or the Data Protection Board of India',
+              'Your salary details, tax inputs, AIS data and the identity details used to check that new slips are yours, including your full PAN. This is not encrypted. It stays there after you sign out, so anyone using the same browser could see it. To remove it, clear this site\'s data in your browser settings.',
+              'Backup files you download contain the same data and are not encrypted.',
             ],
           },
           {
-            title: '7. Cookies',
-            content: 'ArthVo does not use tracking cookies. We use browser localStorage (not cookies) to remember your salary data between sessions on the same device. You can clear this at any time using the Reset button in the sidebar, or by clearing your browser\'s local storage.',
+            title: 'On our servers',
+            content: null,
+            list: [
+              'Parsed slips — if you upload while signed in, we save everything read from the slip, including employer, pay period, net pay and, where shown, your name, full PAN and last 4 digits of Aadhaar. We do not encrypt these records ourselves.',
+              'Activity records — linked to your account: for example, that a slip was read, how many, and its net pay. We do not encrypt these ourselves.',
+              'Account and reminder details — as listed in section 2.',
+              'Server logs — our logs record the gross pay, net pay and month read from each slip page, without your name. Error logs can include error details.',
+              'Cloud backup — not switched on today. When it is on, a copy of your browser data, including your full PAN, is saved to your account, encrypted. We hold the key, so we are able to decrypt it.',
+              'Bank statements — this feature is off today. Statements read while it was on may still be stored, including their transaction data.',
+              'We do not delete any of this automatically. It stays until it is removed by hand.',
+            ],
           },
           {
-            title: '8. Children\'s data',
+            title: '6. Deleting or changing your data',
+            content: `There is no "Delete my data" option in ArthVo yet. Signing out does not delete anything from our servers, and clears only some of what is in your browser. To ask us to access, correct or delete what we hold about you, ${CONTACT}. We handle these requests by hand.`,
+          },
+          {
+            title: '7. Your rights under the DPDP Act 2023',
+            content: `India's Digital Personal Data Protection Act 2023 gives you the rights below. Parts of the Act are coming into force in phases, so some may not be enforceable yet. This list describes the law. It does not mean ArthVo already meets every requirement of the Act. To use any of these rights, ${CONTACT}.`,
+            list: [
+              'Access — to ask for a summary of the personal data we process about you, what we do with it, and who we have shared it with.',
+              'Correction — to ask us to correct, complete or update your personal data.',
+              'Erasure — to ask us to erase your personal data, unless we need to keep it for the purpose you gave it for or to comply with the law.',
+              'Grievance — to raise a complaint with us about how we handle your personal data or respond to these requests.',
+              'Complaint to the Data Protection Board of India — to take your complaint to the Board. The Act requires you to raise it with us first.',
+            ],
+          },
+          {
+            title: '8. Cookies and browser storage',
+            content: 'We use cookies to keep you signed in, and browser storage (localStorage) to remember your salary data on this device. We do not use advertising cookies. Vercel Analytics measures page visits.',
+          },
+          {
+            title: '9. Children\'s data',
             content: 'ArthVo is not intended for use by anyone under the age of 18. We do not knowingly collect data from minors.',
           },
           {
-            title: '9. Changes to this policy',
-            content: 'We may update this privacy policy as the product evolves. The date at the top of this page will always reflect the latest version. Continued use of ArthVo after changes constitutes acceptance of the updated policy.',
+            title: '10. Changes to this policy',
+            content: 'We update this policy as the product changes. The date at the top of this page shows the latest version.',
           },
           {
-            title: '10. Contact us',
-            content: 'For any privacy concerns, data deletion requests, or questions about this policy, please contact us. We aim to respond within 72 hours.',
+            title: '11. Contact us',
+            content: `For privacy questions or data requests, ${CONTACT}.`,
           },
         ].map(section => (
           <div key={section.title} style={{ marginBottom: 32 }}>

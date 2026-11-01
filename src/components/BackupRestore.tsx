@@ -100,6 +100,7 @@ export default function BackupRestore() {
       <button onClick={() => fileRef.current?.click()} disabled={busy} style={btnGhost}>Restore from file</button>
       <input ref={fileRef} type="file" accept="application/json,.json" style={{ display: 'none' }}
         onChange={(e) => { const f = e.target.files?.[0]; if (f) onPick(f); e.target.value = '' }} />
+      <p style={{ width: '100%', fontSize: 11, color: C.muted, margin: 0, lineHeight: 1.5 }}>The backup file isn’t encrypted and can include your full PAN, so store it somewhere safe.</p>
     </div>
   )
 
@@ -109,7 +110,8 @@ export default function BackupRestore() {
         <p style={{ fontSize: 13, fontWeight: 700, color: C.good, margin: '0 0 4px' }}>Your data is backed up automatically</p>
         <p style={{ fontSize: 11.5, color: T.green, margin: '0 0 8px', lineHeight: 1.5 }}>
           It’s saved to your account, encrypted, and synced across your devices — clearing this browser or switching
-          devices won’t lose anything. Your PAN and Aadhaar are masked and never stored in full.
+          devices won’t lose anything. We hold the encryption key. This backup can include your full PAN and the last 4
+          digits of your Aadhaar.
         </p>
         <p style={{ fontSize: 11, color: C.muted, margin: '0 0 10px' }}>
           {syncedAt ? `Last backed up ${timeAgo(syncedAt)}.` : 'Syncing…'}
@@ -128,7 +130,7 @@ export default function BackupRestore() {
       <p style={{ fontSize: 11.5, color: C.muted, margin: '0 0 12px', lineHeight: 1.5 }}>
         {AUTO_BACKUP
           ? 'Sign in to back up your data to your account automatically. Until then it’s saved in this browser only — download a copy to keep it safe or move it to another device.'
-          : 'Your salary, exemptions, deductions and tax inputs are saved in this browser only. Download a backup to keep them safe or move them to another device — clearing your browser or switching devices otherwise loses them.'}
+          : 'Your salary, exemptions, deductions and tax inputs are saved in this browser and aren’t backed up automatically. Download a backup to keep them safe or move them to another device — clearing your browser or switching devices otherwise loses them. Figures read from slips you upload while signed in are also saved to your account, but can’t be restored from there.'}
       </p>
       <ManualButtons primary={true} />
     </div>
