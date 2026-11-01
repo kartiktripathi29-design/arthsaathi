@@ -31,9 +31,13 @@ test('new regime winning with typical deductions reports the margin', () => {
 })
 
 test('old regime could win when typical deductions already beat the new regime', () => {
-  // Just past ₹2Cr, where the new regime's taxable income crosses a surcharge threshold first.
-  const gross = 20080000
-  assert.deepEqual(outlook(gross, 0, false), { kind: 'old-could-win', breakEven: breakEvenDeductions({ annualGross: gross }) })
+  // No salary reaches this with ₹2.25L of typical deductions, so the old-regime figure is supplied.
+  const gross = 2400000
+  const { newTotal } = totals(gross, 0)
+  assert.deepEqual(
+    regimeOutlook({ annualGross: gross, claimed: 0, hasEntered: false, oldTypical: newTotal - 1 }),
+    { kind: 'old-could-win', breakEven: breakEvenDeductions({ annualGross: gross }) },
+  )
 })
 
 test('entered deductions report how much more is needed', () => {

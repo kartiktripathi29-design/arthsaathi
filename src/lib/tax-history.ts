@@ -16,7 +16,7 @@
  *
  * Scope / documented simplifications (v1 — keep honest about what this does NOT model):
  *   - Resident individuals. HUF/firm/company rates not modelled.
- *   - Surcharge IS applied, but marginal relief ON surcharge is not (matters only just past ₹50L/1Cr/…).
+ *   - Surcharge IS applied, with marginal relief at each threshold (₹50L/1Cr/2Cr/5Cr).
  *   - Special-rate capital gains (equity STCG/LTCG etc.) are NOT folded in here — they're taxed at
  *     fixed rates independent of regime, so they don't change the regime-choice delta this engine is
  *     about. Slab-rate "other income" (interest, slab CG, etc.) IS supported via `otherSlabIncome`.
@@ -208,14 +208,24 @@ function rebate(taxable: number, basicTax: number, r: Rebate87A): number {
   return 0
 }
 
-function surcharge(taxable: number, taxAfterRebate: number, topRate: number): number {
+function surchargeRate(taxable: number, topRate: number): number {
   if (taxable <= 5000000) return 0
-  let rate: number
-  if (taxable <= 10000000) rate = 0.10
-  else if (taxable <= 20000000) rate = 0.15
-  else if (taxable <= 50000000) rate = 0.25
-  else rate = topRate
-  return taxAfterRebate * rate
+  if (taxable <= 10000000) return 0.10
+  if (taxable <= 20000000) return 0.15
+  if (taxable <= 50000000) return 0.25
+  return topRate
+}
+
+// Marginal relief: tax plus surcharge can't exceed the tax plus surcharge at the threshold just
+// crossed by more than the income above that threshold.
+function surcharge(taxable: number, taxAfterRebate: number, rr: RegimeRules): number {
+  const rate = surchargeRate(taxable, rr.topSurchargeRate)
+  if (rate === 0) return 0
+  const threshold = Math.max(...[5000000, 10000000, 20000000, 50000000].filter(t => t < taxable))
+  const basicAtThreshold = slabTax(threshold, rr.slabs)
+  const taxAtThreshold = basicAtThreshold - rebate(threshold, basicAtThreshold, rr.rebate87A)
+  const ceiling = taxAtThreshold * (1 + surchargeRate(threshold, rr.topSurchargeRate)) + (taxable - threshold)
+  return Math.max(0, Math.min(taxAfterRebate * rate, ceiling - taxAfterRebate))
 }
 
 // ─── Income components (what a filed return breaks down into) ────────────────────────────
@@ -288,7 +298,7 @@ export function computeYearTax(
   const basicTax = slabTax(taxableIncome, rr.slabs)
   const reb = rebate(taxableIncome, basicTax, rr.rebate87A)
   const taxAfterRebate = Math.max(0, basicTax - reb)
-  const sur = surcharge(taxableIncome, taxAfterRebate, rr.topSurchargeRate)
+  const sur = surcharge(taxableIncome, taxAfterRebate, rr)
   const cess = (taxAfterRebate + sur) * 0.04
   const totalTax = Math.round(taxAfterRebate + sur + cess)
 

@@ -147,44 +147,58 @@ export function oldRegimeSlabs(seniorStatus: SeniorStatus, fy: FY = LATEST_ENACT
   return rulesFor(fy).oldRegimeSlabs[seniorStatus]
 }
 
-// Surcharge on the tax-after-rebate. Old regime: 10/15/25/37%. New regime: capped at 25%.
-export function calcSurcharge(taxableIncome: number, taxAfterRebate: number, regime: 'new' | 'old', fy: FY = LATEST_ENACTED_FY): number {
-  const s = rulesFor(fy).surcharge
-  if (taxableIncome <= s.exemptUpTo) return 0
-  let rate = s.aboveTop[regime]
-  for (const b of s.bands) {
-    if (taxableIncome <= b.upTo) { rate = b.rate; break }
+function slabRows(taxable: number, regime: 'new' | 'old', seniorStatus: SeniorStatus, rules: RuleSet): SlabRow[] {
+  const slabs: SlabTuple[] = regime === 'new' ? rules.newRegimeSlabs : rules.oldRegimeSlabs[seniorStatus]
+  return slabs.map(([min, max, rate, label]) => {
+    const inSlab = Math.max(0, Math.min(taxable, max) - min)
+    return { label, rate, inSlab, tax: inSlab * rate }
+  })
+}
+
+// 87A rebate — per the FY's rule set.
+function calcRebate(taxable: number, basicTax: number, regime: 'new' | 'old', rules: RuleSet): number {
+  if (regime === 'new') {
+    const rb = rules.rebate.new
+    if (taxable <= rb.threshold) return Math.min(basicTax, rb.cap)
+    if (rb.marginalRelief) {
+      const exceeds = taxable - rb.threshold
+      if (basicTax > exceeds) return basicTax - exceeds
+    }
+    return 0
   }
-  return taxAfterRebate * rate
+  const rb = rules.rebate.old
+  return taxable <= rb.threshold ? Math.min(basicTax, rb.cap) : 0
+}
+
+// The surcharge rate for an income: 0 up to the exempt limit, then the first band that covers it.
+function surchargeRate(taxable: number, regime: 'new' | 'old', rules: RuleSet): number {
+  const s = rules.surcharge
+  if (taxable <= s.exemptUpTo) return 0
+  return s.bands.find(b => taxable <= b.upTo)?.rate ?? s.aboveTop[regime]
+}
+
+// Surcharge on the tax-after-rebate. Old regime: 10/15/25/37%. New regime: capped at 25%.
+// Marginal relief: tax plus surcharge can't exceed the tax plus surcharge at the threshold just
+// crossed by more than the income above that threshold.
+export function calcSurcharge(taxableIncome: number, taxAfterRebate: number, regime: 'new' | 'old', fy: FY = LATEST_ENACTED_FY, seniorStatus: SeniorStatus = 'normal'): number {
+  const rules = rulesFor(fy)
+  const rate = surchargeRate(taxableIncome, regime, rules)
+  if (rate === 0) return 0
+  const s = rules.surcharge
+  const threshold = Math.max(...[s.exemptUpTo, ...s.bands.map(b => b.upTo)].filter(t => t < taxableIncome))
+  const basicAtThreshold = slabRows(threshold, regime, seniorStatus, rules).reduce((t, r) => t + r.tax, 0)
+  const taxAtThreshold = basicAtThreshold - calcRebate(threshold, basicAtThreshold, regime, rules)
+  const ceiling = taxAtThreshold * (1 + surchargeRate(threshold, regime, rules)) + (taxableIncome - threshold)
+  return Math.max(0, Math.min(taxAfterRebate * rate, ceiling - taxAfterRebate))
 }
 
 export function slabBreakdown(taxable: number, regime: 'new' | 'old', seniorStatus: SeniorStatus = 'normal', fy: FY = LATEST_ENACTED_FY): SlabResult {
   const rules = rulesFor(fy)
-  const slabs: SlabTuple[] = regime === 'new' ? rules.newRegimeSlabs : rules.oldRegimeSlabs[seniorStatus]
-  const rows: SlabRow[] = []
-  let basicTax = 0
-  for (const [min, max, rate, label] of slabs) {
-    const inSlab = Math.max(0, Math.min(taxable, max) - min)
-    const tax = inSlab * rate
-    rows.push({ label, rate, inSlab, tax })
-    basicTax += tax
-  }
-  // 87A rebate — per the FY's rule set.
-  let rebate = 0
-  if (regime === 'new') {
-    const rb = rules.rebate.new
-    if (taxable <= rb.threshold) {
-      rebate = Math.min(basicTax, rb.cap)
-    } else if (rb.marginalRelief) {
-      const exceeds = taxable - rb.threshold
-      if (basicTax > exceeds) rebate = basicTax - exceeds
-    }
-  } else {
-    const rb = rules.rebate.old
-    if (taxable <= rb.threshold) rebate = Math.min(basicTax, rb.cap)
-  }
+  const rows = slabRows(taxable, regime, seniorStatus, rules)
+  const basicTax = rows.reduce((t, r) => t + r.tax, 0)
+  const rebate = calcRebate(taxable, basicTax, regime, rules)
   const taxAfterRebate = Math.max(0, basicTax - rebate)
-  const surcharge = calcSurcharge(taxable, taxAfterRebate, regime, fy)
+  const surcharge = calcSurcharge(taxable, taxAfterRebate, regime, fy, seniorStatus)
   const cess = (taxAfterRebate + surcharge) * rules.cessRate
   const total = Math.round(taxAfterRebate + surcharge + cess)
   return {

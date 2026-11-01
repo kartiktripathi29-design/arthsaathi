@@ -12,8 +12,8 @@ import { slabBreakdown } from './tax-slabs.ts'
 
 test('FY 2025-26: tax-history and tax-slabs agree on tax (new & old regime)', () => {
   const STD = { new: 75000, old: 50000 } // standard deduction, salaried
-  // Incomes kept below the ₹50L surcharge threshold so both engines are compared on plain slab math.
-  for (const gross of [875000, 1275000, 1575000, 2500000, 4000000]) {
+  // Includes incomes just past each surcharge threshold, so the two marginal-relief copies stay in step.
+  for (const gross of [875000, 1275000, 1575000, 2500000, 4000000, 5085000, 10085000, 20085000, 50085000]) {
     for (const regime of ['new', 'old']) {
       const history = computeYearTax('FY 2025-26', regime, { grossSalary: gross }).totalTax
       const consolidated = slabBreakdown(gross - STD[regime], regime, 'normal', 2025).total
