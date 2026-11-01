@@ -24,10 +24,11 @@ export interface SalaryFacts {
   hraBasis: HraMonth[]          // per-month Basic + HRA series (only available from the summary)
   source: SalaryFactsSource     // where the numbers came from — useful for "verify your data" hints
   synthetic: boolean            // true when the figures are the /try estimate, not a real slip/summary
+  estimatedFrom: 'ctc' | 'inhand' | null // set when a /try estimate was converted from CTC or in-hand
 }
 
 const EMPTY: SalaryFacts = {
-  annualGross: 0, annualNet: 0, annualTDS: 0, fyStartYear: null, hraBasis: [], source: 'none', synthetic: false,
+  annualGross: 0, annualNet: 0, annualTDS: 0, fyStartYear: null, hraBasis: [], source: 'none', synthetic: false, estimatedFrom: null,
 }
 
 // Only the numeric fields this module averages; raw slips carry many more we don't touch here.
@@ -67,6 +68,9 @@ export function getSalaryFacts(): SalaryFacts {
         hraBasis: Array.isArray(summary.hraBasis) ? summary.hraBasis : [],
         source: 'summary',
         synthetic: !!summary._synthetic,
+        estimatedFrom: summary._synthetic && (summary._salaryInput?.type === 'ctc' || summary._salaryInput?.type === 'inhand')
+          ? summary._salaryInput.type
+          : null,
       }
     }
   } catch {
@@ -87,6 +91,7 @@ export function getSalaryFacts(): SalaryFacts {
       hraBasis: [],
       source: 'slip-average',
       synthetic: false,
+      estimatedFrom: null,
     }
   }
 

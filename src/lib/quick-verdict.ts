@@ -45,6 +45,12 @@ const EMPTY: QuickVerdict = {
 // before any deduction is entered (₹1.5L 80C + ₹50k NPS + ₹25k 80D). Mirrors the landing card's assumption.
 const TYPICAL_DEDUCTIONS = 225000
 
+const ESTIMATE_LABEL = {
+  typed: 'Salary (estimate)',
+  ctc: 'Salary (estimated from CTC)',
+  inhand: 'Salary (estimated from in-hand)',
+}
+
 export function computeQuickVerdict(): QuickVerdict {
   const facts = getSalaryFacts()
   const gross = facts.annualGross
@@ -104,7 +110,7 @@ export function computeQuickVerdict(): QuickVerdict {
     // A synthetic /try summary is an estimate, not a real slip — it earns no confidence and still asks
     // for the real slip, so the bar can't present invented salary as "exact". The 0% item just shows
     // the salary was counted.
-    ...(facts.synthetic ? [signal('salary', 'Salary (estimate)', 0)] : []),
+    ...(facts.synthetic ? [signal('salary', ESTIMATE_LABEL[facts.estimatedFrom ?? 'typed'], 0)] : []),
     facts.source === 'slip-average'
       ? signal('slip', 'Add the rest of your slips', 15)
       : item('slip', facts.source === 'summary' && !facts.synthetic, 'Salary slip', 'Add salary slip', 30),

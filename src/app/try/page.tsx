@@ -14,8 +14,15 @@ import SiteHeader from '@/components/SiteHeader'
 import SiteFooter from '@/components/SiteFooter'
 import { ThemeToggle, useArthvoTheme, useThemedBase } from '@/components/ThemeToggle'
 import { tokens as T } from '@/lib/tokens'
+import { MIN_PLAUSIBLE_CTC, monthlyInHandFromGross, monthlyStructure, toMonthlyGross, type SalaryInputType } from '@/lib/salary-input'
 
-const num = (s: string) => Math.max(0, parseFloat((s || '').replace(/,/g, '')) || 0)
+const SALARY_TYPES: { type: SalaryInputType; label: string; placeholder: string; source: string }[] = [
+  { type: 'gross', label: 'Gross monthly', placeholder: 'e.g. 1,20,000', source: '' },
+  { type: 'ctc', label: 'Annual CTC', placeholder: 'e.g. 12,00,000', source: 'CTC' },
+  { type: 'inhand', label: 'Monthly in‑hand', placeholder: 'e.g. 75,000', source: 'in-hand pay' },
+]
+
+const num =(s: string) => Math.max(0, parseFloat((s || '').replace(/,/g, '')) || 0)
 const writeJSON = (k: string, o: any) => { try { localStorage.setItem(k, JSON.stringify(o)) } catch {} }
 // Fire-and-forget funnel ping for launch monitoring (server counts it into /api/health). Never throws,
 // never blocks the page — a failed ping must be invisible to the visitor.
@@ -34,6 +41,7 @@ export default function TryPage() {
   const { theme, setTheme, resolved } = useArthvoTheme()
   useThemedBase(resolved)
   const [salary, setSalary] = useState('')
+  const [salaryType, setSalaryType] = useState<SalaryInputType>('gross')
   const [entered, setEntered] = useState(false)
   const [version, setVersion] = useState(0)
   const [returning, setReturning] = useState<{ verdictFY: number; verdictAmount: number | null } | null>(null)
@@ -46,24 +54,35 @@ export default function TryPage() {
     if (entered && !verdictFired.current) { verdictFired.current = true; pingAnalytics('verdict_rendered') }
   }, [entered])
 
-  const seed = (monthlyStr: string) => {
-    const m = num(monthlyStr)
+  const seed = (amountStr: string, type: SalaryInputType = salaryType) => {
+    const amount = num(amountStr)
+    if (!amount || (type === 'ctc' && amount < MIN_PLAUSIBLE_CTC)) return
+    const m = toMonthlyGross(type, amount)
     if (!m) return
     const annual = m * 12
     const now = new Date()
     const fyStartYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
-    const basic = Math.round(m * 0.4), hra = Math.round(m * 0.2)
+    const { basic, hra } = monthlyStructure(m)
+    const net = type === 'inhand' ? amount : monthlyInHandFromGross(m)
     // Careful summary (drives the verdict) PLUS a light synthetic slip, so the "has data" gates pass
     // after sign-up — the dashboard opens on their numbers instead of bouncing to a blank upload.
     // Flag the seeded summary synthetic so real uploaded/confirmed data is distinguishable from this
     // estimate — both so we never clobber real data (below) and so downstream can treat it as provisional.
     writeJSON('av_salary_summary', {
-      annualGross: annual, annualNet: Math.round(annual * 0.9), annualTDS: 0, fyStartYear,
+      annualGross: annual, annualNet: net * 12, annualTDS: 0, fyStartYear,
       hraBasis: Array.from({ length: 12 }, () => ({ basic, hra })), _synthetic: true,
+      _salaryInput: { type, amount },
     })
-    writeJSON('av_salary_timeline', [{ grossSalary: m, basicSalary: basic, hra, netSalary: Math.round(m * 0.9), month: '', year: String(fyStartYear), _synthetic: true }])
-    setSalary(String(m)); setEntered(true); setVersion(x => x + 1)
+    writeJSON('av_salary_timeline', [{ grossSalary: m, basicSalary: basic, hra, netSalary: net, month: '', year: String(fyStartYear), _synthetic: true }])
+    setSalary(String(amount)); setSalaryType(type); setEntered(true); setVersion(x => x + 1)
   }
+
+  const amount = num(salary)
+  const ctcTooLow = salaryType === 'ctc' && amount > 0 && amount < MIN_PLAUSIBLE_CTC
+  const activeType = SALARY_TYPES.find(t => t.type === salaryType)!
+  const conversion = salaryType !== 'gross' && amount > 0 && !ctcTooLow
+    ? `≈ ₹${toMonthlyGross(salaryType, amount).toLocaleString('en-IN')} gross per month (estimated from ${activeType.source})`
+    : null
 
   // Resume from a salary carried in (?m= from the landing estimate) or one already on the device.
   // REAL uploaded/confirmed salary (a non-synthetic summary or slip) is never overwritten by the
@@ -84,9 +103,14 @@ export default function TryPage() {
         return
       }
       const mParam = new URLSearchParams(window.location.search).get('m')
-      if (mParam && num(mParam) > 0) { seed(mParam); return }
-      // No real data and no ?m=, but a prior synthetic estimate is on the device — resume it.
-      if (s && (s.annualGross || 0) > 0) { setSalary(String(Math.round(s.annualGross / 12))); setEntered(true) }
+      if (mParam && num(mParam) > 0) { seed(mParam, 'gross'); return }
+      // No real data and no ?m=, but a prior synthetic estimate is on the device — resume it as typed.
+      if (s && (s.annualGross || 0) > 0) {
+        const typed = s._salaryInput
+        if (typed?.type && typed.amount > 0) { setSalaryType(typed.type); setSalary(String(typed.amount)) }
+        else setSalary(String(Math.round(s.annualGross / 12)))
+        setEntered(true)
+      }
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -122,15 +146,28 @@ export default function TryPage() {
         {!entered ? (
           <div style={{ maxWidth: 440, margin: '40px auto 0', background: T.card, border: `1.5px solid ${T.hairline}`, borderRadius: 16, padding: '24px 28px' }}>
             <div style={{ fontSize: 20, fontWeight: 800, color: T.ink, letterSpacing: '-0.02em', marginBottom: 6 }}>See your real tax — no signup.</div>
-            <div style={{ fontSize: 13, color: T.muted, marginBottom: 16 }}>Start with your monthly salary. We’ll show old vs new regime, then refine it with a few questions.</div>
+            <div style={{ fontSize: 13, color: T.muted, marginBottom: 16 }}>Start with your salary. We’ll show old vs new regime, then refine it with a few questions.</div>
+            <div role="group" aria-label="Salary type" style={{ display: 'flex', gap: 4, padding: 3, marginBottom: 10, background: T.tint, borderRadius: 10 }}>
+              {SALARY_TYPES.map(t => {
+                const active = t.type === salaryType
+                return (
+                  <button key={t.type} type="button" aria-pressed={active} onClick={() => setSalaryType(t.type)}
+                    style={{ flex: 1, minWidth: 0, padding: '7px 4px', border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600, background: active ? T.teal : 'transparent', color: active ? T.onTeal : T.ink }}>
+                    {t.label}
+                  </button>
+                )
+              })}
+            </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <div style={{ display: 'flex', flex: 1, border: `1.5px solid ${T.hairline}`, borderRadius: 10, overflow: 'hidden', background: T.card }}>
                 <span style={{ padding: '11px 12px', fontSize: 15, color: T.teal, fontWeight: 700, borderRight: `1px solid ${T.hairline}` }}>₹</span>
-                <input type="tel" inputMode="numeric" value={salary} onChange={e => setSalary(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') seed(salary) }} placeholder="e.g. 1,20,000" autoFocus
+                <input type="tel" inputMode="numeric" value={salary} onChange={e => setSalary(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') seed(salary) }} placeholder={activeType.placeholder} aria-label={activeType.label} autoFocus
                   style={{ flex: 1, width: '100%', padding: '11px 12px', border: 'none', outline: 'none', fontSize: 14, fontFamily: '"Sora",sans-serif', background: 'transparent', color: T.ink }} />
               </div>
               <button onClick={() => seed(salary)} style={{ padding: '11px 18px', background: T.teal, color: T.onTeal, borderRadius: 10, fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>See my answer →</button>
             </div>
+            {conversion && <div style={{ fontSize: 12.5, fontWeight: 600, color: T.teal, marginTop: 10 }}>{conversion}</div>}
+            {ctcTooLow && <div style={{ fontSize: 12.5, color: T.muted, marginTop: 10 }}>Enter the full yearly amount, e.g. 12,00,000 for 12 LPA.</div>}
             <div style={{ fontSize: 11, color: T.muted, marginTop: 12 }}>No account needed. Your numbers stay on your device until you save.</div>
             <DataAssurance style={{ marginTop: 8 }} />
           </div>
@@ -140,6 +177,7 @@ export default function TryPage() {
               <button onClick={() => setEntered(false)} style={{ background: 'transparent', border: 'none', color: T.teal, fontWeight: 600, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>← Change salary</button>
               <span style={{ fontSize: 11.5, color: T.muted }}>Saved on this device · no account yet</span>
             </div>
+            {conversion && <div style={{ maxWidth: 760, margin: '0 auto 12px', fontSize: 12.5, fontWeight: 600, color: T.teal }}>{conversion}</div>}
             <ProvisionalVerdict
               version={version}
               uploadHref={null}
