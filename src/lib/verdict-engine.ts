@@ -100,6 +100,7 @@ export type RegimeOutlook =
   | { kind: 'old-wins'; margin: number }
   | { kind: 'needs-more'; more: number }
   | { kind: 'old-unlikely' }
+  | { kind: 'needs-high-rent' }
 
 const rupees = (v: number) => `₹${Math.round(v).toLocaleString('en-IN')}`
 
@@ -112,6 +113,7 @@ export function regimeOutlookText(o: RegimeOutlook): string {
     case 'old-wins': return `With what you've entered, the old regime wins by ${rupees(o.margin)}.`
     case 'needs-more': return `You'd need ${rupees(o.more)} more in deductions for the old regime to win.`
     case 'old-unlikely': return 'The old regime is unlikely to win for you, even with maximum deductions.'
+    case 'needs-high-rent': return 'The old regime would only win if you pay high rent. Enter your rent below to check.'
   }
 }
 
@@ -125,19 +127,22 @@ export interface RegimeOutlookInput extends Omit<RegimeCoreInput, 'totalExemptio
   hasEntered: boolean // whether anything has been entered, even if it counts for ₹0
   oldTypical: number // old-regime tax with typical deductions
   realisticMax: number // see realisticMaxDeductions
+  maxWithoutRent?: number // set while rent is unknown: the realistic maximum with no HRA
 }
 
 // Which message the regime cards should carry, and the figure that goes in it.
-export function regimeOutlook({ claimed, hasEntered, oldTypical, realisticMax, ...core }: RegimeOutlookInput): RegimeOutlook {
+export function regimeOutlook({ claimed, hasEntered, oldTypical, realisticMax, maxWithoutRent, ...core }: RegimeOutlookInput): RegimeOutlook {
   const breakEven = breakEvenDeductions(core)
   if (breakEven === null) return { kind: 'new-tax-zero' }
   const { newTotal } = computeRegimeCore({ ...core, totalExemptions: 0, totalDeductions: 0 })
   const outOfReach = breakEven > realisticMax
+  const needsRent = maxWithoutRent !== undefined && breakEven > maxWithoutRent
+  const short = (): RegimeOutlook | null => outOfReach ? { kind: 'old-unlikely' } : needsRent ? { kind: 'needs-high-rent' } : null
   if (!hasEntered) {
     if (newTotal < oldTypical) return { kind: 'new-wins-typical', margin: oldTypical - newTotal }
-    return outOfReach ? { kind: 'old-unlikely' } : { kind: 'old-could-win', breakEven }
+    return short() ?? { kind: 'old-could-win', breakEven }
   }
   const { oldTotal } = computeRegimeCore({ ...core, totalExemptions: 0, totalDeductions: claimed })
   if (oldTotal < newTotal) return { kind: 'old-wins', margin: newTotal - oldTotal }
-  return outOfReach ? { kind: 'old-unlikely' } : { kind: 'needs-more', more: breakEven - claimed }
+  return short() ?? { kind: 'needs-more', more: breakEven - claimed }
 }

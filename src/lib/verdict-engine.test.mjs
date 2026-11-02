@@ -82,3 +82,30 @@ test('first-look "old could win" also becomes unlikely when out of reach', () =>
     { kind: 'old-unlikely' },
   )
 })
+
+test('asks for rent when only high HRA could make the old regime win', () => {
+  const caps = realisticMaxDeductions('normal', false, 0)
+  const withHra = realisticMaxDeductions('normal', false, 1800000)
+  const r = regimeOutlook({
+    annualGross: 8995248, claimed: 200000, hasEntered: true, oldTypical: totals(8995248, TYPICAL).oldTotal,
+    realisticMax: withHra, maxWithoutRent: caps,
+  })
+  assert.deepEqual(r, { kind: 'needs-high-rent' })
+})
+
+test('still gives the figure when the caps alone could reach break-even, rent unknown', () => {
+  const x = breakEvenDeductions({ annualGross: 1500000 })
+  const r = regimeOutlook({
+    annualGross: 1500000, claimed: 100000, hasEntered: true, oldTypical: totals(1500000, TYPICAL).oldTotal,
+    realisticMax: x + 300000, maxWithoutRent: x,
+  })
+  assert.deepEqual(r, { kind: 'needs-more', more: x - 100000 })
+})
+
+test('once rent is known there is no rent prompt', () => {
+  const r = regimeOutlook({
+    annualGross: 8995248, claimed: 200000, hasEntered: true, oldTypical: totals(8995248, TYPICAL).oldTotal,
+    realisticMax: 450000,
+  })
+  assert.deepEqual(r, { kind: 'old-unlikely' })
+})

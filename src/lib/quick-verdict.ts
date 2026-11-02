@@ -112,6 +112,7 @@ export function computeQuickVerdict(): QuickVerdict {
   const outlook = regimeOutlook({
     annualGross: gross, slabOtherIncome, seniorStatus: senior, oldTypical,
     realisticMax: realisticMaxDeductions(senior, parentsSenior, possibleHra),
+    maxWithoutRent: n(hra.rentPaid) > 0 || hra.noRent ? undefined : realisticMaxDeductions(senior, parentsSenior, 0),
     claimed: totalDeductions + totalExemptions,
     // A rent too low to earn an HRA exemption still counts as having entered something.
     hasEntered: totalDeductions > 0 || totalExemptions > 0 || n(hra.rentPaid) > 0,
